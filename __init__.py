@@ -1,6 +1,28 @@
 # PyQt5 imports
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QMainWindow
-from PyQt5.QtCore import QSize, Qt
+from PyQt5.QtCore import (
+    QSize,
+    Qt,
+    QTimer,
+)
+from PyQt5.QtGui import (
+    QPixmap,
+)
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QGridLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+    QMessageBox,
+    QHBoxLayout,
+    QMenuBar,
+)
 
-# General imports
+# Standard library imports
 import sys
+from random import choice

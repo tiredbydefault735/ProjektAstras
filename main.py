@@ -1,29 +1,87 @@
 from __init__ import *
 
 
-class MainWindow(QMainWindow):
+class RoundedButton(QPushButton):
+    def __init__(self, text):
+        super().__init__(text)
+        self.setFixedSize(160, 80)
+        self.setStyleSheet(
+            """
+            QPushButton {
+                border: 2px solid #444;
+                border-radius: 20px;
+                background-color: #5c4033;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #7b5e45;
+            }
+        """
+        )
+
+
+class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Fullscreen Layout")
 
-        self.button_is_checked = True
+        # Image placeholder
+        label = QLabel(self)
+        pixmap = QPixmap("assets/Logo.png")
+        scaled_pixmap = pixmap.scaled(
+            400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        label.setPixmap(scaled_pixmap)
+        label.setAlignment(Qt.AlignCenter)
 
-        self.setWindowTitle("My App")
+        # Vertical stack of buttons
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(40)
+        for i in range(3):
+            btn = RoundedButton(f"Button {i+1}")
+            button_layout.addWidget(btn)
+        button_layout.addStretch()
 
-        self.button = QPushButton("Press Me!")
-        self.button.setCheckable(True)
-        self.button.released.connect(self.the_button_was_released)
-        self.button.setChecked(self.button_is_checked)
+        # Wrap image in its own layout (optional for spacing)
+        image_layout = QVBoxLayout()
+        image_layout.addWidget(label)
+        image_layout.addStretch()
 
-        self.setCentralWidget(self.button)
+        # Main horizontal layout
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(60, 60, 60, 60)
+        main_layout.addLayout(image_layout)  # ✅ Add image layout
+        main_layout.addLayout(button_layout)  # ✅ Add button layout
 
-    def the_button_was_released(self):
-        self.button_is_checked = self.button.isChecked()
+        self.setLayout(main_layout)
 
-        print(self.button_is_checked)
+        # Check fullscreen status after window shows
+        QTimer.singleShot(500, self.check_fullscreen)
+        self._createMenuBar
+
+    def check_fullscreen(self):
+        if not self.isFullScreen():
+            QMessageBox.warning(
+                self,
+                "Fullscreen Recommended",
+                "This app is designed for fullscreen view.\nPlease switch to fullscreen for best experience.",
+            )
+
+    def _createMenuBar(self):
+        menuBar = self.menuBar()
+        # Creating menus using a QMenu object
+        fileMenu = QMenu("&File", self)
+        menuBar.addMenu(fileMenu)
+        # Creating menus using a title
+        editMenu = menuBar.addMenu("&Edit")
+        helpMenu = menuBar.addMenu("&Help")
+        menubar = self.menuBar()
 
 
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-
-app.exec_()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.showFullScreen()  # Force fullscreen
+    app.exec_()
