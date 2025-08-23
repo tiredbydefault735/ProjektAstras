@@ -1,6 +1,7 @@
 from __init__ import *
 
 
+# Button
 class RoundedButton(QPushButton):
     def __init__(self, text):
         super().__init__(text)
