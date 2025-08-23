@@ -83,5 +83,4 @@ class MainWindow(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.showFullScreen()  # Force fullscreen
     app.exec_()
