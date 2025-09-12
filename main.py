@@ -58,17 +58,7 @@ class MainWindow(QWidget):
 
         self.setLayout(main_layout)
 
-        # Check fullscreen status after window shows
-        QTimer.singleShot(500, self.check_fullscreen)
         self._createMenuBar
-
-    def check_fullscreen(self):
-        if not self.isFullScreen():
-            QMessageBox.warning(
-                self,
-                "Fullscreen Recommended",
-                "This app is designed for fullscreen view.\nPlease switch to fullscreen for best experience.",
-            )
 
     def _createMenuBar(self):
         menuBar = self.menuBar()
