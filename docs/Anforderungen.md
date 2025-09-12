@@ -1,6 +1,6 @@
 # Funktionale Anforderungen
 Diese Anforderungen beschreiben, was die Software leisten muss, um die gestellten Aufgaben zu erfüllen.
-**Zeitabhängige Simulation:** Die Kernfunktionalität der Anwendung muss eine Simulation sein, die sich über die Zeit entwickelt
+**Zeitabhängige Simulation:** Die Kernfunktionalität der Anwendung muss eine Simulation sein, die sich über die Zeit entwickelt\n
 **Zufallswerte:** Die Simulation muss mindestens drei Zufallswerte enthalten, die jeweils mit einer unterschiedlichen Verteilungsform umgesetzt werden, wie z.B. Normalverteilung, Gleichverteilung oder Exponentialverteilung.
 **Eingabeparameter:** Es müssen mindestens sieben Eingabeparameter vom Nutzer anpassbar sein.
 **Simulationsgeschwindigkeit:** Die Geschwindigkeit der Simulation muss in mindestens drei Stufen einstellbar sein.
