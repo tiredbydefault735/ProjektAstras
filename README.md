@@ -12,6 +12,6 @@ Dieses Projekt simuliert die Interaktionen und den Überlebenskampf von vier Sub
 ## Installation und Nutzung
 Die Anwendung ist als ausführbare Windows-Datei konzipiert. Es ist keine Installation erforderlich. Lade einfach die `Arachfara_Simulation.exe` herunter und starte sie direkt.
 ## Über den Autor
-Dieses Projekt wurde von Tired im Rahmen des 3. Lehrjahres an der Berufsschule erstellt.
+Dieses Projekt wurde von Sarah Schütt im Rahmen des 3. Lehrjahres an der Berufsschule erstellt.
 ## Danksagungen
 Besonderer Dank gilt den Lehrern für ihre Unterstützung und Anleitung während des Projekts.
