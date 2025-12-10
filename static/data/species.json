@@ -1,0 +1,26 @@
+{
+    "Icefang": {
+        "min_survival_temp": -75, 
+        "max_survival_temp": 10,
+        "max_clan_members": 10,
+        "home_region": "Snowy_Abyss"
+    },
+    "Crushed_Critters": {
+        "min_survival_temp": -25,
+        "max_survival_temp": 45,
+        "max_clan_members": 30,
+        "home_region": "Wasteland"
+    },
+    "Spores": {
+        "min_survival_temp": 5,
+        "max_survival_temp": 30,
+        "max_clan_members": 3,
+        "home_region": "Evergreen_Forest"
+    },
+    "The_Corrupted": {
+        "min_survival_temp": -30,
+        "max_survival_temp": 35,
+        "max_clan_members": 2,
+        "home_region": "Corrupted_Caves"
+    }
+}
