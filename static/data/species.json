@@ -8,7 +8,7 @@
     "Crushed_Critters": {
         "min_survival_temp": -25,
         "max_survival_temp": 45,
-        "max_clan_members": 30,
+        "max_clan_members": 10,
         "home_region": "Wasteland"
     },
     "Spores": {
