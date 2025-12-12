@@ -225,26 +225,31 @@ class EnvironmentPanel(QWidget):
         self.food_label_title = QLabel("Nahrung:")
         layout.addWidget(self.food_label_title)
 
-        food_layout = QHBoxLayout()
-        food_layout.setSpacing(5)
+        # Anzahl Nahrungsplätze
+        self.food_places_label = QLabel("Nahrungsplätze: 5")
+        layout.addWidget(self.food_places_label)
 
-        self.food_left_btn = QPushButton("←")
-        self.food_left_btn.setFixedWidth(40)
-        self.food_left_btn.setFixedHeight(30)
-        self.food_left_btn.clicked.connect(self.decrease_food)
-        food_layout.addWidget(self.food_left_btn)
+        self.food_places_slider = QSlider(Qt.Orientation.Horizontal)
+        self.food_places_slider.setMinimum(1)
+        self.food_places_slider.setMaximum(10)
+        self.food_places_slider.setValue(5)
+        self.food_places_slider.valueChanged.connect(
+            lambda v: self.food_places_label.setText(f"Nahrungsplätze: {v}")
+        )
+        layout.addWidget(self.food_places_slider)
 
-        self.food_label = QLabel(f"{self.current_food_level}/10")
-        self.food_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        food_layout.addWidget(self.food_label)
+        # Nahrungsmenge pro Platz
+        self.food_amount_label = QLabel("Nahrungsmenge: 50")
+        layout.addWidget(self.food_amount_label)
 
-        self.food_right_btn = QPushButton("→")
-        self.food_right_btn.setFixedWidth(40)
-        self.food_right_btn.setFixedHeight(30)
-        self.food_right_btn.clicked.connect(self.increase_food)
-        food_layout.addWidget(self.food_right_btn)
-
-        layout.addLayout(food_layout)
+        self.food_amount_slider = QSlider(Qt.Orientation.Horizontal)
+        self.food_amount_slider.setMinimum(10)
+        self.food_amount_slider.setMaximum(200)
+        self.food_amount_slider.setValue(50)
+        self.food_amount_slider.valueChanged.connect(
+            lambda v: self.food_amount_label.setText(f"Nahrungsmenge: {v}")
+        )
+        layout.addWidget(self.food_amount_slider)
 
         # Day/Night Section
         self.day_night_label = QLabel("Tag - Nacht:")
@@ -303,9 +308,13 @@ class EnvironmentPanel(QWidget):
         """Get current temperature value."""
         return self.temp_slider.value()
 
-    def get_food_level(self):
-        """Get current food level."""
-        return self.current_food_level
+    def get_food_places(self):
+        """Get number of food places."""
+        return self.food_places_slider.value()
+
+    def get_food_amount(self):
+        """Get food amount per place."""
+        return self.food_amount_slider.value()
 
     def get_is_day(self):
         """Get day/night state."""
@@ -339,13 +348,30 @@ class EnvironmentPanel(QWidget):
         self.food_label_title.setStyleSheet(
             f"color: {preset.get_color('text_secondary')}; background: transparent;"
         )
-        self.food_label.setStyleSheet(f"color: {text}; background: transparent;")
+        self.food_places_label.setStyleSheet(f"color: {text}; background: transparent;")
+        self.food_amount_label.setStyleSheet(f"color: {text}; background: transparent;")
         self.day_night_label.setStyleSheet(
             f"color: {preset.get_color('text_secondary')}; background: transparent;"
         )
 
-        # Style slider
-        self.temp_slider.setStyleSheet(
+        # Style sliders (temp, food_places, food_amount)
+        slider_style = f"""
+            QSlider::groove:horizontal {{
+                border: none;
+                height: 6px;
+                background: {bg_tertiary};
+            }}
+            QSlider::handle:horizontal {{
+                background: {accent};
+                border: none;
+                width: 16px;
+                height: 16px;
+                margin: -5px 0;
+            }}
+        """
+        self.temp_slider.setStyleSheet(slider_style)
+        self.food_places_slider.setStyleSheet(slider_style)
+        self.food_amount_slider.setStyleSheet(
             f"""
             QSlider::groove:horizontal {{
                 border: none;
@@ -403,8 +429,6 @@ class EnvironmentPanel(QWidget):
                 background-color: {accent};
             }}
         """
-        self.food_left_btn.setStyleSheet(button_style)
-        self.food_right_btn.setStyleSheet(button_style)
         self.day_btn.setStyleSheet(button_style)
         self.night_btn.setStyleSheet(button_style)
 
@@ -435,7 +459,7 @@ class SimulationScreen(QWidget):
         # Initialize simulation model
         self.sim_model = SimulationModel()
         # Initial populations will be set when simulation starts
-        self.sim_model.setup(self.species_config, {})
+        self.sim_model.setup(self.species_config, {}, food_places=5, food_amount=50)
 
         self.init_ui()
 
@@ -676,7 +700,11 @@ class SimulationScreen(QWidget):
             # Initialisiere Simulation
             self.sim_model = SimulationModel()
             populations = self.species_panel.get_enabled_species_populations()
-            self.sim_model.setup(self.species_config, populations)
+            food_places = self.environment_panel.get_food_places()
+            food_amount = self.environment_panel.get_food_amount()
+            self.sim_model.setup(
+                self.species_config, populations, food_places, food_amount
+            )
 
             self.is_running = True
             self.btn_play.setText("⏸")
@@ -708,7 +736,7 @@ class SimulationScreen(QWidget):
 
         # Reset Model
         self.sim_model = SimulationModel()
-        self.sim_model.setup(self.species_config, {})
+        self.sim_model.setup(self.species_config, {}, food_places=5, food_amount=50)
 
         self.log_label.setText("Simulation bereit.")
         self.map_widget.clear_map()
@@ -717,7 +745,9 @@ class SimulationScreen(QWidget):
         """Step simulation und update display."""
         if self.sim_model:
             data = self.sim_model.step()
-            self.map_widget.draw_groups(data["groups"], data.get("loners", []))
+            self.map_widget.draw_groups(
+                data["groups"], data.get("loners", []), data.get("food_sources", [])
+            )
             self.time_step = data["time"]
 
             # Update logs
