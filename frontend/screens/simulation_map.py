@@ -23,8 +23,8 @@ class SimulationMapWidget(QGraphicsView):
         # Optimierte Darstellung
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    def draw_groups(self, groups_data, loners_data=None):
-        """Zeichne Clans und Loners - DIREKTES Rendering."""
+    def draw_groups(self, groups_data, loners_data=None, food_sources_data=None):
+        """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
         self.scene.clear()
 
         # Viewport dimensions
@@ -37,6 +37,38 @@ class SimulationMapWidget(QGraphicsView):
         # Scale
         scale_x = width / 1200.0
         scale_y = height / 600.0
+
+        # Zeichne Nahrungsplätze (grüne Kreise)
+        if food_sources_data:
+            for food in food_sources_data:
+                x = food["x"] * scale_x
+                y = food["y"] * scale_y
+                amount = food["amount"]
+                max_amount = food["max_amount"]
+
+                # Größe basierend auf Nahrungsmenge (10-30px)
+                size = 10 + (amount / max_amount) * 20 if max_amount > 0 else 10
+
+                # Farbe: Grün wenn voll, gelb wenn wenig
+                if amount > max_amount * 0.5:
+                    food_color = QColor(34, 139, 34, 180)  # Grün
+                elif amount > 0:
+                    food_color = QColor(218, 165, 32, 180)  # Gelb/Gold
+                else:
+                    food_color = QColor(139, 69, 19, 100)  # Braun (leer)
+
+                border_color = QColor(0, 100, 0, 255)
+
+                # Kreis für Nahrung
+                food_circle = self.scene.addEllipse(
+                    x - size / 2,
+                    y - size / 2,
+                    size,
+                    size,
+                    pen=QPen(border_color, 2),
+                    brush=QBrush(food_color),
+                )
+                food_circle.setZValue(0)  # Hinter allem
 
         # Zeichne Loners (größere Kreise mit Rand)
         if loners_data:
