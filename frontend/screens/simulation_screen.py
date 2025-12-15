@@ -44,13 +44,15 @@ class SpeciesPanel(QWidget):
 
         # Title
         self.title = QLabel("Spezies")
-        title_font = QFont()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
+        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
 
         self.subtitle = QLabel("Subspezies:")
+        subtitle_font = QFont("Minecraft", 12)
+        subtitle_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.subtitle.setFont(subtitle_font)
         layout.addWidget(self.subtitle)
 
         # Create entry for each species
@@ -64,6 +66,9 @@ class SpeciesPanel(QWidget):
         for species_id, display_name in species_names.items():
             # Checkbox for enable/disable
             checkbox = QCheckBox(display_name)
+            checkbox_font = QFont("Minecraft", 12)
+            checkbox_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+            checkbox.setFont(checkbox_font)
             checkbox.setChecked(True)
             self.species_checkboxes[species_id] = checkbox
             layout.addWidget(checkbox)
@@ -73,6 +78,9 @@ class SpeciesPanel(QWidget):
             speed_layout.setSpacing(5)
 
             speed_label = QLabel("Geschwi:")
+            speed_label_font = QFont("Minecraft", 11)
+            speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+            speed_label.setFont(speed_label_font)
             speed_layout.addWidget(speed_label)
 
             slider = QSlider(Qt.Orientation.Horizontal)
@@ -89,6 +97,9 @@ class SpeciesPanel(QWidget):
             member_layout.setSpacing(5)
 
             member_label = QLabel("Mitglieder:")
+            member_label_font = QFont("Minecraft", 11)
+            member_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+            member_label.setFont(member_label_font)
             member_layout.addWidget(member_label)
 
             member_slider = QSlider(Qt.Orientation.Horizontal)
@@ -175,9 +186,10 @@ class SpeciesPanel(QWidget):
 class EnvironmentPanel(QWidget):
     """Region panel: environment controls."""
 
-    def __init__(self, color_preset=None):
+    def __init__(self, color_preset=None, map_widget=None):
         super().__init__()
         self.color_preset = color_preset
+        self.map_widget = map_widget  # Reference to map widget for updating background
         self.current_food_level = 5  # Default food level (1-10)
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
@@ -185,27 +197,33 @@ class EnvironmentPanel(QWidget):
 
         # Title
         self.title = QLabel("Region")
-        title_font = QFont()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
+        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
 
         # Region Selection
         self.region_label = QLabel("Region:")
+        region_label_font = QFont("Minecraft", 12)
+        region_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.region_label.setFont(region_label_font)
         layout.addWidget(self.region_label)
 
         from PyQt6.QtWidgets import QComboBox
 
         self.region_combo = QComboBox()
         self.region_combo.addItems(
-            ["Snowy_Abyss", "Wasteland", "Evergreen_Forest", "Corrupted_Caves"]
+            ["Snowy Abyss", "Wasteland", "Evergreen Forest", "Corrupted Caves"]
         )
         self.region_combo.setFixedHeight(30)
+        self.region_combo.currentTextChanged.connect(self.on_region_changed)
         layout.addWidget(self.region_combo)
 
         # Temperature Section
         self.temp_label = QLabel("Temperatur:")
+        temp_label_font = QFont("Minecraft", 12)
+        temp_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.temp_label.setFont(temp_label_font)
         layout.addWidget(self.temp_label)
 
         self.temp_slider = QSlider(Qt.Orientation.Horizontal)
@@ -215,6 +233,9 @@ class EnvironmentPanel(QWidget):
         layout.addWidget(self.temp_slider)
 
         self.temp_value_label = QLabel("Temp: 20 C°")
+        temp_value_font = QFont("Minecraft", 11)
+        temp_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.temp_value_label.setFont(temp_value_font)
         self.temp_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.temp_slider.valueChanged.connect(
             lambda v: self.temp_value_label.setText(f"Temp: {v} C°")
@@ -223,10 +244,16 @@ class EnvironmentPanel(QWidget):
 
         # Food Section
         self.food_label_title = QLabel("Nahrung:")
+        food_title_font = QFont("Minecraft", 12)
+        food_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.food_label_title.setFont(food_title_font)
         layout.addWidget(self.food_label_title)
 
         # Anzahl Nahrungsplätze
         self.food_places_label = QLabel("Nahrungsplätze: 5")
+        food_places_font = QFont("Minecraft", 11)
+        food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.food_places_label.setFont(food_places_font)
         layout.addWidget(self.food_places_label)
 
         self.food_places_slider = QSlider(Qt.Orientation.Horizontal)
@@ -240,6 +267,9 @@ class EnvironmentPanel(QWidget):
 
         # Nahrungsmenge pro Platz
         self.food_amount_label = QLabel("Nahrungsmenge: 50")
+        food_amount_font = QFont("Minecraft", 11)
+        food_amount_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.food_amount_label.setFont(food_amount_font)
         layout.addWidget(self.food_amount_label)
 
         self.food_amount_slider = QSlider(Qt.Orientation.Horizontal)
@@ -253,12 +283,18 @@ class EnvironmentPanel(QWidget):
 
         # Day/Night Section
         self.day_night_label = QLabel("Tag - Nacht:")
+        day_night_label_font = QFont("Minecraft", 12)
+        day_night_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.day_night_label.setFont(day_night_label_font)
         layout.addWidget(self.day_night_label)
 
         day_night_layout = QHBoxLayout()
         day_night_layout.setSpacing(5)
 
         day_btn = QPushButton("Tag")
+        day_btn_font = QFont("Minecraft", 11)
+        day_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        day_btn.setFont(day_btn_font)
         day_btn.setFixedHeight(30)
         day_btn.setCheckable(True)
         day_btn.setChecked(True)
@@ -266,6 +302,9 @@ class EnvironmentPanel(QWidget):
         day_night_layout.addWidget(day_btn)
 
         night_btn = QPushButton("Nacht")
+        night_btn_font = QFont("Minecraft", 11)
+        night_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        night_btn.setFont(night_btn_font)
         night_btn.setFixedHeight(30)
         night_btn.setCheckable(True)
         night_btn.clicked.connect(lambda: self.on_day_night_toggle(False))
@@ -289,6 +328,11 @@ class EnvironmentPanel(QWidget):
         else:
             self.day_btn.setChecked(False)
             self.night_btn.setChecked(True)
+
+    def on_region_changed(self, region_name):
+        """Called when region selection changes."""
+        if self.map_widget:
+            self.map_widget.set_region(region_name)
 
     def increase_food(self):
         """Increase food level."""
@@ -474,6 +518,9 @@ class SimulationScreen(QWidget):
         top_bar.setSpacing(10)
 
         btn_back = QPushButton("← Back")
+        btn_back_font = QFont("Minecraft", 12)
+        btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        btn_back.setFont(btn_back_font)
         btn_back.setFixedWidth(100)
         btn_back.clicked.connect(self.on_back)
         top_bar.addWidget(btn_back)
@@ -481,6 +528,9 @@ class SimulationScreen(QWidget):
         top_bar.addStretch()
 
         btn_exit = QPushButton("Exit")
+        btn_exit_font = QFont("Minecraft", 12)
+        btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        btn_exit.setFont(btn_exit_font)
         btn_exit.setFixedWidth(100)
         btn_exit.clicked.connect(self.on_exit)
         top_bar.addWidget(btn_exit)
@@ -517,6 +567,9 @@ class SimulationScreen(QWidget):
         tab_buttons_layout.setSpacing(5)
 
         self.btn_species_tab = QPushButton("Spezies")
+        species_tab_font = QFont("Minecraft", 12)
+        species_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_species_tab.setFont(species_tab_font)
         self.btn_species_tab.setCheckable(True)
         self.btn_species_tab.setChecked(True)
         self.btn_species_tab.setFixedHeight(35)
@@ -524,6 +577,9 @@ class SimulationScreen(QWidget):
         tab_buttons_layout.addWidget(self.btn_species_tab)
 
         self.btn_region_tab = QPushButton("Region")
+        region_tab_font = QFont("Minecraft", 12)
+        region_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_region_tab.setFont(region_tab_font)
         self.btn_region_tab.setCheckable(True)
         self.btn_region_tab.setChecked(False)
         self.btn_region_tab.setFixedHeight(35)
@@ -540,7 +596,7 @@ class SimulationScreen(QWidget):
         self.species_panel = SpeciesPanel(self.species_config, self.color_preset)
         self.panel_stack.addWidget(self.species_panel)  # Index 0
 
-        self.environment_panel = EnvironmentPanel(self.color_preset)
+        self.environment_panel = EnvironmentPanel(self.color_preset, self.map_widget)
         self.panel_stack.addWidget(self.environment_panel)  # Index 1
 
         # Show species panel by default
@@ -563,12 +619,18 @@ class SimulationScreen(QWidget):
         log_layout.setContentsMargins(5, 5, 5, 5)
 
         log_title = QLabel("Logs:")
+        log_title_font = QFont("Minecraft", 12)
+        log_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        log_title.setFont(log_title_font)
         log_title.setStyleSheet("color: #ffffff; font-weight: bold;")
         log_layout.addWidget(log_title)
 
         self.log_label = QLabel("Simulation bereit.")
+        log_label_font = QFont("Minecraft", 12)
+        log_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.log_label.setFont(log_label_font)
         self.log_label.setStyleSheet(
-            "color: #33ff33; font-family: monospace; font-size: 9px;"
+            "color: #33ff33; font-family: Minecraft; font-size: 12px;"
         )
         self.log_label.setWordWrap(True)
         self.log_label.setAlignment(
@@ -583,18 +645,27 @@ class SimulationScreen(QWidget):
         control_layout.setSpacing(10)
 
         self.btn_play = QPushButton("▶")
+        play_font = QFont("Minecraft", 16)
+        play_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_play.setFont(play_font)
         self.btn_play.setFixedWidth(50)
         self.btn_play.setFixedHeight(40)
         self.btn_play.clicked.connect(self.toggle_simulation)
         control_layout.addWidget(self.btn_play)
 
         self.btn_pause = QPushButton("||")
+        pause_font = QFont("Minecraft", 16)
+        pause_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_pause.setFont(pause_font)
         self.btn_pause.setFixedWidth(50)
         self.btn_pause.setFixedHeight(40)
         self.btn_pause.clicked.connect(self.pause_simulation)
         control_layout.addWidget(self.btn_pause)
 
         self.btn_stop = QPushButton("⏹")
+        stop_font = QFont("Minecraft", 16)
+        stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_stop.setFont(stop_font)
         self.btn_stop.setFixedWidth(50)
         self.btn_stop.setFixedHeight(40)
         self.btn_stop.clicked.connect(self.stop_simulation)
@@ -603,6 +674,9 @@ class SimulationScreen(QWidget):
         control_layout.addStretch()
 
         self.btn_stats = QPushButton("Stats")
+        stats_font = QFont("Minecraft", 12)
+        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_stats.setFont(stats_font)
         self.btn_stats.setFixedWidth(100)
         self.btn_stats.setFixedHeight(40)
         self.btn_stats.clicked.connect(self.on_stats)
@@ -688,7 +762,7 @@ class SimulationScreen(QWidget):
             f"background-color: {log_bg}; border: 2px solid {log_border};"
         )
         self.log_label.setStyleSheet(
-            f"color: {log_text}; font-family: monospace; font-size: 9px;"
+            f"color: {log_text}; font-family: Minecraft; font-size: 11px;"
         )
 
     def toggle_simulation(self):
@@ -702,9 +776,13 @@ class SimulationScreen(QWidget):
             populations = self.species_panel.get_enabled_species_populations()
             food_places = self.environment_panel.get_food_places()
             food_amount = self.environment_panel.get_food_amount()
+            region = self.environment_panel.get_selected_region()
             self.sim_model.setup(
                 self.species_config, populations, food_places, food_amount
             )
+
+            # Set region background
+            self.map_widget.set_region(region)
 
             self.is_running = True
             self.btn_play.setText("⏸")

@@ -17,11 +17,30 @@ class SimulationMapWidget(QGraphicsView):
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
 
-        # Set background to white
-        self.setBackgroundBrush(QColor(255, 255, 255))
+        # Region colors (can be replaced with images later)
+        self.region_colors = {
+            "Snowy Abyss": QColor(200, 220, 240),  # Hellblau/Eisig
+            "Wasteland": QColor(210, 180, 140),  # Sand/Braun
+            "Evergreen Forest": QColor(120, 160, 100),  # Dunkelgrün
+            "Corrupted Caves": QColor(80, 60, 90),  # Dunkel Lila/Schwarz
+        }
+
+        # Current region
+        self.current_region = "Snowy Abyss"
+
+        # Set initial background
+        self.setBackgroundBrush(
+            self.region_colors.get(self.current_region, QColor(255, 255, 255))
+        )
 
         # Optimierte Darstellung
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    def set_region(self, region_name):
+        """Set the current region and update background color."""
+        self.current_region = region_name
+        bg_color = self.region_colors.get(region_name, QColor(255, 255, 255))
+        self.setBackgroundBrush(bg_color)
 
     def draw_groups(self, groups_data, loners_data=None, food_sources_data=None):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
@@ -131,7 +150,8 @@ class SimulationMapWidget(QGraphicsView):
                 # Population als Text
                 text = QGraphicsTextItem(str(pop))
                 text.setDefaultTextColor(QColor(0, 0, 0, 255))
-                font = QFont("Arial", 10, QFont.Weight.Bold)
+                font = QFont("Minecraft", 13, QFont.Weight.Bold)
+                font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
                 text.setFont(font)
 
                 # Zentriere Text

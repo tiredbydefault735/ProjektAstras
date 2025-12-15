@@ -89,9 +89,8 @@ class StartScreen(QWidget):
 
         # Title
         title = QLabel("PROJEKT ASTRAS")
-        title_font = QFont()
-        title_font.setPointSize(20)
-        title_font.setBold(True)
+        title_font = QFont("Minecraft", 24, QFont.Weight.Bold)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         title.setFont(title_font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: #ffffff; background-color: transparent;")
@@ -99,8 +98,8 @@ class StartScreen(QWidget):
 
         # Subtitle
         subtitle = QLabel("Simulation v1.0")
-        subtitle_font = QFont()
-        subtitle_font.setPointSize(11)
+        subtitle_font = QFont("Minecraft", 14)
+        subtitle_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         subtitle.setFont(subtitle_font)
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet("color: #cccccc; background-color: transparent;")
@@ -111,16 +110,25 @@ class StartScreen(QWidget):
 
         # Buttons
         btn_start = QPushButton("Start Simulation")
+        btn_start_font = QFont("Minecraft", 13)
+        btn_start_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        btn_start.setFont(btn_start_font)
         btn_start.setFixedHeight(50)
         btn_start.clicked.connect(self.go_to_simulation)
         button_layout.addWidget(btn_start)
 
         btn_settings = QPushButton("Settings")
+        btn_settings_font = QFont("Minecraft", 13)
+        btn_settings_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        btn_settings.setFont(btn_settings_font)
         btn_settings.setFixedHeight(50)
         btn_settings.clicked.connect(self.on_settings)
         button_layout.addWidget(btn_settings)
 
         btn_exit = QPushButton("Exit")
+        btn_exit_font = QFont("Minecraft", 13)
+        btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        btn_exit.setFont(btn_exit_font)
         btn_exit.setFixedHeight(50)
         btn_exit.clicked.connect(self.on_exit)
         button_layout.addWidget(btn_exit)
