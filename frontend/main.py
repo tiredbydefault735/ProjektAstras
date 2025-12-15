@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QFontDatabase
 
 from screens.start_screen import StartScreen
 from screens.simulation_screen import SimulationScreen
@@ -113,6 +113,15 @@ def main(preset_name=None):
     from styles.color_presets import get_preset_by_name
 
     app = QApplication(sys.argv)
+
+    # Load custom Minecraft font
+    font_path = Path(__file__).parent.parent / "static" / "fonts" / "Minecraft.ttf"
+    font_id = QFontDatabase.addApplicationFont(str(font_path))
+    if font_id != -1:
+        font_families = QFontDatabase.applicationFontFamilies(font_id)
+        print(f"Loaded custom font: {font_families}")
+    else:
+        print("Failed to load Minecraft.ttf, using fallback fonts")
 
     # Get preset if specified
     preset = None
