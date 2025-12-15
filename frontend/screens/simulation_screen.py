@@ -19,12 +19,198 @@ from PyQt6.QtWidgets import (
     QFrame,
     QCheckBox,
     QStackedWidget,
+    QDialog,
+    QTextEdit,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtGui import QFont, QIcon, QPixmap
 
 from backend.model import SimulationModel
 from screens.simulation_map import SimulationMapWidget
+
+
+class CustomCheckBox(QCheckBox):
+    """Custom checkbox that draws image directly."""
+
+    def __init__(self, text, unchecked_path, checked_path, parent=None):
+        super().__init__(text, parent)
+        self.unchecked_pixmap = QPixmap(unchecked_path)
+        self.checked_pixmap = QPixmap(checked_path)
+
+        # Scale pixmaps to 20x20 if needed
+        if not self.unchecked_pixmap.isNull():
+            self.unchecked_pixmap = self.unchecked_pixmap.scaled(
+                20,
+                20,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        if not self.checked_pixmap.isNull():
+            self.checked_pixmap = self.checked_pixmap.scaled(
+                20,
+                20,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+        # Hide default indicator and add spacing for our custom image
+        self.setStyleSheet(
+            """
+            QCheckBox {
+                spacing: 30px;
+            }
+            QCheckBox::indicator {
+                width: 0px;
+                height: 0px;
+            }
+        """
+        )
+        self.setMinimumHeight(28)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        from PyQt6.QtGui import QPainter
+
+        painter = QPainter(self)
+
+        # Draw checkbox image at left position
+        pixmap = self.checked_pixmap if self.isChecked() else self.unchecked_pixmap
+        if not pixmap.isNull():
+            painter.drawPixmap(0, (self.height() - 20) // 2, pixmap)
+
+        painter.end()
+
+
+class StatsDialog(QDialog):
+    """Popup dialog to display final simulation statistics."""
+
+    def __init__(self, stats, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Simulations-Statistiken")
+        self.setModal(True)
+        self.resize(500, 400)
+
+        # Set dark theme
+        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # Title
+        title = QLabel("Simulations-Statistiken (5 Minuten)")
+        title_font = QFont("Minecraft", 16, QFont.Weight.Bold)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #ffffff;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # Stats text
+        stats_text = QLabel()
+        stats_font = QFont("Minecraft", 11)
+        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        stats_text.setFont(stats_font)
+        stats_text.setWordWrap(True)
+        stats_text.setStyleSheet("color: #ffffff; padding: 10px;")
+
+        # Build stats string
+        text = "<b>Spezies im Spiel:</b><br>"
+        for species, count in stats["species_counts"].items():
+            text += f"• {species}: {count}<br>"
+
+        text += "<br><b>Todesfälle (Kampf):</b><br>"
+        for species, count in stats["deaths"]["combat"].items():
+            text += f"• {species}: {count}<br>"
+
+        text += "<br><b>Todesfälle (Verhungert):</b><br>"
+        for species, count in stats["deaths"]["starvation"].items():
+            text += f"• {species}: {count}<br>"
+
+        text += f"<br><b>Maximale Clans:</b> {stats['max_clans']}<br>"
+        text += f"<b>Futterplätze:</b> {stats['food_places']}"
+
+        stats_text.setText(text)
+        layout.addWidget(stats_text)
+
+        layout.addStretch()
+
+        # Close button
+        close_btn = QPushButton("Schließen")
+        close_btn_font = QFont("Minecraft", 12)
+        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        close_btn.setFont(close_btn_font)
+        close_btn.setFixedHeight(40)
+        close_btn.setStyleSheet(
+            "background-color: #444444; color: #ffffff; "
+            "border: 2px solid #666666; padding: 5px;"
+        )
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+
+
+class LogDialog(QDialog):
+    """Popup dialog to display simulation logs."""
+
+    def __init__(self, log_text, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Simulation Logs")
+        self.setModal(False)
+        self.resize(600, 400)
+
+        # Set dark theme
+        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Title
+        title = QLabel("Simulation Logs")
+        title_font = QFont("Minecraft", 14)
+        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #ffffff; font-weight: bold;")
+        layout.addWidget(title)
+
+        # Text area with scroll
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        text_font = QFont("Minecraft", 11)
+        text_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.text_edit.setFont(text_font)
+        self.text_edit.setStyleSheet(
+            "background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666;"
+        )
+        self.text_edit.setPlainText(log_text)
+        layout.addWidget(self.text_edit)
+
+        # Close button
+        close_btn = QPushButton("Schließen")
+        close_btn_font = QFont("Minecraft", 12)
+        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        close_btn.setFont(close_btn_font)
+        close_btn.setStyleSheet(
+            "background-color: #444444; color: #ffffff; "
+            "border: 2px solid #666666; padding: 5px;"
+        )
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+
+    def update_log(self, log_text):
+        """Update the log text in the dialog."""
+        self.text_edit.setPlainText(log_text)
+        # Scroll to bottom to show latest logs
+        self.text_edit.verticalScrollBar().setValue(
+            self.text_edit.verticalScrollBar().maximum()
+        )
+
+    def update_log(self, log_text):
+        """Update the log text in the dialog."""
+        self.text_edit.setPlainText(log_text)
+        # Scroll to bottom to show latest logs
+        self.text_edit.verticalScrollBar().setValue(
+            self.text_edit.verticalScrollBar().maximum()
+        )
 
 
 class SpeciesPanel(QWidget):
@@ -64,8 +250,12 @@ class SpeciesPanel(QWidget):
         }
 
         for species_id, display_name in species_names.items():
-            # Checkbox for enable/disable
-            checkbox = QCheckBox(display_name)
+            # Checkbox for enable/disable with custom icons
+            base_path = Path(__file__).parent.parent.parent
+            unchecked_path = str(base_path / "static" / "ui" / "Checkbox_unchecked.png")
+            checked_path = str(base_path / "static" / "ui" / "Checkbox_checked.png")
+
+            checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
             checkbox_font = QFont("Minecraft", 12)
             checkbox_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
             checkbox.setFont(checkbox_font)
@@ -110,6 +300,9 @@ class SpeciesPanel(QWidget):
             member_layout.addWidget(member_slider)
 
             layout.addLayout(member_layout)
+
+            # Add spacing between species
+            layout.addSpacing(15)
 
         layout.addStretch()
         self.setLayout(layout)
@@ -488,7 +681,12 @@ class SimulationScreen(QWidget):
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
+        self.log_dialog = None
         self.time_step = 0
+        self.log_expanded = False  # Track log expansion state
+        self.simulation_time = 0  # Time in seconds
+        self.max_simulation_time = 300  # 5 minutes = 300 seconds
+        self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
 
         # Load species config
         json_path = (
@@ -572,7 +770,7 @@ class SimulationScreen(QWidget):
         self.btn_species_tab.setFont(species_tab_font)
         self.btn_species_tab.setCheckable(True)
         self.btn_species_tab.setChecked(True)
-        self.btn_species_tab.setFixedHeight(35)
+        self.btn_species_tab.setFixedSize(125, 35)
         self.btn_species_tab.clicked.connect(lambda: self.switch_sidebar_tab("species"))
         tab_buttons_layout.addWidget(self.btn_species_tab)
 
@@ -582,7 +780,7 @@ class SimulationScreen(QWidget):
         self.btn_region_tab.setFont(region_tab_font)
         self.btn_region_tab.setCheckable(True)
         self.btn_region_tab.setChecked(False)
-        self.btn_region_tab.setFixedHeight(35)
+        self.btn_region_tab.setFixedSize(125, 35)
         self.btn_region_tab.clicked.connect(lambda: self.switch_sidebar_tab("region"))
         tab_buttons_layout.addWidget(self.btn_region_tab)
 
@@ -609,36 +807,8 @@ class SimulationScreen(QWidget):
 
         main_layout.addLayout(content_layout)
 
-        # Log area (bottom, full width, persistent)
-        self.log_frame = QFrame()
-        self.log_frame.setFixedHeight(120)
-        self.log_frame.setStyleSheet(
-            "background-color: #1a1a1a; border: 2px solid #666666;"
-        )
-        log_layout = QVBoxLayout(self.log_frame)
-        log_layout.setContentsMargins(5, 5, 5, 5)
-
-        log_title = QLabel("Logs:")
-        log_title_font = QFont("Minecraft", 12)
-        log_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        log_title.setFont(log_title_font)
-        log_title.setStyleSheet("color: #ffffff; font-weight: bold;")
-        log_layout.addWidget(log_title)
-
-        self.log_label = QLabel("Simulation bereit.")
-        log_label_font = QFont("Minecraft", 12)
-        log_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.log_label.setFont(log_label_font)
-        self.log_label.setStyleSheet(
-            "color: #33ff33; font-family: Minecraft; font-size: 12px;"
-        )
-        self.log_label.setWordWrap(True)
-        self.log_label.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
-        )
-        log_layout.addWidget(self.log_label)
-
-        main_layout.addWidget(self.log_frame)
+        # Store log text in variable instead of label
+        self.log_text = "Simulation bereit."
 
         # Bottom control bar
         control_layout = QHBoxLayout()
@@ -671,6 +841,43 @@ class SimulationScreen(QWidget):
         self.btn_stop.clicked.connect(self.stop_simulation)
         control_layout.addWidget(self.btn_stop)
 
+        # Speed control buttons
+        self.btn_speed_1x = QPushButton("1x")
+        speed_1x_font = QFont("Minecraft", 12)
+        speed_1x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_1x.setFont(speed_1x_font)
+        self.btn_speed_1x.setFixedSize(50, 40)
+        self.btn_speed_1x.setCheckable(True)
+        self.btn_speed_1x.setChecked(True)
+        self.btn_speed_1x.clicked.connect(lambda: self.set_speed(1))
+        control_layout.addWidget(self.btn_speed_1x)
+
+        self.btn_speed_2x = QPushButton("2x")
+        speed_2x_font = QFont("Minecraft", 12)
+        speed_2x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_2x.setFont(speed_2x_font)
+        self.btn_speed_2x.setFixedSize(50, 40)
+        self.btn_speed_2x.setCheckable(True)
+        self.btn_speed_2x.clicked.connect(lambda: self.set_speed(2))
+        control_layout.addWidget(self.btn_speed_2x)
+
+        self.btn_speed_5x = QPushButton("5x")
+        speed_5x_font = QFont("Minecraft", 12)
+        speed_5x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_5x.setFont(speed_5x_font)
+        self.btn_speed_5x.setFixedSize(50, 40)
+        self.btn_speed_5x.setCheckable(True)
+        self.btn_speed_5x.clicked.connect(lambda: self.set_speed(5))
+        control_layout.addWidget(self.btn_speed_5x)
+
+        # Timer display
+        self.timer_label = QLabel("00:00")
+        timer_font = QFont("Minecraft", 14)
+        timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.timer_label.setFont(timer_font)
+        self.timer_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
+        control_layout.addWidget(self.timer_label)
+
         control_layout.addStretch()
 
         self.btn_stats = QPushButton("Stats")
@@ -681,6 +888,15 @@ class SimulationScreen(QWidget):
         self.btn_stats.setFixedHeight(40)
         self.btn_stats.clicked.connect(self.on_stats)
         control_layout.addWidget(self.btn_stats)
+
+        self.btn_log = QPushButton("Log")
+        log_btn_font = QFont("Minecraft", 12)
+        log_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_log.setFont(log_btn_font)
+        self.btn_log.setFixedWidth(100)
+        self.btn_log.setFixedHeight(40)
+        self.btn_log.clicked.connect(self.open_log_dialog)
+        control_layout.addWidget(self.btn_log)
 
         main_layout.addLayout(control_layout)
 
@@ -698,11 +914,6 @@ class SimulationScreen(QWidget):
             self.btn_species_tab.setChecked(False)
             self.btn_region_tab.setChecked(True)
             self.panel_stack.setCurrentIndex(1)  # Show region panel
-
-        # Ensure log frame stays visible
-        if hasattr(self, "log_frame"):
-            self.log_frame.setVisible(True)
-            self.log_frame.raise_()
 
     def update_theme(self, preset):
         """Update inline styles for the simulation screen and child panels."""
@@ -754,17 +965,6 @@ class SimulationScreen(QWidget):
             self.btn_species_tab.setStyleSheet(tab_button_style)
             self.btn_region_tab.setStyleSheet(tab_button_style)
 
-        # Logs/frame colors
-        log_bg = preset.get_color("bg_tertiary")
-        log_border = preset.get_color("border_light")
-        log_text = preset.get_color("log_text")
-        self.log_frame.setStyleSheet(
-            f"background-color: {log_bg}; border: 2px solid {log_border};"
-        )
-        self.log_label.setStyleSheet(
-            f"color: {log_text}; font-family: Minecraft; font-size: 11px;"
-        )
-
     def toggle_simulation(self):
         """Start/resume simulation."""
         if not self.is_running:
@@ -787,9 +987,9 @@ class SimulationScreen(QWidget):
             self.is_running = True
             self.btn_play.setText("⏸")
 
-            # Start Update-Timer (100ms = 10 steps/sec)
+            # Start Update-Timer with speed multiplier
             self.update_timer = QTimer()
-            self.update_timer.timeout.connect(self.update_simulation)
+            self.update_timer.timeout.connect(self.update_simulation_with_speed)
             self.update_timer.start(100)
 
     def pause_simulation(self):
@@ -811,13 +1011,29 @@ class SimulationScreen(QWidget):
         self.is_running = False
         self.btn_play.setText("▶")
         self.time_step = 0
+        self.simulation_time = 0
 
         # Reset Model
         self.sim_model = SimulationModel()
         self.sim_model.setup(self.species_config, {}, food_places=5, food_amount=50)
 
-        self.log_label.setText("Simulation bereit.")
+        self.log_text = "Simulation bereit."
         self.map_widget.clear_map()
+        self.timer_label.setText("00:00")
+
+    def set_speed(self, speed):
+        """Set simulation speed multiplier."""
+        self.simulation_speed = speed
+
+        # Update button checked states
+        self.btn_speed_1x.setChecked(speed == 1)
+        self.btn_speed_2x.setChecked(speed == 2)
+        self.btn_speed_5x.setChecked(speed == 5)
+
+    def update_simulation_with_speed(self):
+        """Update simulation multiple times based on speed setting."""
+        for _ in range(self.simulation_speed):
+            self.update_simulation()
 
     def update_simulation(self):
         """Step simulation und update display."""
@@ -828,21 +1044,66 @@ class SimulationScreen(QWidget):
             )
             self.time_step = data["time"]
 
+            # Track simulation time (each step = 0.1 seconds)
+            self.simulation_time = self.time_step * 0.1
+
+            # Update timer display
+            minutes = int(self.simulation_time // 60)
+            seconds = int(self.simulation_time % 60)
+            self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
+
+            # Check if 5 minutes reached
+            if self.simulation_time >= self.max_simulation_time:
+                self.show_final_stats()
+                self.stop_simulation()
+                return
+
+            # Check if everyone has died
+            total_population = sum(
+                sum(c["population"] for c in g["clans"]) for g in data["groups"]
+            )
+            total_loners = len(data.get("loners", []))
+            if total_population == 0 and total_loners == 0:
+                self.log_text += "\n⚠️ Alle Arachfara sind gestorben!"
+                self.show_final_stats()
+                self.stop_simulation()
+                return
+
             # Update logs
             logs = data.get("logs", [])
             if logs:
-                log_text = "\n".join(logs[-10:])
-                self.log_label.setText(log_text)
+                self.log_text = "\n".join(logs[-10:])
+                # Update popup if it's open
+                if self.log_dialog and self.log_dialog.isVisible():
+                    self.log_dialog.update_log(self.log_text)
+
+    def show_final_stats(self):
+        """Show final statistics dialog after 5 minutes."""
+        if self.sim_model:
+            stats = self.sim_model.get_final_stats()
+            dialog = StatsDialog(stats, self)
+            dialog.exec()
+
+    def open_log_dialog(self):
+        """Open log popup dialog."""
+        if self.log_dialog is None or not self.log_dialog.isVisible():
+            self.log_dialog = LogDialog(self.log_text, self)
+            self.log_dialog.show()
+        else:
+            self.log_dialog.raise_()
+            self.log_dialog.activateWindow()
 
     def on_stats(self):
         """Show statistics (placeholder)."""
-        # Get current logs and append stats
-        current_logs = self.log_label.text()
+        # Add stats to logs
         stats_info = f"\n[STATS] Zeit: {self.time_step}"
-        if current_logs:
-            self.log_label.setText(current_logs + stats_info)
+        if self.log_text:
+            self.log_text += stats_info
         else:
-            self.log_label.setText(stats_info)
+            self.log_text = stats_info
+        # Update popup if open
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.update_log(self.log_text)
 
     def on_back(self):
         """Go back to start screen."""

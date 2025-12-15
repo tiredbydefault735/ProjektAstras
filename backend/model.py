@@ -111,17 +111,26 @@ class Clan:
         """Gesamte HP des Clans."""
         return self.population * self.hp_per_member
 
-    def take_damage(self, damage):
+    def take_damage(self, damage, sim_model=None):
         """Nimmt Schaden und reduziert Population wenn nötig."""
         remaining_damage = damage
+        deaths = 0
         while remaining_damage > 0 and self.population > 0:
             if remaining_damage >= self.hp_per_member:
                 # Töte ein Mitglied
                 self.population -= 1
+                deaths += 1
                 remaining_damage -= self.hp_per_member
             else:
                 # Teilschaden (wird ignoriert, nur volle Member sterben)
                 remaining_damage = 0
+
+        # Track combat deaths
+        if deaths > 0 and sim_model:
+            sim_model.stats["deaths"]["combat"][self.species] = (
+                sim_model.stats["deaths"]["combat"].get(self.species, 0) + deaths
+            )
+
         return self.population > 0  # True wenn noch lebt
 
     def distance_to_clan(self, other_clan):
@@ -267,6 +276,12 @@ class SpeciesGroup:
                         self.env.sim_model.add_log(
                             f"☠️ {self.name} Clan #{clan.clan_id}: {deaths} Mitglied(er) verhungert!"
                         )
+                        self.env.sim_model.stats["deaths"]["starvation"][self.name] = (
+                            self.env.sim_model.stats["deaths"]["starvation"].get(
+                                self.name, 0
+                            )
+                            + deaths
+                        )
 
                 # Langsames Population-Wachstum
                 if random.random() < 0.05:
@@ -329,6 +344,17 @@ class SimulationModel:
         self.logs = []
         self.max_logs = 50
         self.time = 0
+
+        # Statistics tracking
+        self.stats = {
+            "species_counts": {},  # Initial counts per species
+            "deaths": {
+                "combat": {},  # Deaths by combat per species
+                "starvation": {},  # Deaths by starvation per species
+            },
+            "max_clans": 0,
+            "food_places": 0,
+        }
 
     def add_log(self, message):
         """Log-Nachricht hinzufügen."""
@@ -416,6 +442,20 @@ class SimulationModel:
             f"Start: {len(self.groups)} Spezies, {total_pop} Mitglieder, {len(self.loners)} Einzelgänger"
         )
 
+        # Initialize statistics
+        self.stats["food_places"] = food_places
+        total_clans = sum(len(g.clans) for g in self.groups)
+        self.stats["max_clans"] = total_clans
+
+        # Count initial population per species
+        for group in self.groups:
+            species_name = group.name
+            clan_pop = sum(c.population for c in group.clans)
+            loner_pop = sum(1 for l in self.loners if l.species == species_name)
+            self.stats["species_counts"][species_name] = clan_pop + loner_pop
+            self.stats["deaths"]["combat"][species_name] = 0
+            self.stats["deaths"]["starvation"][species_name] = 0
+
     def step(self):
         """Simulationsschritt."""
         # SimPy step
@@ -432,6 +472,9 @@ class SimulationModel:
             if loner.hunger_timer >= 100:
                 loners_to_remove.append(loner)
                 self.add_log(f"☠️ {loner.species} Einzelgänger verhungert!")
+                self.stats["deaths"]["starvation"][loner.species] = (
+                    self.stats["deaths"]["starvation"].get(loner.species, 0) + 1
+                )
 
         # Entferne verhungerte Loners
         for loner in loners_to_remove:
@@ -580,7 +623,7 @@ class SimulationModel:
                                     random.random() < 0.3
                                 ):  # 30% Chance pro Step (war 15%)
                                     old_pop = clan2.population
-                                    alive = clan2.take_damage(ATTACK_DAMAGE)
+                                    alive = clan2.take_damage(ATTACK_DAMAGE, self)
                                     if old_pop > clan2.population:
                                         killed = old_pop - clan2.population
                                         self.add_log(
@@ -646,6 +689,12 @@ class SimulationModel:
                                     self.add_log(
                                         f"⚔️ {group.name} Clan #{clan.clan_id} tötet {loner.species} Einzelgänger"
                                     )
+                                    self.stats["deaths"]["combat"][loner.species] = (
+                                        self.stats["deaths"]["combat"].get(
+                                            loner.species, 0
+                                        )
+                                        + 1
+                                    )
 
                                     # Kannibalismus: Spores und Corrupted bekommen 2 Food pro Loner
                                     if clan.can_cannibalize:
@@ -657,21 +706,45 @@ class SimulationModel:
                                         )
 
                         elif interaction == "Freundlich":
-                            # Loner kann Clan beitreten (selten)
+                            # Loner kann Clan beitreten
+                            # Höhere Chance wenn hungrig (>50 steps ohne Essen)
+                            join_chance = 0.03  # 3% Basis-Chance
+                            if loner.hunger_timer >= 50:
+                                join_chance = 0.15  # 15% wenn hungrig
+
                             if (
-                                random.random() < 0.01
+                                random.random() < join_chance
                                 and clan.population < clan.max_members
+                                and loner.species == group.name  # Nur gleiche Spezies
                             ):
                                 clan.population += 1
                                 loners_to_remove.append(loner)
+                                reason = (
+                                    "hungrig"
+                                    if loner.hunger_timer >= 50
+                                    else "freundlich"
+                                )
                                 self.add_log(
-                                    f"👥 {loner.species} Einzelgänger tritt {group.name} Clan #{clan.clan_id} bei"
+                                    f"👥 {loner.species} Einzelgänger ({reason}) tritt {group.name} Clan #{clan.clan_id} bei"
                                 )
 
         # Entferne getötete Loners
         for loner in loners_to_remove:
             if loner in self.loners:
                 self.loners.remove(loner)
+
+    def get_final_stats(self):
+        """Get final statistics for end of simulation."""
+        # Update max clans count
+        current_clans = sum(len(g.clans) for g in self.groups)
+        self.stats["max_clans"] = max(self.stats["max_clans"], current_clans)
+
+        return {
+            "species_counts": self.stats["species_counts"],
+            "deaths": self.stats["deaths"],
+            "max_clans": self.stats["max_clans"],
+            "food_places": self.stats["food_places"],
+        }
 
     def set_temperature(self, temp):
         """Set temperature."""
