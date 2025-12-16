@@ -49,13 +49,15 @@ class Loner:
         )
         self.can_cannibalize = can_cannibalize  # Kann andere Arachs essen
 
-    def update(self, width, height):
+    def update(self, width, height, is_day=True):
         """Bewege Loner."""
         # Hunger erhöhen
         self.hunger_timer += 1
 
-        self.x += self.vx
-        self.y += self.vy
+        # Bei Nacht: Langsamere Bewegung (70% Geschwindigkeit)
+        speed_modifier = 1.0 if is_day else 0.7
+        self.x += self.vx * speed_modifier
+        self.y += self.vy * speed_modifier
 
         # Bounce an Rändern
         if self.x < 10 or self.x > width - 10:
@@ -169,7 +171,7 @@ class Clan:
                 self.vx = (self.vx / current_speed) * max_speed
                 self.vy = (self.vy / current_speed) * max_speed
 
-    def update(self, width, height):
+    def update(self, width, height, is_day=True):
         """Bewege Clan langsam und smooth."""
         # Hunger erhöhen (jeder Step = 0.1 Sekunden)
         self.hunger_timer += 1
@@ -178,8 +180,10 @@ class Clan:
         if self.hunger_timer >= 50:
             self.seeking_food = True
 
-        self.x += self.vx
-        self.y += self.vy
+        # Bei Nacht: Langsamere Bewegung (70% Geschwindigkeit)
+        speed_modifier = 1.0 if is_day else 0.7
+        self.x += self.vx * speed_modifier
+        self.y += self.vy * speed_modifier
 
         # Bounce an Rändern (mit Margin von 30px)
         if self.x < 30:
@@ -264,9 +268,14 @@ class SpeciesGroup:
         while True:
             yield self.env.timeout(1)
 
+            # Hole Tag/Nacht Status vom Model
+            is_day = getattr(self.env, "sim_model", None) and getattr(
+                self.env.sim_model, "is_day", True
+            )
+
             # Update alle Clans
             for clan in self.clans:
-                clan.update(self.map_width, self.map_height)
+                clan.update(self.map_width, self.map_height, is_day)
 
                 # Hungertod: Nach 100 Steps (10 Sekunden) sterben Mitglieder
                 if clan.hunger_timer >= 100:
@@ -371,6 +380,7 @@ class SimulationModel:
         food_places=5,
         food_amount=50,
         start_temperature=None,
+        start_is_day=True,
     ):
         """Initialisiere Simulation."""
         self.groups = []
@@ -388,9 +398,13 @@ class SimulationModel:
         self.temp_change_timer = 0  # Timer für Temperatur-Änderungen
 
         # Tag/Nacht-Zyklus initialisieren
-        self.is_day = True  # Start bei Tag
+        self.is_day = start_is_day  # Start-Tageszeit aus UI
         self.day_night_timer = 0
-        self.day_night_cycle_duration = 1200  # 120 Sekunden pro Zyklus
+        self.day_night_cycle_duration = 300  # 30 Sekunden pro Zyklus (300 Steps)
+        self.transition_duration = 50  # 5 Sekunden Übergang (50 Steps)
+        self.in_transition = False
+        self.transition_timer = 0
+        self.transition_to_day = True  # Zielzustand des Übergangs
 
         # Re-initialize statistics to ensure temperature is included
         self.stats["deaths"]["temperature"] = {}
@@ -491,20 +505,47 @@ class SimulationModel:
         self.env.run(until=target)
         self.time = int(self.env.now)
 
-        # Tag/Nacht-Zyklus: Wechsel alle 120 Sekunden (1200 Steps)
+        # Tag/Nacht-Zyklus: Wechsel alle 30 Sekunden (300 Steps)
         self.day_night_timer += 1
-        if self.day_night_timer >= self.day_night_cycle_duration:
+
+        # Starte Übergang wenn Zyklus endet
+        if (
+            self.day_night_timer >= self.day_night_cycle_duration
+            and not self.in_transition
+        ):
             self.day_night_timer = 0
-            self.is_day = not self.is_day
-            self.stats["is_day"] = self.is_day
-            if self.is_day:
-                self.add_log(f"☀️ Es ist jetzt Tag!")
-                # Bei Tag: Temperatur steigt etwas
-                self.current_temperature += random.uniform(3, 8)
+            self.in_transition = True
+            self.transition_timer = 0
+            self.transition_to_day = not self.is_day
+
+            if self.transition_to_day:
+                self.add_log(f"🌅 Sonnenaufgang...")
             else:
-                self.add_log(f"🌙 Es ist jetzt Nacht!")
-                # Bei Nacht: Temperatur sinkt etwas
-                self.current_temperature -= random.uniform(3, 8)
+                self.add_log(f"🌆 Sonnenuntergang...")
+
+        # Übergangs-Logik
+        if self.in_transition:
+            self.transition_timer += 1
+
+            # Graduelle Temperaturänderung (10°C über transition_duration verteilt)
+            temp_change_per_step = 10.0 / self.transition_duration
+            if self.transition_to_day:
+                self.current_temperature += temp_change_per_step
+            else:
+                self.current_temperature -= temp_change_per_step
+
+            # Beende Übergang
+            if self.transition_timer >= self.transition_duration:
+                self.in_transition = False
+                self.transition_timer = 0
+                self.is_day = self.transition_to_day
+                self.stats["is_day"] = self.is_day
+
+                if self.is_day:
+                    self.add_log(f"☀️ Es ist jetzt Tag!")
+                else:
+                    self.add_log(f"🌙 Es ist jetzt Nacht!")
+
             # Begrenze Temperatur
             self.current_temperature = max(-80, min(50, self.current_temperature))
             self.stats["temperature"] = round(self.current_temperature, 1)
@@ -524,7 +565,7 @@ class SimulationModel:
         # Update Loners und prüfe auf Hungertod und Temperatur-Schaden
         loners_to_remove = []
         for loner in self.loners:
-            loner.update(self.map_width, self.map_height)
+            loner.update(self.map_width, self.map_height, self.is_day)
 
             # Temperatur-Schaden prüfen
             species_config = self.species_config.get(loner.species, {})
@@ -647,6 +688,12 @@ class SimulationModel:
             "loners": loners_data,
             "food_sources": food_sources_data,
             "logs": self.logs.copy(),
+            "is_day": self.is_day,
+            "transition_progress": (
+                self.transition_timer / self.transition_duration
+                if self.in_transition
+                else (1.0 if self.is_day else 0.0)
+            ),
         }
 
     def _process_food_seeking(self):
@@ -754,10 +801,11 @@ class SimulationModel:
                         # Angriff nur in Nahkampfreichweite
                         if dist < INTERACTION_RANGE:
                             if interaction == "Aggressiv":
-                                # Clan1 greift Clan2 an - HÖHERE Chance
-                                if (
-                                    random.random() < 0.3
-                                ):  # 30% Chance pro Step (war 15%)
+                                # Clan1 greift Clan2 an - Bei Nacht reduzierte Kampfchance
+                                attack_chance = (
+                                    0.3 if self.is_day else 0.15
+                                )  # 30% Tag, 15% Nacht
+                                if random.random() < attack_chance:
                                     old_pop = clan2.population
                                     alive = clan2.take_damage(ATTACK_DAMAGE, self)
                                     if old_pop > clan2.population:
@@ -817,8 +865,11 @@ class SimulationModel:
 
                     if dist < INTERACTION_RANGE:
                         if interaction == "Aggressiv":
-                            # Clan greift Loner an - HÖHERE Chance
-                            if random.random() < 0.4:  # 40% Chance (war 20%)
+                            # Clan greift Loner an - Bei Nacht reduzierte Kampfchance
+                            attack_chance = (
+                                0.4 if self.is_day else 0.2
+                            )  # 40% Tag, 20% Nacht
+                            if random.random() < attack_chance:
                                 loner.hp -= ATTACK_DAMAGE
                                 if loner.hp <= 0:
                                     loners_to_remove.append(loner)

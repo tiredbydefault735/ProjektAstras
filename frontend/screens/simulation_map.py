@@ -42,7 +42,13 @@ class SimulationMapWidget(QGraphicsView):
         bg_color = self.region_colors.get(region_name, QColor(255, 255, 255))
         self.setBackgroundBrush(bg_color)
 
-    def draw_groups(self, groups_data, loners_data=None, food_sources_data=None):
+    def draw_groups(
+        self,
+        groups_data,
+        loners_data=None,
+        food_sources_data=None,
+        transition_progress=1.0,
+    ):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
         self.scene.clear()
 
@@ -160,6 +166,22 @@ class SimulationMapWidget(QGraphicsView):
                 text.setPos(x - text_width / 2, y - text_height / 2)
                 text.setZValue(1)
                 self.scene.addItem(text)
+
+        # Fließender Dunkelheitseffekt basierend auf Tageszeit
+        # transition_progress: 0.0 = Nacht, 1.0 = Tag
+        # Berechne Dunkelheit: 0 bei Tag (hell), 120 bei Nacht (dunkel)
+        darkness = int((1.0 - transition_progress) * 120)
+
+        if darkness > 0:
+            overlay = self.scene.addRect(
+                0,
+                0,
+                width,
+                height,
+                pen=QPen(Qt.PenStyle.NoPen),
+                brush=QBrush(QColor(0, 0, 0, darkness)),
+            )
+            overlay.setZValue(10)  # Über allem
 
     def clear_map(self):
         """Lösche Map."""

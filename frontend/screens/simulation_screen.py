@@ -593,6 +593,7 @@ class EnvironmentPanel(QWidget):
 
         self.day_btn = day_btn
         self.night_btn = night_btn
+        self.start_is_day = True  # Default: Start bei Tag
 
         layout.addLayout(day_night_layout)
 
@@ -603,6 +604,7 @@ class EnvironmentPanel(QWidget):
 
     def on_day_night_toggle(self, is_day):
         """Toggle between day and night mode."""
+        self.start_is_day = is_day
         if is_day:
             self.day_btn.setChecked(True)
             self.night_btn.setChecked(False)
@@ -1083,6 +1085,14 @@ class SimulationScreen(QWidget):
         self.timer_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
         control_layout.addWidget(self.timer_label)
 
+        # Day/Night indicator
+        self.day_night_label = QLabel("☀️")
+        day_night_font = QFont("Minecraft", 16)
+        day_night_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.day_night_label.setFont(day_night_font)
+        self.day_night_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
+        control_layout.addWidget(self.day_night_label)
+
         # Temperature display (live)
         self.live_temp_label = QLabel("🌡️ 0°C")
         live_temp_font = QFont("Minecraft", 12)
@@ -1198,9 +1208,15 @@ class SimulationScreen(QWidget):
             food_places = self.environment_panel.get_food_places()
             food_amount = self.environment_panel.get_food_amount()
             start_temp = self.environment_panel.get_temperature()
+            start_is_day = self.environment_panel.get_is_day()
             region = self.environment_panel.get_selected_region()
             self.sim_model.setup(
-                self.species_config, populations, food_places, food_amount, start_temp
+                self.species_config,
+                populations,
+                food_places,
+                food_amount,
+                start_temp,
+                start_is_day,
             )
 
             # Set region background
@@ -1266,7 +1282,10 @@ class SimulationScreen(QWidget):
         if self.sim_model:
             data = self.sim_model.step()
             self.map_widget.draw_groups(
-                data["groups"], data.get("loners", []), data.get("food_sources", [])
+                data["groups"],
+                data.get("loners", []),
+                data.get("food_sources", []),
+                data.get("transition_progress", 1.0),
             )
             self.time_step = data["time"]
 
@@ -1277,6 +1296,10 @@ class SimulationScreen(QWidget):
             minutes = int(self.simulation_time // 60)
             seconds = int(self.simulation_time % 60)
             self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
+
+            # Update day/night indicator
+            is_day = data.get("is_day", True)
+            self.day_night_label.setText("☀️" if is_day else "🌙")
 
             # Update live temperature display
             current_temp = self.sim_model.stats.get("temperature", 0)
