@@ -1,0 +1,22 @@
+{
+    "Snowy_Abyss": {
+        "min_temp": -60,
+        "max_temp": -20,
+        "max_food_spots": 3
+    },
+    "Wasteland": {
+        "min_temp": -10,
+        "max_temp": 35,
+        "max_food_spots": 4
+    },
+    "Evergreen_Forest": {
+        "min_temp": 10,
+        "max_temp": 22,
+        "max_food_spots": 7
+    },
+    "Corrupted_Caves": {
+        "min_temp": -20,
+        "max_temp": 30,
+        "max_food_spots": 2
+    }
+}
