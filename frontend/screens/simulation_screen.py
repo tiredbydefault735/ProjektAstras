@@ -9,6 +9,9 @@ from pathlib import Path
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Import resource path utilities
+from utils import get_static_path
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -127,6 +130,10 @@ class StatsDialog(QDialog):
         for species, count in stats["deaths"]["starvation"].items():
             text += f"• {species}: {count}<br>"
 
+        text += "<br><b>Todesfälle (Temperatur):</b><br>"
+        for species, count in stats["deaths"].get("temperature", {}).items():
+            text += f"• {species}: {count}<br>"
+
         text += f"<br><b>Maximale Clans:</b> {stats['max_clans']}<br>"
         text += f"<b>Futterplätze:</b> {stats['food_places']}"
 
@@ -181,7 +188,7 @@ class LogDialog(QDialog):
         self.text_edit.setStyleSheet(
             "background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666;"
         )
-        self.text_edit.setPlainText(log_text)
+        self.text_edit.setHtml(self.colorize_logs(log_text))
         layout.addWidget(self.text_edit)
 
         # Close button
@@ -196,17 +203,60 @@ class LogDialog(QDialog):
         close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn)
 
-    def update_log(self, log_text):
-        """Update the log text in the dialog."""
-        self.text_edit.setPlainText(log_text)
-        # Scroll to bottom to show latest logs
-        self.text_edit.verticalScrollBar().setValue(
-            self.text_edit.verticalScrollBar().maximum()
-        )
+    def colorize_logs(self, log_text):
+        """Colorize log messages based on content."""
+        if not log_text:
+            return ""
+
+        lines = log_text.split("\n")
+        colored_lines = []
+
+        for line in lines:
+            # Verhungert - Dunkles Rot
+            if "☠️" in line and "verhungert" in line:
+                colored_lines.append(f'<span style="color: #cc3333;">{line}</span>')
+            # Erfroren (Temperatur + Kälte) - Helles Blau
+            elif "❄️" in line and "Temperatur" in line:
+                colored_lines.append(f'<span style="color: #99ddff;">{line}</span>')
+            # Hitzetod (Temperatur bei Hitze, über ~30°C) - Helles Rot
+            elif "stirbt an Temperatur" in line:
+                # Check if temperature is high (heuristic: if no ❄️ emoji, it's heat)
+                if "❄️" not in line:
+                    colored_lines.append(f'<span style="color: #ff9999;">{line}</span>')
+                else:
+                    colored_lines.append(f'<span style="color: #99ddff;">{line}</span>')
+            # Isst (Food/Eating) - Braun
+            elif "🍽️" in line or "🍖" in line or "isst" in line:
+                colored_lines.append(f'<span style="color: #cd853f;">{line}</span>')
+            # Clan beigetreten - Lila
+            elif "👥" in line and "tritt" in line and "bei" in line:
+                colored_lines.append(f'<span style="color: #bb88ff;">{line}</span>')
+            # Clan verlassen - Orange (falls implementiert)
+            elif "verlässt" in line or "verlassen" in line:
+                colored_lines.append(f'<span style="color: #ff9944;">{line}</span>')
+            # Combat/Attack - Red
+            elif "⚔️" in line or "💀" in line:
+                colored_lines.append(f'<span style="color: #ff6666;">{line}</span>')
+            # Temperature Info - Cyan
+            elif "🌡️" in line:
+                colored_lines.append(f'<span style="color: #66ccff;">{line}</span>')
+            # Day/Night - Yellow/Purple
+            elif "☀️" in line:
+                colored_lines.append(f'<span style="color: #ffdd44;">{line}</span>')
+            elif "🌙" in line:
+                colored_lines.append(f'<span style="color: #aa88ff;">{line}</span>')
+            # Friendly - Light Green
+            elif "🤝" in line:
+                colored_lines.append(f'<span style="color: #88ff88;">{line}</span>')
+            # Start/Info - White
+            else:
+                colored_lines.append(f'<span style="color: #ffffff;">{line}</span>')
+
+        return "<br>".join(colored_lines)
 
     def update_log(self, log_text):
         """Update the log text in the dialog."""
-        self.text_edit.setPlainText(log_text)
+        self.text_edit.setHtml(self.colorize_logs(log_text))
         # Scroll to bottom to show latest logs
         self.text_edit.verticalScrollBar().setValue(
             self.text_edit.verticalScrollBar().maximum()
@@ -251,9 +301,18 @@ class SpeciesPanel(QWidget):
 
         for species_id, display_name in species_names.items():
             # Checkbox for enable/disable with custom icons
-            base_path = Path(__file__).parent.parent.parent
-            unchecked_path = str(base_path / "static" / "ui" / "Checkbox_unchecked.png")
-            checked_path = str(base_path / "static" / "ui" / "Checkbox_checked.png")
+            unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
+            checked_path = str(get_static_path("ui/Checkbox_checked.png"))
+            try:
+                from frontend.main import debug_log
+
+                debug_log(
+                    f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
+                )
+            except:
+                print(
+                    f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
+                )
 
             checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
             checkbox_font = QFont("Minecraft", 12)
@@ -379,11 +438,31 @@ class SpeciesPanel(QWidget):
 class EnvironmentPanel(QWidget):
     """Region panel: environment controls."""
 
-    def __init__(self, color_preset=None, map_widget=None):
+    def __init__(
+        self,
+        color_preset=None,
+        map_widget=None,
+        species_config=None,
+        species_panel=None,
+    ):
         super().__init__()
         self.color_preset = color_preset
         self.map_widget = map_widget  # Reference to map widget for updating background
+        self.species_config = species_config  # Reference to species config
+        self.species_panel = (
+            species_panel  # Reference to species panel for checkbox control
+        )
         self.current_food_level = 5  # Default food level (1-10)
+
+        # Load region config for temperature ranges
+        self.region_config = {}
+        try:
+            region_json_path = get_static_path("data/region.json")
+            with open(region_json_path, "r") as f:
+                self.region_config = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load region.json: {e}")
+
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
@@ -412,6 +491,14 @@ class EnvironmentPanel(QWidget):
         self.region_combo.currentTextChanged.connect(self.on_region_changed)
         layout.addWidget(self.region_combo)
 
+        # Store region name to key mapping
+        self.region_name_to_key = {
+            "Snowy Abyss": "Snowy_Abyss",
+            "Wasteland": "Wasteland",
+            "Evergreen Forest": "Evergreen_Forest",
+            "Corrupted Caves": "Corrupted_Caves",
+        }
+
         # Temperature Section
         self.temp_label = QLabel("Temperatur:")
         temp_label_font = QFont("Minecraft", 12)
@@ -430,10 +517,11 @@ class EnvironmentPanel(QWidget):
         temp_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.temp_value_label.setFont(temp_value_font)
         self.temp_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.temp_slider.valueChanged.connect(
-            lambda v: self.temp_value_label.setText(f"Temp: {v} C°")
-        )
+        self.temp_slider.valueChanged.connect(self.on_temp_value_changed)
         layout.addWidget(self.temp_value_label)
+
+        # Set initial temperature range based on default region (Snowy Abyss)
+        self.update_temperature_range("Snowy Abyss")
 
         # Food Section
         self.food_label_title = QLabel("Nahrung:")
@@ -526,6 +614,109 @@ class EnvironmentPanel(QWidget):
         """Called when region selection changes."""
         if self.map_widget:
             self.map_widget.set_region(region_name)
+        # Update temperature slider range based on region
+        self.update_temperature_range(region_name)
+        # Update species checkboxes based on region temperature compatibility
+        self.update_species_compatibility(region_name)
+
+    def update_temperature_range(self, region_name):
+        """Update temperature slider min/max based on selected region."""
+        # Convert display name to JSON key
+        region_key = self.region_name_to_key.get(region_name, "Wasteland")
+
+        if region_key in self.region_config:
+            region_data = self.region_config[region_key]
+            min_temp = region_data.get("min_temp", -50)
+            max_temp = region_data.get("max_temp", 50)
+
+            # Update slider range
+            self.temp_slider.setMinimum(min_temp)
+            self.temp_slider.setMaximum(max_temp)
+
+            # Set value to middle of range
+            mid_temp = (min_temp + max_temp) // 2
+            self.temp_slider.setValue(mid_temp)
+
+            # Update label with range info
+            self.temp_value_label.setText(
+                f"Temp: {mid_temp} C° ({min_temp} bis {max_temp})"
+            )
+
+    def on_temp_value_changed(self, value):
+        """Update label when temperature slider value changes."""
+        min_temp = self.temp_slider.minimum()
+        max_temp = self.temp_slider.maximum()
+        self.temp_value_label.setText(f"Temp: {value} C° ({min_temp} bis {max_temp})")
+        # Update species compatibility based on selected temperature
+        self.update_species_compatibility_by_temp(value)
+
+    def update_species_compatibility(self, region_name):
+        """Enable/disable species checkboxes based on region temperature compatibility."""
+        if not self.species_panel or not self.species_config:
+            return
+
+        # Get region temperature range
+        region_key = self.region_name_to_key.get(region_name, "Wasteland")
+        if region_key not in self.region_config:
+            return
+
+        region_data = self.region_config[region_key]
+        region_min_temp = region_data.get("min_temp", -50)
+        region_max_temp = region_data.get("max_temp", 50)
+
+        # Check each species
+        for species_id, checkbox in self.species_panel.species_checkboxes.items():
+            if species_id in self.species_config:
+                species_data = self.species_config[species_id]
+                species_min_temp = species_data.get("min_survival_temp", -100)
+                species_max_temp = species_data.get("max_survival_temp", 100)
+
+                # Check if species can survive in this region's temperature range
+                # Species can survive if there's ANY overlap between region temp and survival temp
+                can_survive = not (
+                    region_max_temp < species_min_temp
+                    or region_min_temp > species_max_temp
+                )
+
+                if not can_survive:
+                    # Disable and uncheck species that can't survive
+                    checkbox.setChecked(False)
+                    checkbox.setEnabled(False)
+                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
+                else:
+                    # Enable species that can survive
+                    checkbox.setEnabled(True)
+                    # Reset style (will be updated by update_theme)
+
+    def update_species_compatibility_by_temp(self, temperature):
+        """Enable/disable species checkboxes based on specific temperature."""
+        if not self.species_panel or not self.species_config:
+            return
+
+        # Check each species
+        for species_id, checkbox in self.species_panel.species_checkboxes.items():
+            if species_id in self.species_config:
+                species_data = self.species_config[species_id]
+                species_min_temp = species_data.get("min_survival_temp", -100)
+                species_max_temp = species_data.get("max_survival_temp", 100)
+
+                # Check if species can survive at this specific temperature
+                can_survive = species_min_temp <= temperature <= species_max_temp
+
+                if not can_survive:
+                    # Disable and uncheck species that can't survive
+                    checkbox.setChecked(False)
+                    checkbox.setEnabled(False)
+                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
+                else:
+                    # Enable and auto-check species that can survive
+                    checkbox.setEnabled(True)
+                    checkbox.setChecked(True)
+                    # Reset style (will be updated by update_theme)
+
+    def set_species_panel(self, species_panel):
+        """Set reference to species panel after it's created."""
+        self.species_panel = species_panel
 
     def increase_food(self):
         """Increase food level."""
@@ -689,14 +880,26 @@ class SimulationScreen(QWidget):
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
 
         # Load species config
-        json_path = (
-            Path(__file__).parent.parent.parent / "static" / "data" / "species.json"
-        )
+        json_path = get_static_path("data/species.json")
+        try:
+            from frontend.main import debug_log
+
+            debug_log(f"species.json path: {json_path}")
+            debug_log(f"species.json exists: {json_path.exists()}")
+        except:
+            print(f"DEBUG: species.json path: {json_path}")
+            print(f"DEBUG: species.json exists: {json_path.exists()}")
         try:
             with open(json_path, "r") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
+            try:
+                from frontend.main import debug_log
+
+                debug_log(f"ERROR: Could not load species.json from {json_path}")
+            except:
+                print(f"Warning: Could not load species.json from {json_path}")
 
         # Initialize simulation model
         self.sim_model = SimulationModel()
@@ -756,6 +959,7 @@ class SimulationScreen(QWidget):
 
         # Sidebar: Tab buttons and panels
         sidebar_frame = QFrame()
+        sidebar_frame.setFixedWidth(270)
         sidebar_layout = QVBoxLayout(sidebar_frame)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(10)
@@ -794,8 +998,16 @@ class SimulationScreen(QWidget):
         self.species_panel = SpeciesPanel(self.species_config, self.color_preset)
         self.panel_stack.addWidget(self.species_panel)  # Index 0
 
-        self.environment_panel = EnvironmentPanel(self.color_preset, self.map_widget)
+        self.environment_panel = EnvironmentPanel(
+            self.color_preset, self.map_widget, self.species_config, self.species_panel
+        )
         self.panel_stack.addWidget(self.environment_panel)  # Index 1
+
+        # Initialize species compatibility for default region and temperature
+        self.environment_panel.update_species_compatibility("Snowy Abyss")
+        # Also check with initial temperature value
+        initial_temp = self.environment_panel.get_temperature()
+        self.environment_panel.update_species_compatibility_by_temp(initial_temp)
 
         # Show species panel by default
         self.panel_stack.setCurrentIndex(0)
@@ -814,24 +1026,17 @@ class SimulationScreen(QWidget):
         control_layout = QHBoxLayout()
         control_layout.setSpacing(10)
 
-        self.btn_play = QPushButton("▶")
-        play_font = QFont("Minecraft", 16)
-        play_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_play.setFont(play_font)
-        self.btn_play.setFixedWidth(50)
-        self.btn_play.setFixedHeight(40)
-        self.btn_play.clicked.connect(self.toggle_simulation)
-        control_layout.addWidget(self.btn_play)
+        # Play/Pause Toggle Button
+        self.btn_play_pause = QPushButton("▶")
+        play_pause_font = QFont("Minecraft", 16)
+        play_pause_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_play_pause.setFont(play_pause_font)
+        self.btn_play_pause.setFixedWidth(50)
+        self.btn_play_pause.setFixedHeight(40)
+        self.btn_play_pause.clicked.connect(self.toggle_play_pause)
+        control_layout.addWidget(self.btn_play_pause)
 
-        self.btn_pause = QPushButton("||")
-        pause_font = QFont("Minecraft", 16)
-        pause_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_pause.setFont(pause_font)
-        self.btn_pause.setFixedWidth(50)
-        self.btn_pause.setFixedHeight(40)
-        self.btn_pause.clicked.connect(self.pause_simulation)
-        control_layout.addWidget(self.btn_pause)
-
+        # Stop Button
         self.btn_stop = QPushButton("⏹")
         stop_font = QFont("Minecraft", 16)
         stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -877,6 +1082,22 @@ class SimulationScreen(QWidget):
         self.timer_label.setFont(timer_font)
         self.timer_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
         control_layout.addWidget(self.timer_label)
+
+        # Temperature display (live)
+        self.live_temp_label = QLabel("🌡️ 0°C")
+        live_temp_font = QFont("Minecraft", 12)
+        live_temp_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.live_temp_label.setFont(live_temp_font)
+        self.live_temp_label.setStyleSheet("color: #88ccff; padding: 0 10px;")
+        control_layout.addWidget(self.live_temp_label)
+
+        # Day/Night indicator (live)
+        self.live_day_night_label = QLabel("☀️ Tag")
+        live_dn_font = QFont("Minecraft", 12)
+        live_dn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.live_day_night_label.setFont(live_dn_font)
+        self.live_day_night_label.setStyleSheet("color: #ffcc44; padding: 0 10px;")
+        control_layout.addWidget(self.live_day_night_label)
 
         control_layout.addStretch()
 
@@ -976,29 +1197,34 @@ class SimulationScreen(QWidget):
             populations = self.species_panel.get_enabled_species_populations()
             food_places = self.environment_panel.get_food_places()
             food_amount = self.environment_panel.get_food_amount()
+            start_temp = self.environment_panel.get_temperature()
             region = self.environment_panel.get_selected_region()
             self.sim_model.setup(
-                self.species_config, populations, food_places, food_amount
+                self.species_config, populations, food_places, food_amount, start_temp
             )
 
             # Set region background
             self.map_widget.set_region(region)
 
             self.is_running = True
-            self.btn_play.setText("⏸")
+            self.btn_play_pause.setText("⏸")
 
             # Start Update-Timer with speed multiplier
             self.update_timer = QTimer()
             self.update_timer.timeout.connect(self.update_simulation_with_speed)
             self.update_timer.start(100)
 
-    def pause_simulation(self):
-        """Pause simulation."""
+    def toggle_play_pause(self):
+        """Toggle between play and pause."""
         if self.is_running:
+            # Currently running, so pause
             if self.update_timer:
                 self.update_timer.stop()
             self.is_running = False
-            self.btn_play.setText("▶")
+            self.btn_play_pause.setText("▶")
+        else:
+            # Currently paused or not started, so play/start
+            self.toggle_simulation()
 
     def stop_simulation(self):
         """Stop and reset simulation."""
@@ -1009,7 +1235,7 @@ class SimulationScreen(QWidget):
             self.update_timer = None
 
         self.is_running = False
-        self.btn_play.setText("▶")
+        self.btn_play_pause.setText("▶")
         self.time_step = 0
         self.simulation_time = 0
 
@@ -1051,6 +1277,29 @@ class SimulationScreen(QWidget):
             minutes = int(self.simulation_time // 60)
             seconds = int(self.simulation_time % 60)
             self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
+
+            # Update live temperature display
+            current_temp = self.sim_model.stats.get("temperature", 0)
+            temp_color = (
+                "#88ccff"
+                if current_temp < 0
+                else "#ffcc44" if current_temp > 25 else "#ffffff"
+            )
+            self.live_temp_label.setText(f"🌡️ {current_temp}°C")
+            self.live_temp_label.setStyleSheet(f"color: {temp_color}; padding: 0 10px;")
+
+            # Update live day/night display
+            is_day = self.sim_model.stats.get("is_day", True)
+            if is_day:
+                self.live_day_night_label.setText("☀️ Tag")
+                self.live_day_night_label.setStyleSheet(
+                    "color: #ffcc44; padding: 0 10px;"
+                )
+            else:
+                self.live_day_night_label.setText("🌙 Nacht")
+                self.live_day_night_label.setStyleSheet(
+                    "color: #8888ff; padding: 0 10px;"
+                )
 
             # Check if 5 minutes reached
             if self.simulation_time >= self.max_simulation_time:
