@@ -2,7 +2,12 @@
 StartScreen - First screen with logo and buttons.
 """
 
+import sys
 from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -13,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QFont, QColor
 from PyQt6.QtCore import Qt
+from utils import get_static_path
 
 
 class StartScreen(QWidget):
@@ -59,12 +65,7 @@ class StartScreen(QWidget):
         logo_layout.setContentsMargins(0, 0, 0, 0)
 
         logo_label = QLabel()
-        logo_path = (
-            Path(__file__).parent.parent.parent
-            / "static"
-            / "src"
-            / "logo_astras_pix.png"
-        )
+        logo_path = get_static_path("src/logo_astras_pix.png")
         if logo_path.exists():
             pixmap = QPixmap(str(logo_path))
             scaled_pixmap = pixmap.scaledToWidth(

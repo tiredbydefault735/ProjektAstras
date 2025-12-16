@@ -4,10 +4,46 @@ Main application entry point.
 """
 
 import sys
+import os
 from pathlib import Path
 
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import resource path utilities
+from utils import get_static_path
+
+# Setup debug logging
+# Nuitka onefile: __file__ points to temp dir with 'onefile_' in path
+is_exe = 'onefile_' in str(Path(__file__).resolve()).lower()
+if is_exe:
+    # In EXE mode, write log next to executable
+    log_file = Path(sys.argv[0]).parent / "debug.log"
+else:
+    # In dev mode, write to project root
+    log_file = Path(__file__).parent.parent / "debug.log"
+
+def debug_log(message):
+    """Write debug message to log file and print to console"""
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{message}\n")
+        print(message)
+    except Exception as e:
+        print(f"Failed to write log: {e}")
+
+# Clear old log
+try:
+    if log_file.exists():
+        log_file.unlink()
+except:
+    pass
+
+debug_log("=== ProjektAstras Debug Log ===")
+debug_log(f"sys.frozen: {getattr(sys, 'frozen', False)}")
+debug_log(f"sys.executable: {sys.executable}")
+if hasattr(sys, '_MEIPASS'):
+    debug_log(f"sys._MEIPASS: {sys._MEIPASS}")
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PyQt6.QtCore import Qt
@@ -114,8 +150,25 @@ def main(preset_name=None):
 
     app = QApplication(sys.argv)
 
-    # Load custom Minecraft font
-    font_path = Path(__file__).parent.parent / "static" / "fonts" / "Minecraft.ttf"
+    # Load custom Minecraft font using centralized resource path utility
+    font_path = get_static_path("fonts/Minecraft.ttf")
+    debug_log(f"Font path: {font_path}")
+    debug_log(f"Font exists: {font_path.exists()}")
+    if font_path.exists():
+        debug_log("Font file found!")
+    else:
+        debug_log("ERROR: Font file NOT found!")
+        # List what's actually in the directory
+        try:
+            parent = font_path.parent
+            if parent.exists():
+                debug_log(f"Contents of {parent}:")
+                for item in parent.iterdir():
+                    debug_log(f"  - {item.name}")
+            else:
+                debug_log(f"ERROR: Directory {parent} does not exist!")
+        except Exception as e:
+            debug_log(f"Error listing directory: {e}")
     font_id = QFontDatabase.addApplicationFont(str(font_path))
     if font_id != -1:
         font_families = QFontDatabase.applicationFontFamilies(font_id)

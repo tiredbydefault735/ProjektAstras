@@ -9,6 +9,9 @@ from pathlib import Path
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Import resource path utilities
+from utils import get_static_path
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -251,9 +254,13 @@ class SpeciesPanel(QWidget):
 
         for species_id, display_name in species_names.items():
             # Checkbox for enable/disable with custom icons
-            base_path = Path(__file__).parent.parent.parent
-            unchecked_path = str(base_path / "static" / "ui" / "Checkbox_unchecked.png")
-            checked_path = str(base_path / "static" / "ui" / "Checkbox_checked.png")
+            unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
+            checked_path = str(get_static_path("ui/Checkbox_checked.png"))
+            try:
+                from frontend.main import debug_log
+                debug_log(f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}")
+            except:
+                print(f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}")
 
             checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
             checkbox_font = QFont("Minecraft", 12)
@@ -689,14 +696,24 @@ class SimulationScreen(QWidget):
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
 
         # Load species config
-        json_path = (
-            Path(__file__).parent.parent.parent / "static" / "data" / "species.json"
-        )
+        json_path = get_static_path("data/species.json")
+        try:
+            from frontend.main import debug_log
+            debug_log(f"species.json path: {json_path}")
+            debug_log(f"species.json exists: {json_path.exists()}")
+        except:
+            print(f"DEBUG: species.json path: {json_path}")
+            print(f"DEBUG: species.json exists: {json_path.exists()}")
         try:
             with open(json_path, "r") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
+            try:
+                from frontend.main import debug_log
+                debug_log(f"ERROR: Could not load species.json from {json_path}")
+            except:
+                print(f"Warning: Could not load species.json from {json_path}")
 
         # Initialize simulation model
         self.sim_model = SimulationModel()
