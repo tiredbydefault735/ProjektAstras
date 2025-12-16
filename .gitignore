@@ -1,4 +1,4 @@
 /.pnotes
-/__pycache__
+**/__pycache__
 .clip
 .pyc
