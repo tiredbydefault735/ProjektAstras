@@ -4,7 +4,7 @@
         "max_survival_temp": 10,
         "max_clan_members": 10,
         "home_region": "Snowy_Abyss",
-        "hp": 25,
+        "hp": 75,
         "interactions": {
             "Icefang": "Freundlich",
             "Crushed_Critters": "Neutral",
@@ -18,7 +18,7 @@
         "max_survival_temp": 45,
         "max_clan_members": 10,
         "home_region": "Wasteland",
-        "hp": 25,
+        "hp": 75,
         "interactions": {
             "Icefang": "Vorsichtig",
             "Crushed_Critters": "Unfreundlich",
@@ -32,7 +32,7 @@
         "max_survival_temp": 30,
         "max_clan_members": 3,
         "home_region": "Evergreen_Forest",
-        "hp": 35,
+        "hp": 85,
         "interactions": {
             "Icefang": "Ängstlich",
             "Crushed_Critters": "Aggressiv",
@@ -46,7 +46,7 @@
         "max_survival_temp": 35,
         "max_clan_members": 2,
         "home_region": "Corrupted_Caves",
-        "hp": 50,
+        "hp": 100,
         "interactions": {
             "Icefang": "Ängstlich",
             "Crushed_Critters": "Vorsichtig",
