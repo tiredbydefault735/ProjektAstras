@@ -351,6 +351,7 @@ class SimulationModel:
             "deaths": {
                 "combat": {},  # Deaths by combat per species
                 "starvation": {},  # Deaths by starvation per species
+                "temperature": {},  # Deaths by temperature per species
             },
             "max_clans": 0,
             "food_places": 0,
@@ -364,11 +365,35 @@ class SimulationModel:
             self.logs = self.logs[-self.max_logs :]
 
     def setup(
-        self, species_config, population_overrides, food_places=5, food_amount=50
+        self,
+        species_config,
+        population_overrides,
+        food_places=5,
+        food_amount=50,
+        start_temperature=None,
     ):
         """Initialisiere Simulation."""
         self.groups = []
         self.loners = []
+
+        # Temperatur-System initialisieren
+        if start_temperature is not None:
+            self.current_temperature = (
+                start_temperature  # Vom Slider gesetzte Temperatur
+            )
+        else:
+            self.current_temperature = random.uniform(
+                -20, 20
+            )  # Fallback: zufällige Start-Temperatur
+        self.temp_change_timer = 0  # Timer für Temperatur-Änderungen
+
+        # Tag/Nacht-Zyklus initialisieren
+        self.is_day = True  # Start bei Tag
+        self.day_night_timer = 0
+        self.day_night_cycle_duration = 1200  # 120 Sekunden pro Zyklus
+
+        # Re-initialize statistics to ensure temperature is included
+        self.stats["deaths"]["temperature"] = {}
 
         # Farben für Spezies
         color_map = {
@@ -446,6 +471,8 @@ class SimulationModel:
         self.stats["food_places"] = food_places
         total_clans = sum(len(g.clans) for g in self.groups)
         self.stats["max_clans"] = total_clans
+        self.stats["temperature"] = round(self.current_temperature, 1)
+        self.stats["is_day"] = self.is_day
 
         # Count initial population per species
         for group in self.groups:
@@ -455,6 +482,7 @@ class SimulationModel:
             self.stats["species_counts"][species_name] = clan_pop + loner_pop
             self.stats["deaths"]["combat"][species_name] = 0
             self.stats["deaths"]["starvation"][species_name] = 0
+            self.stats["deaths"]["temperature"][species_name] = 0
 
     def step(self):
         """Simulationsschritt."""
@@ -463,10 +491,70 @@ class SimulationModel:
         self.env.run(until=target)
         self.time = int(self.env.now)
 
-        # Update Loners und prüfe auf Hungertod
+        # Tag/Nacht-Zyklus: Wechsel alle 120 Sekunden (1200 Steps)
+        self.day_night_timer += 1
+        if self.day_night_timer >= self.day_night_cycle_duration:
+            self.day_night_timer = 0
+            self.is_day = not self.is_day
+            self.stats["is_day"] = self.is_day
+            if self.is_day:
+                self.add_log(f"☀️ Es ist jetzt Tag!")
+                # Bei Tag: Temperatur steigt etwas
+                self.current_temperature += random.uniform(3, 8)
+            else:
+                self.add_log(f"🌙 Es ist jetzt Nacht!")
+                # Bei Nacht: Temperatur sinkt etwas
+                self.current_temperature -= random.uniform(3, 8)
+            # Begrenze Temperatur
+            self.current_temperature = max(-80, min(50, self.current_temperature))
+            self.stats["temperature"] = round(self.current_temperature, 1)
+
+        # Temperatur-System: Ändere Temperatur alle 200 Steps (~20 Sekunden)
+        self.temp_change_timer += 1
+        if self.temp_change_timer >= 200:
+            self.temp_change_timer = 0
+            # Zufällige Temperatur-Änderung (-3 bis +3 Grad)
+            temp_change = random.uniform(-3, 3)
+            self.current_temperature += temp_change
+            # Begrenze auf -80 bis +50 Grad
+            self.current_temperature = max(-80, min(50, self.current_temperature))
+            self.stats["temperature"] = round(self.current_temperature, 1)
+            self.add_log(f"🌡️ Temperatur: {round(self.current_temperature, 1)}°C")
+
+        # Update Loners und prüfe auf Hungertod und Temperatur-Schaden
         loners_to_remove = []
         for loner in self.loners:
             loner.update(self.map_width, self.map_height)
+
+            # Temperatur-Schaden prüfen
+            species_config = self.species_config.get(loner.species, {})
+            min_temp = species_config.get("min_survival_temp", -100)
+            max_temp = species_config.get("max_survival_temp", 100)
+
+            if (
+                self.current_temperature < min_temp
+                or self.current_temperature > max_temp
+            ):
+                # Progressiver Temperatur-Schaden basierend auf Distanz vom Überlebensbereich
+                if self.current_temperature < min_temp:
+                    temp_diff = min_temp - self.current_temperature
+                else:
+                    temp_diff = self.current_temperature - max_temp
+
+                # Basis-Schaden: 3 HP + 1 HP pro 5 Grad Unterschied
+                # Bei 30 Grad Unterschied: 3 + 6 = 9 HP pro Step
+                damage = 3 + (temp_diff // 5)
+                damage = max(3, min(damage, 20))  # Min 3, Max 20 HP pro Step
+
+                loner.hp -= damage
+                if loner.hp <= 0:
+                    loners_to_remove.append(loner)
+                    self.add_log(
+                        f"❄️ {loner.species} Einzelgänger stirbt an Temperatur ({round(self.current_temperature, 1)}°C)!"
+                    )
+                    self.stats["deaths"]["temperature"][loner.species] = (
+                        self.stats["deaths"]["temperature"].get(loner.species, 0) + 1
+                    )
 
             # Hungertod: Nach 100 Steps (10 Sekunden)
             if loner.hunger_timer >= 100:
@@ -480,6 +568,41 @@ class SimulationModel:
         for loner in loners_to_remove:
             if loner in self.loners:
                 self.loners.remove(loner)
+
+        # Temperatur-Schaden für Clans
+        for group in self.groups:
+            species_config = self.species_config.get(group.name, {})
+            min_temp = species_config.get("min_survival_temp", -100)
+            max_temp = species_config.get("max_survival_temp", 100)
+
+            if (
+                self.current_temperature < min_temp
+                or self.current_temperature > max_temp
+            ):
+                # Progressiver Temperatur-Schaden basierend auf Distanz vom Überlebensbereich
+                if self.current_temperature < min_temp:
+                    temp_diff = min_temp - self.current_temperature
+                else:
+                    temp_diff = self.current_temperature - max_temp
+
+                # Basis-Schaden: 3 HP + 1 HP pro 5 Grad Unterschied
+                # Bei 30 Grad Unterschied: 3 + 6 = 9 HP pro Step
+                damage = 3 + (temp_diff // 5)
+                damage = max(3, min(damage, 20))  # Min 3, Max 20 HP pro Step
+
+                # Wende Schaden auf alle Clans dieser Gruppe an
+                for clan in group.clans:
+                    old_pop = clan.population
+                    if not clan.take_damage(damage, self):
+                        # Clan ist tot - wird später entfernt
+                        pass
+                    # Logge wenn Mitglieder sterben
+                    if old_pop > clan.population:
+                        deaths = old_pop - clan.population
+                        self.stats["deaths"]["temperature"][group.name] = (
+                            self.stats["deaths"]["temperature"].get(group.name, 0)
+                            + deaths
+                        )
 
         # Nahrungssuche für Clans
         self._process_food_seeking()
@@ -555,8 +678,16 @@ class SimulationModel:
                         # Reset hunger timer: 1 food = 10 Sekunden = 100 Steps
                         clan.hunger_timer = max(0, clan.hunger_timer - (consumed * 10))
                         clan.seeking_food = False
+                        # HP-Regeneration: Pro Food +5 HP pro Mitglied (bis max HP)
+                        old_hp = clan.hp_per_member
+                        species_stats = self.species_config.get(group.name, {})
+                        max_hp = species_stats.get("hp", 50)
+                        clan.hp_per_member = min(
+                            clan.hp_per_member + (consumed * 5),
+                            max_hp,
+                        )
                         self.add_log(
-                            f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food"
+                            f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{clan.hp_per_member - old_hp} HP)"
                         )
 
         # Loners suchen und essen Nahrung
@@ -587,7 +718,12 @@ class SimulationModel:
                 consumed = nearest_food.consume(loner.food_intake)
                 if consumed > 0:
                     loner.hunger_timer = max(0, loner.hunger_timer - (consumed * 10))
-                    self.add_log(f"🍽️ {loner.species} Einzelgänger isst {consumed} Food")
+                    # HP-Regeneration: Pro Food +5 HP (bis max HP)
+                    old_hp = loner.hp
+                    loner.hp = min(loner.hp + (consumed * 5), loner.max_hp)
+                    self.add_log(
+                        f"🍽️ {loner.species} Einzelgänger isst {consumed} Food (+{loner.hp - old_hp} HP)"
+                    )
 
     def _process_interactions(self):
         """Prozessiere alle Interaktionen zwischen Clans und Loners."""

@@ -1,3 +1,4 @@
 /.pnotes
 /__pycache__
 .clip
+.pyc
