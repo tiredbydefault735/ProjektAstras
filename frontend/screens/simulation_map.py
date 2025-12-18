@@ -13,9 +13,13 @@ class SimulationMapWidget(QGraphicsView):
     def __init__(self):
         super().__init__()
 
-        # Create graphics scene
+        # Create graphics scene (will resize with viewport)
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
+
+        # Disable scrollbars
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         # Region colors (can be replaced with images later)
         self.region_colors = {
@@ -52,14 +56,17 @@ class SimulationMapWidget(QGraphicsView):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
         self.scene.clear()
 
-        # Viewport dimensions
+        # Get viewport dimensions (actual display size)
         width = self.viewport().width()
         height = self.viewport().height()
 
         if width <= 0 or height <= 0:
             return
 
-        # Scale
+        # Update scene rect to match viewport
+        self.scene.setSceneRect(0, 0, width, height)
+
+        # Scale from logical coordinates (1200x600) to actual display size
         scale_x = width / 1200.0
         scale_y = height / 600.0
 
@@ -173,6 +180,7 @@ class SimulationMapWidget(QGraphicsView):
         darkness = int((1.0 - transition_progress) * 120)
 
         if darkness > 0:
+            # Use width and height from scene rect (1200x600) for consistent coverage
             overlay = self.scene.addRect(
                 0,
                 0,

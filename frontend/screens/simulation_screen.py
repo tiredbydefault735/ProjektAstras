@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QDialog,
     QTextEdit,
+    QSplitter,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QFont, QIcon, QPixmap
@@ -91,14 +92,14 @@ class StatsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Simulations-Statistiken")
         self.setModal(True)
-        self.resize(500, 400)
+        self.resize(900, 500)
 
         # Set dark theme
         self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
 
         # Title
         title = QLabel("Simulations-Statistiken (5 Minuten)")
@@ -107,15 +108,20 @@ class StatsDialog(QDialog):
         title.setFont(title_font)
         title.setStyleSheet("color: #ffffff;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        main_layout.addWidget(title)
 
-        # Stats text
+        # Horizontal layout for text and graph
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(20)
+
+        # Left side: Stats text
         stats_text = QLabel()
         stats_font = QFont("Minecraft", 11)
         stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         stats_text.setFont(stats_font)
         stats_text.setWordWrap(True)
         stats_text.setStyleSheet("color: #ffffff; padding: 10px;")
+        stats_text.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Build stats string
         text = "<b>Spezies im Spiel:</b><br>"
@@ -138,9 +144,74 @@ class StatsDialog(QDialog):
         text += f"<b>Futterplätze:</b> {stats['food_places']}"
 
         stats_text.setText(text)
-        layout.addWidget(stats_text)
+        content_layout.addWidget(stats_text, 1)
 
-        layout.addStretch()
+        # Right side: Population graph
+        try:
+            import matplotlib
+
+            matplotlib.use("QtAgg")  # Ensure Qt backend is used
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+            from matplotlib.figure import Figure
+
+            fig = Figure(figsize=(6, 4), facecolor="#1a1a1a")
+            canvas = FigureCanvasQTAgg(fig)
+            ax = fig.add_subplot(111)
+
+            # Plot population history for each species
+            population_history = stats.get("population_history", {})
+            if population_history:
+                colors = {
+                    "Icefang": "#cce6ff",
+                    "Crushed_Critters": "#cc9966",
+                    "Spores": "#66cc66",
+                    "The_Corrupted": "#cc66cc",
+                }
+
+                for species, history in population_history.items():
+                    if history:  # Only plot if there's data
+                        time_points = [
+                            i * 10 for i in range(len(history))
+                        ]  # Every 10 steps
+                        ax.plot(
+                            time_points,
+                            history,
+                            label=species,
+                            color=colors.get(species, "#ffffff"),
+                            linewidth=2,
+                        )
+
+                ax.set_xlabel("Zeit (Steps)", color="#ffffff", fontsize=10)
+                ax.set_ylabel("Population", color="#ffffff", fontsize=10)
+                ax.set_title(
+                    "Population im Zeitverlauf", color="#ffffff", fontsize=12, pad=10
+                )
+                ax.legend(
+                    loc="best",
+                    facecolor="#2a2a2a",
+                    edgecolor="#666666",
+                    labelcolor="#ffffff",
+                    fontsize=9,
+                )
+                ax.set_facecolor("#2a2a2a")
+                ax.tick_params(colors="#ffffff", labelsize=8)
+                ax.spines["bottom"].set_color("#666666")
+                ax.spines["top"].set_color("#666666")
+                ax.spines["left"].set_color("#666666")
+                ax.spines["right"].set_color("#666666")
+                ax.grid(True, alpha=0.2, color="#666666")
+
+                fig.tight_layout()
+
+            content_layout.addWidget(canvas, 2)
+        except ImportError:
+            # Fallback if matplotlib not available
+            no_graph_label = QLabel("Graph nicht verfügbar\n(matplotlib benötigt)")
+            no_graph_label.setStyleSheet("color: #999999;")
+            no_graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            content_layout.addWidget(no_graph_label, 2)
+
+        main_layout.addLayout(content_layout)
 
         # Close button
         close_btn = QPushButton("Schließen")
@@ -153,7 +224,7 @@ class StatsDialog(QDialog):
             "border: 2px solid #666666; padding: 5px;"
         )
         close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
+        main_layout.addWidget(close_btn)
 
 
 class LogDialog(QDialog):
@@ -188,6 +259,9 @@ class LogDialog(QDialog):
         self.text_edit.setStyleSheet(
             "background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666;"
         )
+        # Enable word wrapping and scrolling
+        self.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.text_edit.setHtml(self.colorize_logs(log_text))
         layout.addWidget(self.text_edit)
 
@@ -256,11 +330,18 @@ class LogDialog(QDialog):
 
     def update_log(self, log_text):
         """Update the log text in the dialog."""
+        # Check if user is at the bottom before updating
+        scrollbar = self.text_edit.verticalScrollBar()
+        was_at_bottom = scrollbar.value() >= scrollbar.maximum() - 10  # 10px threshold
+
         self.text_edit.setHtml(self.colorize_logs(log_text))
-        # Scroll to bottom to show latest logs
-        self.text_edit.verticalScrollBar().setValue(
-            self.text_edit.verticalScrollBar().maximum()
-        )
+
+        # Force scrollbar update
+        self.text_edit.ensureCursorVisible()
+
+        # Only auto-scroll if user was already at the bottom
+        if was_at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
 
 
 class SpeciesPanel(QWidget):
@@ -271,11 +352,13 @@ class SpeciesPanel(QWidget):
         self.color_preset = color_preset
         self.species_config = species_config
         self.species_checkboxes = {}
-        self.species_sliders = {}
+        self.loner_speed_sliders = {}
+        self.clan_speed_sliders = {}
         self.member_sliders = {}
+        self.member_value_labels = {}
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(10, 15, 10, 10)
         layout.setSpacing(12)
 
         # Title
@@ -322,26 +405,49 @@ class SpeciesPanel(QWidget):
             self.species_checkboxes[species_id] = checkbox
             layout.addWidget(checkbox)
 
-            # Speed slider
-            speed_layout = QHBoxLayout()
-            speed_layout.setSpacing(5)
+            # Loner speed slider
+            loner_speed_layout = QHBoxLayout()
+            loner_speed_layout.setSpacing(5)
 
-            speed_label = QLabel("Geschwi:")
-            speed_label_font = QFont("Minecraft", 11)
-            speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            speed_label.setFont(speed_label_font)
-            speed_layout.addWidget(speed_label)
+            loner_speed_label = QLabel("Loner Speed:")
+            loner_speed_label_font = QFont("Minecraft", 11)
+            loner_speed_label_font.setLetterSpacing(
+                QFont.SpacingType.AbsoluteSpacing, 1
+            )
+            loner_speed_label.setFont(loner_speed_label_font)
+            loner_speed_label.setFixedWidth(110)
+            loner_speed_layout.addWidget(loner_speed_label)
 
-            slider = QSlider(Qt.Orientation.Horizontal)
-            slider.setMinimum(1)
-            slider.setMaximum(10)
-            slider.setValue(5)
-            self.species_sliders[species_id] = slider
-            speed_layout.addWidget(slider)
+            loner_slider = QSlider(Qt.Orientation.Horizontal)
+            loner_slider.setMinimum(1)
+            loner_slider.setMaximum(10)
+            loner_slider.setValue(5)
+            self.loner_speed_sliders[species_id] = loner_slider
+            loner_speed_layout.addWidget(loner_slider)
 
-            layout.addLayout(speed_layout)
+            layout.addLayout(loner_speed_layout)
 
-            # Member slider
+            # Clan speed slider
+            clan_speed_layout = QHBoxLayout()
+            clan_speed_layout.setSpacing(5)
+
+            clan_speed_label = QLabel("Clan Speed:")
+            clan_speed_label_font = QFont("Minecraft", 11)
+            clan_speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+            clan_speed_label.setFont(clan_speed_label_font)
+            clan_speed_label.setFixedWidth(110)
+            clan_speed_layout.addWidget(clan_speed_label)
+
+            clan_slider = QSlider(Qt.Orientation.Horizontal)
+            clan_slider.setMinimum(1)
+            clan_slider.setMaximum(10)
+            clan_slider.setValue(5)
+            self.clan_speed_sliders[species_id] = clan_slider
+            clan_speed_layout.addWidget(clan_slider)
+
+            layout.addLayout(clan_speed_layout)
+
+            # Member slider with value display
             member_layout = QHBoxLayout()
             member_layout.setSpacing(5)
 
@@ -349,23 +455,41 @@ class SpeciesPanel(QWidget):
             member_label_font = QFont("Minecraft", 11)
             member_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
             member_label.setFont(member_label_font)
+            member_label.setFixedWidth(110)
             member_layout.addWidget(member_label)
+
+            member_value_label = QLabel("5")
+            member_value_font = QFont("Minecraft", 11)
+            member_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+            member_value_label.setFont(member_value_font)
+            member_value_label.setFixedWidth(30)
+            member_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self.member_value_labels[species_id] = member_value_label
+            member_layout.addWidget(member_value_label)
 
             member_slider = QSlider(Qt.Orientation.Horizontal)
             member_slider.setMinimum(0)
             member_slider.setMaximum(20)
             member_slider.setValue(5)
+            member_slider.valueChanged.connect(
+                lambda value, sid=species_id: self.update_member_value(sid, value)
+            )
             self.member_sliders[species_id] = member_slider
             member_layout.addWidget(member_slider)
 
             layout.addLayout(member_layout)
 
             # Add spacing between species
-            layout.addSpacing(15)
+            layout.addSpacing(25)
 
         layout.addStretch()
         self.setLayout(layout)
         self.update_theme(self.color_preset)
+
+    def update_member_value(self, species_id, value):
+        """Update the member value label when slider changes."""
+        if species_id in self.member_value_labels:
+            self.member_value_labels[species_id].setText(str(value))
 
     def get_enabled_species_populations(self):
         """Get populations for enabled species based on member sliders."""
@@ -428,7 +552,10 @@ class SpeciesPanel(QWidget):
             }}
         """
 
-        for slider in self.species_sliders.values():
+        for slider in self.loner_speed_sliders.values():
+            slider.setStyleSheet(slider_style)
+
+        for slider in self.clan_speed_sliders.values():
             slider.setStyleSheet(slider_style)
 
         for slider in self.member_sliders.values():
@@ -880,6 +1007,7 @@ class SimulationScreen(QWidget):
         self.simulation_time = 0  # Time in seconds
         self.max_simulation_time = 300  # 5 minutes = 300 seconds
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
+        self.population_data = {}  # Store population history for live graph
 
         # Load species config
         json_path = get_static_path("data/species.json")
@@ -903,10 +1031,8 @@ class SimulationScreen(QWidget):
             except:
                 print(f"Warning: Could not load species.json from {json_path}")
 
-        # Initialize simulation model
-        self.sim_model = SimulationModel()
-        # Initial populations will be set when simulation starts
-        self.sim_model.setup(self.species_config, {}, food_places=5, food_amount=50)
+        # Don't initialize simulation model here - will be created on first start
+        # self.sim_model is already set to None above
 
         self.init_ui()
 
@@ -940,13 +1066,17 @@ class SimulationScreen(QWidget):
 
         main_layout.addLayout(top_bar)
 
-        # Content: map (left, large) and sidebar (right, compact)
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(10)
+        # Content: Use QSplitter for 75/25 split with dynamic resizing
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.setHandleWidth(5)
 
-        # Map area (left, main focus) - white background with fixed size
+        # Left column: Map area (75%)
+        left_column = QFrame()
+        left_layout = QVBoxLayout(left_column)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
         self.map_frame = QFrame()
-        self.map_frame.setFixedSize(1200, 600)  # Breiter für bessere Platznutzung
         self.map_frame.setStyleSheet(
             "background-color: #ffffff; border: 2px solid #000000;"
         )
@@ -954,47 +1084,48 @@ class SimulationScreen(QWidget):
         map_layout.setContentsMargins(0, 0, 0, 0)
 
         self.map_widget = SimulationMapWidget()
-        self.map_widget.setFixedSize(1200, 600)
+        self.map_widget.setMinimumSize(600, 400)  # Minimum size for usability
         map_layout.addWidget(self.map_widget)
 
-        content_layout.addWidget(self.map_frame)
+        left_layout.addWidget(self.map_frame)
+        content_splitter.addWidget(left_column)
 
-        # Sidebar: Tab buttons and panels
-        sidebar_frame = QFrame()
-        sidebar_frame.setFixedWidth(270)
-        sidebar_layout = QVBoxLayout(sidebar_frame)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(10)
+        # Right column: Settings and controls (25%)
+        right_column = QFrame()
+        right_column.setMinimumWidth(300)
+        right_layout = QVBoxLayout(right_column)
+        right_layout.setContentsMargins(10, 0, 0, 0)
+        right_layout.setSpacing(10)
 
         # Tab buttons
         tab_buttons_layout = QHBoxLayout()
         tab_buttons_layout.setSpacing(5)
-
-        self.btn_species_tab = QPushButton("Spezies")
-        species_tab_font = QFont("Minecraft", 12)
-        species_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_species_tab.setFont(species_tab_font)
-        self.btn_species_tab.setCheckable(True)
-        self.btn_species_tab.setChecked(True)
-        self.btn_species_tab.setFixedSize(125, 35)
-        self.btn_species_tab.clicked.connect(lambda: self.switch_sidebar_tab("species"))
-        tab_buttons_layout.addWidget(self.btn_species_tab)
 
         self.btn_region_tab = QPushButton("Region")
         region_tab_font = QFont("Minecraft", 12)
         region_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_region_tab.setFont(region_tab_font)
         self.btn_region_tab.setCheckable(True)
-        self.btn_region_tab.setChecked(False)
-        self.btn_region_tab.setFixedSize(125, 35)
+        self.btn_region_tab.setChecked(True)
+        self.btn_region_tab.setFixedHeight(35)
         self.btn_region_tab.clicked.connect(lambda: self.switch_sidebar_tab("region"))
         tab_buttons_layout.addWidget(self.btn_region_tab)
 
-        sidebar_layout.addLayout(tab_buttons_layout)
+        self.btn_species_tab = QPushButton("Spezies")
+        species_tab_font = QFont("Minecraft", 12)
+        species_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_species_tab.setFont(species_tab_font)
+        self.btn_species_tab.setCheckable(True)
+        self.btn_species_tab.setChecked(False)
+        self.btn_species_tab.setFixedHeight(35)
+        self.btn_species_tab.clicked.connect(lambda: self.switch_sidebar_tab("species"))
+        tab_buttons_layout.addWidget(self.btn_species_tab)
+
+        right_layout.addLayout(tab_buttons_layout)
 
         # Use QStackedWidget to prevent layout shifts when switching tabs
         self.panel_stack = QStackedWidget()
-        self.panel_stack.setFixedSize(250, 550)
+        self.panel_stack.setMinimumHeight(400)
 
         # Create panels
         self.species_panel = SpeciesPanel(self.species_config, self.color_preset)
@@ -1011,22 +1142,73 @@ class SimulationScreen(QWidget):
         initial_temp = self.environment_panel.get_temperature()
         self.environment_panel.update_species_compatibility_by_temp(initial_temp)
 
-        # Show species panel by default
-        self.panel_stack.setCurrentIndex(0)
+        # Show region/environment panel by default
+        self.panel_stack.setCurrentIndex(1)
 
-        sidebar_layout.addWidget(self.panel_stack)
-        sidebar_layout.addStretch()
-
-        content_layout.addWidget(sidebar_frame)
-
-        main_layout.addLayout(content_layout)
+        right_layout.addWidget(self.panel_stack)
 
         # Store log text in variable instead of label
         self.log_text = "Simulation bereit."
 
-        # Bottom control bar
-        control_layout = QHBoxLayout()
+        # Control section at bottom of right column
+        right_layout.addSpacing(20)
+
+        # Stats and Log buttons (only shown before simulation starts)
+        self.stats_log_widget = QWidget()
+        stats_log_layout = QHBoxLayout(self.stats_log_widget)
+        stats_log_layout.setContentsMargins(0, 0, 0, 0)
+        stats_log_layout.setSpacing(10)
+
+        self.btn_stats = QPushButton("Stats")
+        stats_font = QFont("Minecraft", 12)
+        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_stats.setFont(stats_font)
+        self.btn_stats.setFixedHeight(40)
+        self.btn_stats.clicked.connect(self.on_stats)
+        stats_log_layout.addWidget(self.btn_stats)
+
+        self.btn_log = QPushButton("Log")
+        log_btn_font = QFont("Minecraft", 12)
+        log_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_log.setFont(log_btn_font)
+        self.btn_log.setFixedHeight(40)
+        self.btn_log.clicked.connect(self.open_log_dialog)
+        stats_log_layout.addWidget(self.btn_log)
+
+        right_layout.addWidget(self.stats_log_widget)
+
+        # Live graph area (shown during simulation)
+        self.live_graph_widget = None
+        self.graph_container = QFrame()
+        self.graph_container.setVisible(False)
+        self.graph_container.setStyleSheet(
+            "background-color: #1a1a1a; border: 1px solid #666666;"
+        )
+        self.graph_container.setMinimumHeight(250)
+        self.graph_container.setMaximumHeight(350)
+        graph_container_layout = QVBoxLayout(self.graph_container)
+        graph_container_layout.setContentsMargins(5, 5, 5, 5)
+
+        # Legend text area below graph
+        self.graph_legend_label = QLabel("")
+        legend_font = QFont("Minecraft", 10)
+        legend_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.graph_legend_label.setFont(legend_font)
+        self.graph_legend_label.setWordWrap(True)
+        self.graph_legend_label.setStyleSheet("color: #ffffff; padding: 5px;")
+        graph_container_layout.addWidget(self.graph_legend_label)
+
+        right_layout.addWidget(self.graph_container)
+
+        # Control buttons section
+        control_section = QFrame()
+        control_layout = QVBoxLayout(control_section)
+        control_layout.setContentsMargins(0, 10, 0, 0)
         control_layout.setSpacing(10)
+
+        # Play controls row
+        play_controls_layout = QHBoxLayout()
+        play_controls_layout.setSpacing(10)
 
         # Play/Pause Toggle Button
         self.btn_play_pause = QPushButton("▶")
@@ -1036,100 +1218,111 @@ class SimulationScreen(QWidget):
         self.btn_play_pause.setFixedWidth(50)
         self.btn_play_pause.setFixedHeight(40)
         self.btn_play_pause.clicked.connect(self.toggle_play_pause)
-        control_layout.addWidget(self.btn_play_pause)
+        play_controls_layout.addWidget(self.btn_play_pause)
 
         # Stop Button
-        self.btn_stop = QPushButton("⏹")
+        self.btn_stop = QPushButton("Reset/Stop")
         stop_font = QFont("Minecraft", 16)
         stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_stop.setFont(stop_font)
-        self.btn_stop.setFixedWidth(50)
         self.btn_stop.setFixedHeight(40)
         self.btn_stop.clicked.connect(self.stop_simulation)
-        control_layout.addWidget(self.btn_stop)
+        play_controls_layout.addWidget(self.btn_stop)
+        play_controls_layout.addStretch()
+        control_layout.addLayout(play_controls_layout)
 
-        # Speed control buttons
-        self.btn_speed_1x = QPushButton("1x")
-        speed_1x_font = QFont("Minecraft", 12)
-        speed_1x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_speed_1x.setFont(speed_1x_font)
-        self.btn_speed_1x.setFixedSize(50, 40)
-        self.btn_speed_1x.setCheckable(True)
-        self.btn_speed_1x.setChecked(True)
-        self.btn_speed_1x.clicked.connect(lambda: self.set_speed(1))
-        control_layout.addWidget(self.btn_speed_1x)
-
-        self.btn_speed_2x = QPushButton("2x")
-        speed_2x_font = QFont("Minecraft", 12)
-        speed_2x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_speed_2x.setFont(speed_2x_font)
-        self.btn_speed_2x.setFixedSize(50, 40)
-        self.btn_speed_2x.setCheckable(True)
-        self.btn_speed_2x.clicked.connect(lambda: self.set_speed(2))
-        control_layout.addWidget(self.btn_speed_2x)
-
-        self.btn_speed_5x = QPushButton("5x")
-        speed_5x_font = QFont("Minecraft", 12)
-        speed_5x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_speed_5x.setFont(speed_5x_font)
-        self.btn_speed_5x.setFixedSize(50, 40)
-        self.btn_speed_5x.setCheckable(True)
-        self.btn_speed_5x.clicked.connect(lambda: self.set_speed(5))
-        control_layout.addWidget(self.btn_speed_5x)
+        # Info display row with timer, day/night, and speed controls
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(10)
 
         # Timer display
         self.timer_label = QLabel("00:00")
         timer_font = QFont("Minecraft", 14)
         timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.timer_label.setFont(timer_font)
-        self.timer_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
-        control_layout.addWidget(self.timer_label)
+        self.timer_label.setStyleSheet("color: #ffffff;")
+        info_layout.addWidget(self.timer_label)
 
         # Day/Night indicator
         self.day_night_label = QLabel("☀️")
         day_night_font = QFont("Minecraft", 16)
         day_night_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.day_night_label.setFont(day_night_font)
-        self.day_night_label.setStyleSheet("color: #ffffff; padding: 0 10px;")
-        control_layout.addWidget(self.day_night_label)
+        self.day_night_label.setStyleSheet("color: #ffffff;")
+        info_layout.addWidget(self.day_night_label)
+
+        # Speed control buttons next to time
+        speed_label = QLabel("Sim Speed:")
+        speed_label_font = QFont("Minecraft", 9)
+        speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        speed_label.setFont(speed_label_font)
+        speed_label.setStyleSheet("color: #ffffff;")
+        info_layout.addWidget(speed_label)
+
+        self.btn_speed_1x = QPushButton("1x")
+        speed_1x_font = QFont("Minecraft", 10)
+        speed_1x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_1x.setFont(speed_1x_font)
+        self.btn_speed_1x.setFixedSize(45, 35)
+        self.btn_speed_1x.setCheckable(True)
+        self.btn_speed_1x.setChecked(True)
+        self.btn_speed_1x.clicked.connect(lambda: self.set_speed(1))
+        info_layout.addWidget(self.btn_speed_1x)
+
+        self.btn_speed_2x = QPushButton("2x")
+        speed_2x_font = QFont("Minecraft", 10)
+        speed_2x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_2x.setFont(speed_2x_font)
+        self.btn_speed_2x.setFixedSize(45, 35)
+        self.btn_speed_2x.setCheckable(True)
+        self.btn_speed_2x.clicked.connect(lambda: self.set_speed(2))
+        info_layout.addWidget(self.btn_speed_2x)
+
+        self.btn_speed_5x = QPushButton("5x")
+        speed_5x_font = QFont("Minecraft", 10)
+        speed_5x_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_speed_5x.setFont(speed_5x_font)
+        self.btn_speed_5x.setFixedSize(45, 35)
+        self.btn_speed_5x.setCheckable(True)
+        self.btn_speed_5x.clicked.connect(lambda: self.set_speed(5))
+        info_layout.addWidget(self.btn_speed_5x)
+
+        info_layout.addStretch()
+        control_layout.addLayout(info_layout)
+
+        # Live info row
+        live_info_layout = QHBoxLayout()
+        live_info_layout.setSpacing(10)
 
         # Temperature display (live)
         self.live_temp_label = QLabel("🌡️ 0°C")
-        live_temp_font = QFont("Minecraft", 12)
+        live_temp_font = QFont("Minecraft", 11)
         live_temp_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.live_temp_label.setFont(live_temp_font)
-        self.live_temp_label.setStyleSheet("color: #88ccff; padding: 0 10px;")
-        control_layout.addWidget(self.live_temp_label)
+        self.live_temp_label.setStyleSheet("color: #88ccff;")
+        live_info_layout.addWidget(self.live_temp_label)
 
         # Day/Night indicator (live)
         self.live_day_night_label = QLabel("☀️ Tag")
-        live_dn_font = QFont("Minecraft", 12)
+        live_dn_font = QFont("Minecraft", 11)
         live_dn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.live_day_night_label.setFont(live_dn_font)
-        self.live_day_night_label.setStyleSheet("color: #ffcc44; padding: 0 10px;")
-        control_layout.addWidget(self.live_day_night_label)
+        self.live_day_night_label.setStyleSheet("color: #ffcc44;")
+        live_info_layout.addWidget(self.live_day_night_label)
+        live_info_layout.addStretch()
+        control_layout.addLayout(live_info_layout)
 
-        control_layout.addStretch()
+        # Add control section to right column
+        right_layout.addWidget(control_section)
+        right_layout.addStretch()
 
-        self.btn_stats = QPushButton("Stats")
-        stats_font = QFont("Minecraft", 12)
-        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_stats.setFont(stats_font)
-        self.btn_stats.setFixedWidth(100)
-        self.btn_stats.setFixedHeight(40)
-        self.btn_stats.clicked.connect(self.on_stats)
-        control_layout.addWidget(self.btn_stats)
+        # Add right column to splitter
+        content_splitter.addWidget(right_column)
 
-        self.btn_log = QPushButton("Log")
-        log_btn_font = QFont("Minecraft", 12)
-        log_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_log.setFont(log_btn_font)
-        self.btn_log.setFixedWidth(100)
-        self.btn_log.setFixedHeight(40)
-        self.btn_log.clicked.connect(self.open_log_dialog)
-        control_layout.addWidget(self.btn_log)
+        # Set initial splitter sizes (75% / 25%)
+        content_splitter.setSizes([7500, 2500])
 
-        main_layout.addLayout(control_layout)
+        main_layout.addWidget(content_splitter)
 
         self.setLayout(main_layout)
         # Apply initial theme to inline-styled widgets
@@ -1199,35 +1392,55 @@ class SimulationScreen(QWidget):
     def toggle_simulation(self):
         """Start/resume simulation."""
         if not self.is_running:
-            # Deaktiviere Region-Auswahl
-            self.environment_panel.set_controls_enabled(False)
+            # Nur beim ersten Start initialisieren (wenn kein Model existiert)
+            if self.sim_model is None:
+                # Deaktiviere Region-Auswahl
+                self.environment_panel.set_controls_enabled(False)
 
-            # Initialisiere Simulation
-            self.sim_model = SimulationModel()
-            populations = self.species_panel.get_enabled_species_populations()
-            food_places = self.environment_panel.get_food_places()
-            food_amount = self.environment_panel.get_food_amount()
-            start_temp = self.environment_panel.get_temperature()
-            start_is_day = self.environment_panel.get_is_day()
-            region = self.environment_panel.get_selected_region()
-            self.sim_model.setup(
-                self.species_config,
-                populations,
-                food_places,
-                food_amount,
-                start_temp,
-                start_is_day,
-            )
+                # Initialisiere Simulation
+                self.sim_model = SimulationModel()
+                populations = self.species_panel.get_enabled_species_populations()
+                food_places = self.environment_panel.get_food_places()
+                food_amount = self.environment_panel.get_food_amount()
+                start_temp = self.environment_panel.get_temperature()
+                start_is_day = self.environment_panel.get_is_day()
+                region = self.environment_panel.get_selected_region()
+                self.sim_model.setup(
+                    self.species_config,
+                    populations,
+                    food_places,
+                    food_amount,
+                    start_temp,
+                    start_is_day,
+                )
 
-            # Set region background
-            self.map_widget.set_region(region)
+                # Set region background
+                self.map_widget.set_region(region)
 
+                # Initialize population data for live graph
+                self.population_data = {}
+                for species_name in populations.keys():
+                    self.population_data[species_name] = []
+
+                # Hide tabs and stats/log buttons, show graph
+                self.btn_region_tab.setVisible(False)
+                self.btn_species_tab.setVisible(False)
+                self.panel_stack.setVisible(False)
+                self.stats_log_widget.setVisible(False)
+                self.graph_container.setVisible(True)
+
+                # Initialize graph if not already created
+                if self.live_graph_widget is None:
+                    self.initialize_live_graph()
+
+            # Resume (oder Start)
             self.is_running = True
             self.btn_play_pause.setText("⏸")
 
             # Start Update-Timer with speed multiplier
-            self.update_timer = QTimer()
-            self.update_timer.timeout.connect(self.update_simulation_with_speed)
+            if not self.update_timer:
+                self.update_timer = QTimer()
+                self.update_timer.timeout.connect(self.update_simulation_with_speed)
             self.update_timer.start(100)
 
     def toggle_play_pause(self):
@@ -1238,8 +1451,16 @@ class SimulationScreen(QWidget):
                 self.update_timer.stop()
             self.is_running = False
             self.btn_play_pause.setText("▶")
+            self.btn_play_pause.setStyleSheet(
+                "background-color: #4CAF50; color: white;"
+            )
+            self.timer_label.setText(self.timer_label.text() + " ⏸")
         else:
             # Currently paused or not started, so play/start
+            self.btn_play_pause.setStyleSheet("")
+            # Remove pause symbol from timer if present
+            timer_text = self.timer_label.text().replace(" ⏸", "")
+            self.timer_label.setText(timer_text)
             self.toggle_simulation()
 
     def stop_simulation(self):
@@ -1252,16 +1473,24 @@ class SimulationScreen(QWidget):
 
         self.is_running = False
         self.btn_play_pause.setText("▶")
+        self.btn_play_pause.setStyleSheet("")
         self.time_step = 0
         self.simulation_time = 0
 
-        # Reset Model
-        self.sim_model = SimulationModel()
-        self.sim_model.setup(self.species_config, {}, food_places=5, food_amount=50)
+        # Reset Model to None so it will be recreated on next start
+        self.sim_model = None
 
-        self.log_text = "Simulation bereit."
-        self.map_widget.clear_map()
-        self.timer_label.setText("00:00")
+        # Clear population data for live graph
+        self.population_data = {}
+        if self.live_graph_widget:
+            self.update_live_graph()
+
+        # Show tabs and stats/log buttons, hide graph
+        self.btn_region_tab.setVisible(True)
+        self.btn_species_tab.setVisible(True)
+        self.panel_stack.setVisible(True)
+        self.stats_log_widget.setVisible(True)
+        self.graph_container.setVisible(False)
 
     def set_speed(self, speed):
         """Set simulation speed multiplier."""
@@ -1272,6 +1501,22 @@ class SimulationScreen(QWidget):
         self.btn_speed_2x.setChecked(speed == 2)
         self.btn_speed_5x.setChecked(speed == 5)
 
+    def on_loner_speed_changed(self, value):
+        """Handle loner speed slider change."""
+        # Convert slider value (5-20) to multiplier (0.5-2.0)
+        multiplier = value / 10.0
+        self.loner_speed_value_label.setText(f"{multiplier:.1f}x")
+        if self.sim_model:
+            self.sim_model.set_loner_speed(multiplier)
+
+    def on_clan_speed_changed(self, value):
+        """Handle clan speed slider change."""
+        # Convert slider value (5-20) to multiplier (0.5-2.0)
+        multiplier = value / 10.0
+        self.clan_speed_value_label.setText(f"{multiplier:.1f}x")
+        if self.sim_model:
+            self.sim_model.set_clan_speed(multiplier)
+
     def update_simulation_with_speed(self):
         """Update simulation multiple times based on speed setting."""
         for _ in range(self.simulation_speed):
@@ -1279,7 +1524,7 @@ class SimulationScreen(QWidget):
 
     def update_simulation(self):
         """Step simulation und update display."""
-        if self.sim_model:
+        if self.sim_model and self.is_running:
             data = self.sim_model.step()
             self.map_widget.draw_groups(
                 data["groups"],
@@ -1324,6 +1569,28 @@ class SimulationScreen(QWidget):
                     "color: #8888ff; padding: 0 10px;"
                 )
 
+            # Collect population data for live graph (every 10 steps)
+            if self.time_step % 10 == 0:
+                for group in data["groups"]:
+                    species_name = group["name"]
+                    # Calculate total population for this species
+                    clan_pop = sum(c["population"] for c in group["clans"])
+                    loner_pop = sum(
+                        1
+                        for l in data.get("loners", [])
+                        if l["species"] == species_name
+                    )
+                    total_pop = clan_pop + loner_pop
+
+                    # Initialize list if needed
+                    if species_name not in self.population_data:
+                        self.population_data[species_name] = []
+
+                    self.population_data[species_name].append(total_pop)
+
+                # Update live graph (always shown during simulation)
+                self.update_live_graph()
+
             # Check if 5 minutes reached
             if self.simulation_time >= self.max_simulation_time:
                 self.show_final_stats()
@@ -1341,13 +1608,14 @@ class SimulationScreen(QWidget):
                 self.stop_simulation()
                 return
 
-            # Update logs
-            logs = data.get("logs", [])
-            if logs:
-                self.log_text = "\n".join(logs[-10:])
-                # Update popup if it's open
-                if self.log_dialog and self.log_dialog.isVisible():
-                    self.log_dialog.update_log(self.log_text)
+            # Update logs (nur alle 5 Steps für bessere Performance)
+            if self.time_step % 5 == 0:
+                logs = data.get("logs", [])
+                if logs:
+                    self.log_text = "\n".join(logs[-50:])
+                    # Update popup if it's open
+                    if self.log_dialog and self.log_dialog.isVisible():
+                        self.log_dialog.update_log(self.log_text)
 
     def show_final_stats(self):
         """Show final statistics dialog after 5 minutes."""
@@ -1376,6 +1644,111 @@ class SimulationScreen(QWidget):
         # Update popup if open
         if self.log_dialog and self.log_dialog.isVisible():
             self.log_dialog.update_log(self.log_text)
+
+    def initialize_live_graph(self):
+        """Initialize the live graph widget."""
+        try:
+            import matplotlib
+
+            matplotlib.use("QtAgg")
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+            from matplotlib.figure import Figure
+
+            # Create matplotlib figure
+            fig = Figure(figsize=(5, 3), facecolor="#1a1a1a")
+            self.live_graph_widget = FigureCanvasQTAgg(fig)
+            self.live_graph_ax = fig.add_subplot(111)
+
+            # Style the axes
+            self.live_graph_ax.set_facecolor("#1a1a1a")
+            self.live_graph_ax.tick_params(colors="#ffffff", labelsize=8)
+            self.live_graph_ax.set_xlabel("Time (s)", color="#ffffff", fontsize=9)
+            self.live_graph_ax.set_ylabel("Population", color="#ffffff", fontsize=9)
+            self.live_graph_ax.set_title(
+                "Live Population", color="#ffffff", fontsize=10
+            )
+            for spine in self.live_graph_ax.spines.values():
+                spine.set_color("#666666")
+
+            # Add to container at the top (before legend label)
+            layout = self.graph_container.layout()
+            layout.insertWidget(0, self.live_graph_widget)
+
+            # Update graph immediately
+            self.update_live_graph()
+
+        except ImportError:
+            # Fallback if matplotlib is not available
+            from PyQt6.QtWidgets import QLabel
+
+            label = QLabel("Matplotlib nicht verfügbar")
+            label.setStyleSheet("color: #ffffff; font-size: 12px;")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout = self.graph_container.layout()
+            layout.insertWidget(0, label)
+
+    def update_graph_legend(self):
+        """Update the text legend below the graph."""
+        colors = {
+            "Icefang": "#cce6ff",
+            "Crushed_Critters": "#cc9966",
+            "Spores": "#66cc66",
+            "The_Corrupted": "#cc66cc",
+        }
+
+        # Create colored text for each species
+        legend_parts = []
+        for species_name in sorted(self.population_data.keys()):
+            color = colors.get(species_name, "#ffffff")
+            # Replace underscores with spaces for display
+            display_name = species_name.replace("_", " ")
+            legend_parts.append(
+                f'<span style="color: {color}; font-weight: bold;">{display_name}</span>'
+            )
+
+        if legend_parts:
+            self.graph_legend_label.setText(" | ".join(legend_parts))
+        else:
+            self.graph_legend_label.setText("")
+
+    def update_live_graph(self):
+        """Update the live population graph with current data."""
+        if self.live_graph_widget is None:
+            return
+
+        if not hasattr(self, "plot_curves"):
+            return
+
+        try:
+            import pyqtgraph as pg
+
+            # Get species colors
+            colors = {
+                "Icefang": "#cce6ff",
+                "Crushed_Critters": "#cc9966",
+                "Spores": "#66cc66",
+                "The_Corrupted": "#cc66cc",
+            }
+
+            # Plot each species
+            for species_name, history in self.population_data.items():
+                if history:
+                    time_points = [i * 10 for i in range(len(history))]
+                    color = colors.get(species_name, "#ffffff")
+
+                    # Create or update curve for this species
+                    if species_name not in self.plot_curves:
+                        self.plot_curves[species_name] = self.live_graph_widget.plot(
+                            time_points, history, pen=pg.mkPen(color=color, width=2)
+                        )
+                    else:
+                        self.plot_curves[species_name].setData(time_points, history)
+
+            # Update text legend below graph
+            self.update_graph_legend()
+
+        except Exception as e:
+            print(f"Error updating live graph: {e}")
 
     def on_back(self):
         """Go back to start screen."""
