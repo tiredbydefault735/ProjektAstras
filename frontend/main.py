@@ -111,11 +111,21 @@ def main(preset_name=None):
         preset_name: Optional color preset name. If not provided, uses DEFAULT_PRESET.
     """
     from styles.color_presets import get_preset_by_name
+    from utils import get_static_path
 
     app = QApplication(sys.argv)
 
+    # Set application icon (for taskbar)
+    icon_path = get_static_path("src/logo_astras_pix.png")
+    if icon_path.exists():
+        app_icon = QIcon(str(icon_path))
+        app.setWindowIcon(app_icon)
+        print(f"Loaded application icon from {icon_path}")
+    else:
+        print("Warning: Application icon not found")
+
     # Load custom Minecraft font
-    font_path = Path(__file__).parent.parent / "static" / "fonts" / "Minecraft.ttf"
+    font_path = get_static_path("fonts/Minecraft.ttf")
     font_id = QFontDatabase.addApplicationFont(str(font_path))
     if font_id != -1:
         font_families = QFontDatabase.applicationFontFamilies(font_id)

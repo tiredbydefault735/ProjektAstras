@@ -4,35 +4,35 @@
         "max_survival_temp": 10,
         "max_clan_members": 10,
         "home_region": "Snowy_Abyss",
-        "hp": 75,
+        "hp": 100,
         "interactions": {
             "Icefang": "Freundlich",
             "Crushed_Critters": "Neutral",
             "Spores": "Aggressiv",
             "The_Corrupted": "Aggressiv"
         },
-        "food_intake": 7
+        "food_intake": 4
     },
     "Crushed_Critters": {
         "min_survival_temp": -25,
         "max_survival_temp": 45,
         "max_clan_members": 10,
         "home_region": "Wasteland",
-        "hp": 75,
+        "hp": 100,
         "interactions": {
             "Icefang": "Vorsichtig",
             "Crushed_Critters": "Unfreundlich",
             "Spores": "Aggressiv",
             "The_Corrupted": "Aggressiv"
         }, 
-        "food_intake": 6
+        "food_intake": 3
     },
     "Spores": {
-        "min_survival_temp": 5,
+        "min_survival_temp": 0,
         "max_survival_temp": 30,
         "max_clan_members": 3,
         "home_region": "Evergreen_Forest",
-        "hp": 85,
+        "hp": 120,
         "interactions": {
             "Icefang": "Ängstlich",
             "Crushed_Critters": "Aggressiv",
@@ -46,13 +46,13 @@
         "max_survival_temp": 35,
         "max_clan_members": 2,
         "home_region": "Corrupted_Caves",
-        "hp": 100,
+        "hp": 140,
         "interactions": {
-            "Icefang": "Ängstlich",
-            "Crushed_Critters": "Vorsichtig",
+            "Icefang": "Aggressiv",
+            "Crushed_Critters": "Aggressiv",
             "Spores": "Aggressiv",
             "The_Corrupted": "Zusammenschluss für Jagd"
         }, 
-        "food_intake": 1
+        "food_intake": 2
     }
 }

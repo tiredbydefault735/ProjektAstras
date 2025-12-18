@@ -15,12 +15,21 @@ class FoodSource:
         self.y = y
         self.amount = amount
         self.max_amount = amount
+        self.regeneration_timer = 0
 
     def consume(self, requested_amount):
         """Konsumiere Nahrung, gibt tatsächlich konsumierte Menge zurück."""
         consumed = min(requested_amount, self.amount)
         self.amount -= consumed
         return consumed
+
+    def regenerate(self):
+        """Regeneriere Nahrung über Zeit (alle 50 Steps = 5 Sekunden)."""
+        self.regeneration_timer += 1
+        if self.regeneration_timer >= 50:
+            self.regeneration_timer = 0
+            if self.amount < self.max_amount:
+                self.amount = min(self.amount + 5, self.max_amount)
 
     def is_depleted(self):
         """Ist die Nahrung aufgebraucht?"""
@@ -39,9 +48,9 @@ class Loner:
         self.color = color
         self.hp = hp  # Gesundheit
         self.max_hp = hp
-        # Schnellere Geschwindigkeit
-        self.vx = random.uniform(-1.2, 1.2)
-        self.vy = random.uniform(-1.2, 1.2)
+        # Loners sind schneller als Clans!
+        self.vx = random.uniform(-2.5, 2.5)
+        self.vy = random.uniform(-2.5, 2.5)
         # Nahrungssystem
         self.food_intake = food_intake  # Wie viel Food benötigt wird
         self.hunger_timer = (
@@ -49,23 +58,31 @@ class Loner:
         )
         self.can_cannibalize = can_cannibalize  # Kann andere Arachs essen
 
-    def update(self, width, height, is_day=True):
+    def update(self, width, height, is_day=True, speed_multiplier=1.0):
         """Bewege Loner."""
         # Hunger erhöhen
         self.hunger_timer += 1
 
         # Bei Nacht: Langsamere Bewegung (70% Geschwindigkeit)
         speed_modifier = 1.0 if is_day else 0.7
+        # Apply global speed multiplier
+        speed_modifier *= speed_multiplier
         self.x += self.vx * speed_modifier
         self.y += self.vy * speed_modifier
 
-        # Bounce an Rändern
-        if self.x < 10 or self.x > width - 10:
-            self.vx = -self.vx
-            self.x = max(10, min(width - 10, self.x))
-        if self.y < 10 or self.y > height - 10:
-            self.vy = -self.vy
-            self.y = max(10, min(height - 10, self.y))
+        # Bounce an Rändern (wie Clans)
+        if self.x < 0:
+            self.x = 0
+            self.vx = abs(self.vx)
+        elif self.x > width:
+            self.x = width
+            self.vx = -abs(self.vx)
+        if self.y < 0:
+            self.y = 0
+            self.vy = abs(self.vy)
+        elif self.y > height:
+            self.y = height
+            self.vy = -abs(self.vy)
 
         # Gelegentliche Richtungsänderung
         if random.random() < 0.02:
@@ -100,9 +117,9 @@ class Clan:
         self.color = color
         self.max_members = max_members
         self.hp_per_member = hp_per_member  # HP pro Mitglied
-        # Schnellere Bewegung
-        self.vx = random.uniform(-1.0, 1.0)
-        self.vy = random.uniform(-1.0, 1.0)
+        # Clans sind langsamer als Loners
+        self.vx = random.uniform(-2.0, 2.0)
+        self.vy = random.uniform(-2.0, 2.0)
         # Nahrungssystem
         self.food_intake = food_intake
         self.hunger_timer = hunger_timer  # Sekunden seit letzter Nahrung
@@ -165,23 +182,25 @@ class Clan:
             self.vy += (dy / dist) * strength
 
             # Begrenze maximale Geschwindigkeit (verhindert Glitching)
-            max_speed = 2.0
+            max_speed = 4.0
             current_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
             if current_speed > max_speed:
                 self.vx = (self.vx / current_speed) * max_speed
                 self.vy = (self.vy / current_speed) * max_speed
 
-    def update(self, width, height, is_day=True):
+    def update(self, width, height, is_day=True, speed_multiplier=1.0):
         """Bewege Clan langsam und smooth."""
         # Hunger erhöhen (jeder Step = 0.1 Sekunden)
         self.hunger_timer += 1
 
-        # Nach 50 Steps (5 Sekunden) wird Food gesucht
-        if self.hunger_timer >= 50:
+        # Nach 200 Steps (20 Sekunden) wird Food gesucht
+        if self.hunger_timer >= 200:
             self.seeking_food = True
 
         # Bei Nacht: Langsamere Bewegung (70% Geschwindigkeit)
         speed_modifier = 1.0 if is_day else 0.7
+        # Apply global speed multiplier
+        speed_modifier *= speed_multiplier
         self.x += self.vx * speed_modifier
         self.y += self.vy * speed_modifier
 
@@ -237,7 +256,7 @@ class SpeciesGroup:
         self.can_cannibalize = can_cannibalize
         self.map_width = map_width
         self.map_height = map_height
-        self.max_clans = 4
+        self.max_clans = 8  # Erhöht für mehr Splits
         self.clans = []
         self.next_clan_id = 0
 
@@ -275,11 +294,16 @@ class SpeciesGroup:
 
             # Update alle Clans
             for clan in self.clans:
-                clan.update(self.map_width, self.map_height, is_day)
+                clan.update(
+                    self.map_width,
+                    self.map_height,
+                    is_day,
+                    self.env.sim_model.clan_speed_multiplier,
+                )
 
-                # Hungertod: Nach 100 Steps (10 Sekunden) sterben Mitglieder
-                if clan.hunger_timer >= 100:
-                    deaths = max(1, clan.population // 5)  # 20% der Population stirbt
+                # Hungertod: Nach 300 Steps (30 Sekunden) sterben Mitglieder
+                if clan.hunger_timer >= 300:
+                    deaths = max(1, clan.population // 10)  # 10% der Population stirbt
                     clan.population -= deaths
                     if hasattr(self.env, "sim_model"):
                         self.env.sim_model.add_log(
@@ -292,22 +316,80 @@ class SpeciesGroup:
                             + deaths
                         )
 
-                # Langsames Population-Wachstum
-                if random.random() < 0.05:
-                    change = random.randint(-1, 2)
-                    clan.population += change
-                    clan.population = max(0, min(clan.population, clan.max_members))
+                # Clan mit 1 Mitglied wird zum Einzelgänger
+                if clan.population == 1:
+                    if hasattr(self.env, "sim_model"):
+                        sim_model = self.env.sim_model
+                        loner = Loner(
+                            self.name,
+                            clan.x,
+                            clan.y,
+                            clan.color,
+                            clan.hp_per_member,
+                            self.food_intake,
+                            clan.hunger_timer,
+                            clan.can_cannibalize,
+                        )
+                        sim_model.loners.append(loner)
+                        sim_model.add_log(
+                            f"🚶 {self.name} Clan #{clan.clan_id} wird zum Einzelgänger (1 Mitglied)"
+                        )
+                    clan.population = 0  # Markiere zum Entfernen
 
-            # Clan-Splitting wenn zu groß
+                # Einzelgänger-Abspaltung: 2% Chance wenn Clan > 3 Mitglieder
+                elif clan.population > 3 and random.random() < 0.02:
+                    clan.population -= 1
+                    # Erstelle Einzelgänger
+                    if hasattr(self.env, "sim_model"):
+                        sim_model = self.env.sim_model
+                        loner = Loner(
+                            self.name,
+                            clan.x + random.uniform(-30, 30),
+                            clan.y + random.uniform(-30, 30),
+                            clan.color,
+                            clan.hp_per_member,
+                            self.food_intake,
+                            0,
+                            clan.can_cannibalize,
+                        )
+                        sim_model.loners.append(loner)
+                        sim_model.add_log(
+                            f"🚶 {self.name} Einzelgänger spaltet sich von Clan #{clan.clan_id} ab ({clan.population + 1} → {clan.population})"
+                        )
+
+            # Clan-Splitting mit Gaußscher Normalverteilung
             self.check_clan_splits()
 
             # Entferne leere Clans
             self.clans = [c for c in self.clans if c.population > 0]
 
     def check_clan_splits(self):
-        """Teile Clans wenn sie zu groß werden."""
+        """Teile Clans wenn sie zu groß werden (Gaußsche Normalverteilung)."""
         for clan in self.clans[:]:
-            if clan.population > self.max_members and len(self.clans) < self.max_clans:
+            if len(self.clans) >= 15:
+                continue  # Max 15 Clans
+
+            # Pflicht-Split bei Überschreitung von max_members
+            if clan.population > clan.max_members:
+                split_chance = 1.0  # 100% Split
+            # Gaußsche Normalverteilung: Split-Wahrscheinlichkeit steigt ab 50% von max_members
+            elif clan.population >= clan.max_members * 0.5:
+                # Berechne wie nah wir an max_members sind (0.0 bis 1.0)
+                progress = (clan.population - clan.max_members * 0.5) / (
+                    clan.max_members * 0.5
+                )
+                # Gaußsche Funktion: exp(-((x-1)^2) / 0.5)
+                # Je näher an max_members, desto höher die Wahrscheinlichkeit
+                import math
+
+                split_chance = (
+                    math.exp(-((1 - progress) ** 2) / 0.5) * 0.15
+                )  # Max 15% Chance
+            else:
+                continue  # Zu klein für Split
+
+            # Prüfe ob Split erfolgt
+            if random.random() < split_chance:
                 # Split
                 pop_half = clan.population // 2
                 clan.population = clan.population - pop_half
@@ -336,7 +418,10 @@ class SpeciesGroup:
 
                 if hasattr(self.env, "sim_model"):
                     self.env.sim_model.add_log(
-                        f"{self.name} Clan #{clan.clan_id} → Clan #{new_clan.clan_id} (je {clan.population})"
+                        f"✂️ {self.name} Clan #{clan.clan_id} teilt sich! → Clan #{new_clan.clan_id} (je {clan.population} Mitglieder)"
+                    )
+                    self.env.sim_model.add_log(
+                        f"🎉 Neue Population: Clan #{clan.clan_id} ({clan.population}) + Clan #{new_clan.clan_id} ({pop_half}) = {clan.population + pop_half} Mitglieder"
                     )
 
 
@@ -351,8 +436,12 @@ class SimulationModel:
         self.map_width = 1200
         self.map_height = 600
         self.logs = []
-        self.max_logs = 50
+        self.max_logs = 300  # Increased from 50 for longer history
         self.time = 0
+
+        # Speed multipliers (1.0 = normal speed)
+        self.loner_speed_multiplier = 1.0
+        self.clan_speed_multiplier = 1.0
 
         # Statistics tracking
         self.stats = {
@@ -364,6 +453,7 @@ class SimulationModel:
             },
             "max_clans": 0,
             "food_places": 0,
+            "population_history": {},  # Track population over time
         }
 
     def add_log(self, message):
@@ -388,14 +478,15 @@ class SimulationModel:
 
         # Temperatur-System initialisieren
         if start_temperature is not None:
+            self.base_temperature = start_temperature  # Basis-Temperatur (Mittelwert)
             self.current_temperature = (
                 start_temperature  # Vom Slider gesetzte Temperatur
             )
         else:
-            self.current_temperature = random.uniform(
-                -20, 20
-            )  # Fallback: zufällige Start-Temperatur
+            self.base_temperature = random.uniform(-20, 20)  # Fallback
+            self.current_temperature = self.base_temperature
         self.temp_change_timer = 0  # Timer für Temperatur-Änderungen
+        self.day_night_temp_offset = 0  # Aktueller Tag/Nacht Offset
 
         # Tag/Nacht-Zyklus initialisieren
         self.is_day = start_is_day  # Start-Tageszeit aus UI
@@ -447,10 +538,17 @@ class SimulationModel:
                 self.map_width,
                 self.map_height,
             )
+            # Setze hunger_timer aller Clans auf 0
+            for clan in group.clans:
+                clan.hunger_timer = 0
             self.groups.append(group)
 
-        # Erstelle Einzelgänger (2-5 pro Spezies)
+        # Erstelle Einzelgänger (2-5 pro Spezies) - NUR für aktivierte Spezies
         for species_name, stats in species_config.items():
+            # Überspringe deaktivierte Spezies (Population = 0)
+            if population_overrides.get(species_name, 0) == 0:
+                continue
+
             color = color_map.get(species_name, (0.5, 0.5, 0.5, 1))
             hp = stats.get("hp", 25)
             food_intake = stats.get("food_intake", 5)
@@ -498,12 +596,43 @@ class SimulationModel:
             self.stats["deaths"]["starvation"][species_name] = 0
             self.stats["deaths"]["temperature"][species_name] = 0
 
+    def _calculate_transition_progress(self):
+        """Calculate transition progress: 0.0 = full night, 1.0 = full day."""
+        if not self.in_transition:
+            # Not in transition - return stable value
+            return 1.0 if self.is_day else 0.0
+
+        # During transition
+        progress_ratio = self.transition_timer / self.transition_duration
+
+        if self.transition_to_day:
+            # Transitioning from night (0.0) to day (1.0)
+            return progress_ratio
+        else:
+            # Transitioning from day (1.0) to night (0.0)
+            return 1.0 - progress_ratio
+
     def step(self):
         """Simulationsschritt."""
         # SimPy step
         target = self.env.now + 1
         self.env.run(until=target)
         self.time = int(self.env.now)
+
+        # Track population history every 10 steps
+        if self.time % 10 == 0:
+            for species_name in self.species_config.keys():
+                if species_name not in self.stats["population_history"]:
+                    self.stats["population_history"][species_name] = []
+                # Count current population for this species
+                # Groups store species name in 'name' attribute
+                count = sum(
+                    sum(c.population for c in g.clans)
+                    for g in self.groups
+                    if g.name == species_name
+                )
+                count += sum(1 for l in self.loners if l.species == species_name)
+                self.stats["population_history"][species_name].append(count)
 
         # Tag/Nacht-Zyklus: Wechsel alle 30 Sekunden (300 Steps)
         self.day_night_timer += 1
@@ -528,11 +657,10 @@ class SimulationModel:
             self.transition_timer += 1
 
             # Graduelle Temperaturänderung (10°C über transition_duration verteilt)
-            temp_change_per_step = 10.0 / self.transition_duration
-            if self.transition_to_day:
-                self.current_temperature += temp_change_per_step
-            else:
-                self.current_temperature -= temp_change_per_step
+            # Ziel: +5°C für Tag, -5°C für Nacht (symmetrisch um base_temperature)
+            target_offset = 5.0 if self.transition_to_day else -5.0
+            progress = self.transition_timer / self.transition_duration
+            self.day_night_temp_offset = target_offset * progress
 
             # Beende Übergang
             if self.transition_timer >= self.transition_duration:
@@ -540,32 +668,52 @@ class SimulationModel:
                 self.transition_timer = 0
                 self.is_day = self.transition_to_day
                 self.stats["is_day"] = self.is_day
+                self.day_night_temp_offset = target_offset  # Setze finalen Offset
 
                 if self.is_day:
                     self.add_log(f"☀️ Es ist jetzt Tag!")
                 else:
                     self.add_log(f"🌙 Es ist jetzt Nacht!")
 
+            # Berechne aktuelle Temperatur: Basis + Tag/Nacht Offset
+            self.current_temperature = (
+                self.base_temperature + self.day_night_temp_offset
+            )
+
             # Begrenze Temperatur
             self.current_temperature = max(-80, min(50, self.current_temperature))
             self.stats["temperature"] = round(self.current_temperature, 1)
 
-        # Temperatur-System: Ändere Temperatur alle 200 Steps (~20 Sekunden)
+        # Temperatur-System: Ändere Basis-Temperatur alle 200 Steps (~20 Sekunden)
         self.temp_change_timer += 1
         if self.temp_change_timer >= 200:
             self.temp_change_timer = 0
-            # Zufällige Temperatur-Änderung (-3 bis +3 Grad)
+            # Zufällige Basis-Temperatur-Änderung (-3 bis +3 Grad)
             temp_change = random.uniform(-3, 3)
-            self.current_temperature += temp_change
-            # Begrenze auf -80 bis +50 Grad
+            self.base_temperature += temp_change
+            # Begrenze Basis-Temperatur auf -80 bis +50 Grad
+            self.base_temperature = max(-80, min(50, self.base_temperature))
+            # Aktualisiere current_temperature mit neuem Offset
+            self.current_temperature = (
+                self.base_temperature + self.day_night_temp_offset
+            )
             self.current_temperature = max(-80, min(50, self.current_temperature))
             self.stats["temperature"] = round(self.current_temperature, 1)
             self.add_log(f"🌡️ Temperatur: {round(self.current_temperature, 1)}°C")
 
+        # Nahrungsregeneration
+        for food_source in self.food_sources:
+            food_source.regenerate()
+
         # Update Loners und prüfe auf Hungertod und Temperatur-Schaden
         loners_to_remove = []
         for loner in self.loners:
-            loner.update(self.map_width, self.map_height, self.is_day)
+            loner.update(
+                self.map_width,
+                self.map_height,
+                self.is_day,
+                self.loner_speed_multiplier,
+            )
 
             # Temperatur-Schaden prüfen
             species_config = self.species_config.get(loner.species, {})
@@ -576,16 +724,16 @@ class SimulationModel:
                 self.current_temperature < min_temp
                 or self.current_temperature > max_temp
             ):
-                # Progressiver Temperatur-Schaden basierend auf Distanz vom Überlebensbereich
+                # LONERS: Viel höherer Temperatur-Schaden (3x schneller als Clans)
                 if self.current_temperature < min_temp:
                     temp_diff = min_temp - self.current_temperature
                 else:
                     temp_diff = self.current_temperature - max_temp
 
-                # Basis-Schaden: 3 HP + 1 HP pro 5 Grad Unterschied
-                # Bei 30 Grad Unterschied: 3 + 6 = 9 HP pro Step
-                damage = 3 + (temp_diff // 5)
-                damage = max(3, min(damage, 20))  # Min 3, Max 20 HP pro Step
+                # Erhöhter Schaden für Einzelgänger: 6 HP + 3 HP pro 5 Grad
+                # Bei 30 Grad Unterschied: 6 + 18 = 24 HP pro Step
+                damage = 6 + (temp_diff // 5) * 3
+                damage = max(6, min(damage, 40))  # Min 6, Max 40 HP pro Step
 
                 loner.hp -= damage
                 if loner.hp <= 0:
@@ -597,8 +745,8 @@ class SimulationModel:
                         self.stats["deaths"]["temperature"].get(loner.species, 0) + 1
                     )
 
-            # Hungertod: Nach 100 Steps (10 Sekunden)
-            if loner.hunger_timer >= 100:
+            # Hungertod: Nach 300 Steps (30 Sekunden)
+            if loner.hunger_timer >= 300:
                 loners_to_remove.append(loner)
                 self.add_log(f"☠️ {loner.species} Einzelgänger verhungert!")
                 self.stats["deaths"]["starvation"][loner.species] = (
@@ -620,19 +768,34 @@ class SimulationModel:
                 self.current_temperature < min_temp
                 or self.current_temperature > max_temp
             ):
-                # Progressiver Temperatur-Schaden basierend auf Distanz vom Überlebensbereich
+                # CLANS: Niedrigerer Temperatur-Schaden + 20% Überlebenschance
                 if self.current_temperature < min_temp:
                     temp_diff = min_temp - self.current_temperature
                 else:
                     temp_diff = self.current_temperature - max_temp
 
-                # Basis-Schaden: 3 HP + 1 HP pro 5 Grad Unterschied
-                # Bei 30 Grad Unterschied: 3 + 6 = 9 HP pro Step
-                damage = 3 + (temp_diff // 5)
-                damage = max(3, min(damage, 20))  # Min 3, Max 20 HP pro Step
+                # Normaler Schaden für Clans: 2 HP + 1 HP pro 5 Grad
+                # Bei 30 Grad Unterschied: 2 + 6 = 8 HP pro Step
+                damage = 2 + (temp_diff // 5)
+                damage = max(2, min(damage, 12))  # Min 2, Max 12 HP pro Step
 
                 # Wende Schaden auf alle Clans dieser Gruppe an
                 for clan in group.clans:
+                    # 20% Chance pro Tag/Nacht-Zyklus zu überleben
+                    # Wenn wir am Anfang eines Zyklus sind, würfeln wir
+                    if not hasattr(clan, "temp_survival_roll"):
+                        clan.temp_survival_roll = random.random() < 0.2
+                    if not hasattr(clan, "last_cycle_state"):
+                        clan.last_cycle_state = self.is_day
+
+                    # Reset bei Zyklus-Wechsel
+                    if clan.last_cycle_state != self.is_day:
+                        clan.last_cycle_state = self.is_day
+                        clan.temp_survival_roll = random.random() < 0.2
+
+                    # Wenn Clan die Überlebens-Chance gewonnen hat, überspringe Schaden
+                    if clan.temp_survival_roll:
+                        continue
                     old_pop = clan.population
                     if not clan.take_damage(damage, self):
                         # Clan ist tot - wird später entfernt
@@ -689,11 +852,7 @@ class SimulationModel:
             "food_sources": food_sources_data,
             "logs": self.logs.copy(),
             "is_day": self.is_day,
-            "transition_progress": (
-                self.transition_timer / self.transition_duration
-                if self.in_transition
-                else (1.0 if self.is_day else 0.0)
-            ),
+            "transition_progress": self._calculate_transition_progress(),
         }
 
     def _process_food_seeking(self):
@@ -703,6 +862,10 @@ class SimulationModel:
         # Clans suchen und essen Nahrung
         for group in self.groups:
             for clan in group.clans:
+                # Kannibalen (Corrupted & Spores) essen keine Nahrung - nur Jagd!
+                if clan.can_cannibalize:
+                    continue
+
                 # Finde nächste Nahrungsquelle
                 nearest_food = None
                 nearest_dist = float("inf")
@@ -737,8 +900,15 @@ class SimulationModel:
                             f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{clan.hp_per_member - old_hp} HP)"
                         )
 
+                        # Kein automatisches Wachstum beim Essen mehr
+                        # Clans wachsen nur durch Einzelgänger-Anschluss
+
         # Loners suchen und essen Nahrung
         for loner in self.loners:
+            # Kannibalen (Corrupted & Spores) essen keine Nahrung - nur Jagd!
+            if loner.can_cannibalize:
+                continue
+
             nearest_food = None
             nearest_dist = float("inf")
 
@@ -751,8 +921,8 @@ class SimulationModel:
                         nearest_dist = dist
                         nearest_food = food_source
 
-            # Wenn hungrig (>= 50 Steps), suche Nahrung
-            if loner.hunger_timer >= 50 and nearest_food:
+            # Wenn hungrig (>= 200 Steps), suche Nahrung
+            if loner.hunger_timer >= 200 and nearest_food:
                 dx = nearest_food.x - loner.x
                 dy = nearest_food.y - loner.y
                 dist_calc = math.sqrt(dx * dx + dy * dy)
@@ -774,9 +944,14 @@ class SimulationModel:
 
     def _process_interactions(self):
         """Prozessiere alle Interaktionen zwischen Clans und Loners."""
-        ATTACK_DAMAGE = 3  # Fester Attack-Wert
+        ATTACK_DAMAGE = 2  # Fester Attack-Wert (reduziert für längeres Überleben)
         INTERACTION_RANGE = 100  # Reichweite für Interaktionen
-        HUNT_RANGE = 300  # Reichweite für aktive Jagd
+        HUNT_RANGE = 400  # Reichweite für aktive Jagd (erhöht)
+        HUNT_LOG_COOLDOWN = 100  # Nur alle 100 Steps loggen
+
+        # Tracking für Jagd-Logs (verhindert Spam)
+        if not hasattr(self, "hunt_log_timer"):
+            self.hunt_log_timer = {}
 
         # Clan vs Clan Interaktionen
         for i, group1 in enumerate(self.groups):
@@ -793,10 +968,54 @@ class SimulationModel:
                             group2.name, "Neutral"
                         )
 
+                        # SPEZIAL: Corrupted & Spores kämpfen gegeneinander wenn keine Hauptbeute da
+                        # Wenn clan1 ein Kannibal ist (Corrupted/Spores) und clan2 auch...
+                        if (
+                            clan1.can_cannibalize
+                            and clan2.can_cannibalize
+                            and group1.name != group2.name
+                        ):  # Verschiedene Kannibalen-Arten
+                            # Prüfe ob Hauptbeute (Icefang/Crushed_Critters) in Reichweite ist
+                            has_primary_prey = False
+                            for other_group in self.groups:
+                                if other_group.name in ["Icefang", "Crushed_Critters"]:
+                                    for other_clan in other_group.clans:
+                                        prey_dist = clan1.distance_to_clan(other_clan)
+                                        if prey_dist < HUNT_RANGE:
+                                            has_primary_prey = True
+                                            break
+                                if has_primary_prey:
+                                    break
+
+                            # Keine Hauptbeute da? Dann kämpfen sie gegeneinander!
+                            if not has_primary_prey:
+                                interaction = "Aggressiv"
+
+                        # Clans derselben Spezies stoßen sich ab (Territorialverhalten)
+                        if group1.name == group2.name and dist < 150:
+                            # Bewege sich vom anderen Clan weg
+                            dx = clan1.x - clan2.x
+                            dy = clan1.y - clan2.y
+                            dist_calc = max(dist, 0.1)  # Verhindere Division durch 0
+                            repel_strength = 0.3
+                            clan1.vx += (dx / dist_calc) * repel_strength
+                            clan1.vy += (dy / dist_calc) * repel_strength
                         # AKTIVE JAGD: Bewege dich zum Ziel wenn aggressiv
-                        if interaction == "Aggressiv" and dist < HUNT_RANGE:
-                            # Jage das Ziel aktiv
-                            clan1.move_towards(clan2.x, clan2.y, strength=0.25)
+                        elif interaction == "Aggressiv" and dist < HUNT_RANGE:
+                            # Jage das Ziel aktiv mit höherer Stärke
+                            clan1.move_towards(clan2.x, clan2.y, strength=0.4)
+
+                            # Logge Jagd (aber nicht zu oft)
+                            hunt_key = f"{group1.name}_{clan1.clan_id}_hunts_{group2.name}_{clan2.clan_id}"
+                            if (
+                                hunt_key not in self.hunt_log_timer
+                                or self.time - self.hunt_log_timer[hunt_key]
+                                >= HUNT_LOG_COOLDOWN
+                            ):
+                                self.hunt_log_timer[hunt_key] = self.time
+                                self.add_log(
+                                    f"🎯 {group1.name} Clan #{clan1.clan_id} jagt {group2.name} Clan #{clan2.clan_id}! (Distanz: {int(dist)}px)"
+                                )
 
                         # Angriff nur in Nahkampfreichweite
                         if dist < INTERACTION_RANGE:
@@ -859,16 +1078,31 @@ class SimulationModel:
                         loner.species, "Neutral"
                     )
 
-                    # AKTIVE JAGD auf Loners
+                    # AKTIVE JAGD auf Loners (HÖHERE PRIORITÄT als Clans!)
                     if interaction == "Aggressiv" and dist < HUNT_RANGE:
-                        clan.move_towards(loner.x, loner.y, strength=0.2)
+                        # Loners sind bevorzugte Ziele - 2x stärkere Verfolgung!
+                        clan.move_towards(
+                            loner.x, loner.y, strength=0.7
+                        )  # War 0.35, jetzt 0.7
+
+                        # Logge Jagd (aber nicht zu oft)
+                        hunt_key = f"{group.name}_{clan.clan_id}_hunts_loner_{loner.species}_{id(loner)}"
+                        if (
+                            hunt_key not in self.hunt_log_timer
+                            or self.time - self.hunt_log_timer[hunt_key]
+                            >= HUNT_LOG_COOLDOWN
+                        ):
+                            self.hunt_log_timer[hunt_key] = self.time
+                            self.add_log(
+                                f"🎯 {group.name} Clan #{clan.clan_id} jagt {loner.species} Einzelgänger! (Distanz: {int(dist)}px)"
+                            )
 
                     if dist < INTERACTION_RANGE:
                         if interaction == "Aggressiv":
-                            # Clan greift Loner an - Bei Nacht reduzierte Kampfchance
+                            # Clan greift Loner an - ERHÖHTE Angriffschance für Loners!
                             attack_chance = (
-                                0.4 if self.is_day else 0.2
-                            )  # 40% Tag, 20% Nacht
+                                0.6 if self.is_day else 0.3
+                            )  # War 0.4/0.2, jetzt 0.6/0.3
                             if random.random() < attack_chance:
                                 loner.hp -= ATTACK_DAMAGE
                                 if loner.hp <= 0:
@@ -901,7 +1135,6 @@ class SimulationModel:
 
                             if (
                                 random.random() < join_chance
-                                and clan.population < clan.max_members
                                 and loner.species == group.name  # Nur gleiche Spezies
                             ):
                                 clan.population += 1
@@ -912,13 +1145,97 @@ class SimulationModel:
                                     else "freundlich"
                                 )
                                 self.add_log(
-                                    f"👥 {loner.species} Einzelgänger ({reason}) tritt {group.name} Clan #{clan.clan_id} bei"
+                                    f"👥 {loner.species} Einzelgänger ({reason}) tritt {group.name} Clan #{clan.clan_id} bei ({clan.population - 1} → {clan.population})"
                                 )
+
+                                # Prüfe ob Clan jetzt splitten sollte
+                                if clan.population > clan.max_members:
+                                    group.check_clan_splits()
 
         # Entferne getötete Loners
         for loner in loners_to_remove:
             if loner in self.loners:
                 self.loners.remove(loner)
+
+        # Clan-Bildung: 2+ Einzelgänger derselben Spezies können sich zusammenschließen
+        self._process_loner_clan_formation()
+
+    def _process_loner_clan_formation(self):
+        """Einzelgänger können sich zu einem neuen Clan zusammenschließen."""
+        FORMATION_RANGE = 50  # Wie nah Loners sein müssen
+
+        # Gruppiere Loners nach Spezies
+        species_loners = {}
+        for loner in self.loners:
+            if loner.species not in species_loners:
+                species_loners[loner.species] = []
+            species_loners[loner.species].append(loner)
+
+        # Prüfe für jede Spezies ob Clan-Bildung möglich ist
+        for species_name, loners_list in species_loners.items():
+            if len(loners_list) < 2:
+                continue  # Mindestens 2 Loners nötig
+
+            # Finde Gruppe dieser Spezies
+            group = None
+            for g in self.groups:
+                if g.name == species_name:
+                    group = g
+                    break
+
+            if not group or len(group.clans) >= 15:
+                continue  # Keine Gruppe oder zu viele Clans
+
+            # Prüfe Loner-Paare auf Nähe
+            checked_loners = []
+            for i, loner1 in enumerate(loners_list):
+                if loner1 in checked_loners:
+                    continue
+
+                nearby_loners = [loner1]
+                for j, loner2 in enumerate(loners_list):
+                    if i >= j or loner2 in checked_loners:
+                        continue
+
+                    dx = loner1.x - loner2.x
+                    dy = loner1.y - loner2.y
+                    dist = math.sqrt(dx * dx + dy * dy)
+
+                    if dist < FORMATION_RANGE:
+                        nearby_loners.append(loner2)
+
+                # Wenn 2+ Loners nah beieinander sind: 5% Chance für Clan-Bildung
+                if len(nearby_loners) >= 2 and random.random() < 0.05:
+                    # Erstelle neuen Clan
+                    center_x = sum(l.x for l in nearby_loners) / len(nearby_loners)
+                    center_y = sum(l.y for l in nearby_loners) / len(nearby_loners)
+
+                    new_clan = Clan(
+                        group.next_clan_id,
+                        species_name,
+                        center_x,
+                        center_y,
+                        len(nearby_loners),
+                        nearby_loners[0].color,
+                        group.max_members,
+                        nearby_loners[0].hp,
+                        group.food_intake,
+                        0,
+                        nearby_loners[0].can_cannibalize,
+                    )
+                    group.clans.append(new_clan)
+                    group.next_clan_id += 1
+
+                    # Entferne Loners
+                    for loner in nearby_loners:
+                        if loner in self.loners:
+                            self.loners.remove(loner)
+                        checked_loners.append(loner)
+
+                    self.add_log(
+                        f"🤝 {len(nearby_loners)} {species_name} Einzelgänger schließen sich zu Clan #{new_clan.clan_id} zusammen!"
+                    )
+                    break  # Nur ein Clan pro Durchlauf pro Spezies
 
     def get_final_stats(self):
         """Get final statistics for end of simulation."""
@@ -931,6 +1248,7 @@ class SimulationModel:
             "deaths": self.stats["deaths"],
             "max_clans": self.stats["max_clans"],
             "food_places": self.stats["food_places"],
+            "population_history": self.stats["population_history"],
         }
 
     def set_temperature(self, temp):
@@ -944,3 +1262,11 @@ class SimulationModel:
     def set_day_night(self, is_day):
         """Set day/night."""
         pass
+
+    def set_loner_speed(self, multiplier):
+        """Set loner speed multiplier (0.5 to 2.0)."""
+        self.loner_speed_multiplier = max(0.5, min(2.0, multiplier))
+
+    def set_clan_speed(self, multiplier):
+        """Set clan speed multiplier (0.5 to 2.0)."""
+        self.clan_speed_multiplier = max(0.5, min(2.0, multiplier))
