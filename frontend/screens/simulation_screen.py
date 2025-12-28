@@ -1505,10 +1505,11 @@ class SimulationScreen(QWidget):
 
     def update_simulation_with_speed(self):
         """Update simulation multiple times based on speed setting."""
-        for _ in range(self.simulation_speed):
-            self.update_simulation()
+        for i in range(self.simulation_speed):
+            is_last = i == self.simulation_speed - 1
+            self.update_simulation(update_ui=is_last)
 
-    def update_simulation(self):
+    def update_simulation(self, update_ui=True):
         """Step simulation und update display."""
         if self.sim_model and self.is_running:
             data = self.sim_model.step()
@@ -1523,40 +1524,42 @@ class SimulationScreen(QWidget):
             # Track simulation time (each step = 0.1 seconds)
             self.simulation_time = self.time_step * 0.1
 
-            # Update timer display
-            minutes = int(self.simulation_time // 60)
-            seconds = int(self.simulation_time % 60)
-            self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
+            if update_ui:
+                # Update timer display
+                minutes = int(self.simulation_time // 60)
+                seconds = int(self.simulation_time % 60)
+                self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
 
-            # Update day/night indicator
-            is_day = data.get("is_day", True)
-            self.day_night_label.setText("☀️" if is_day else "🌙")
+                # Update day/night indicator
+                is_day = data.get("is_day", True)
+                self.day_night_label.setText("☀️" if is_day else "🌙")
 
-            # Update live temperature display
-            current_temp = self.sim_model.stats.get("temperature", 0)
-            temp_color = (
-                "#88ccff"
-                if current_temp < 0
-                else "#ffcc44" if current_temp > 25 else "#ffffff"
-            )
-            self.live_temp_label.setText(f"🌡️ {current_temp}°C")
-            self.live_temp_label.setStyleSheet(f"color: {temp_color}; padding: 0 10px;")
-
-            # Update live day/night display
-            is_day = self.sim_model.stats.get("is_day", True)
-            if is_day:
-                self.live_day_night_label.setText("☀️ Tag")
-                self.live_day_night_label.setStyleSheet(
-                    "color: #ffcc44; padding: 0 10px;"
+                # Update live temperature display
+                current_temp = self.sim_model.stats.get("temperature", 0)
+                temp_color = (
+                    "#88ccff"
+                    if current_temp < 0
+                    else "#ffcc44" if current_temp > 25 else "#ffffff"
                 )
-            else:
-                self.live_day_night_label.setText("🌙 Nacht")
-                self.live_day_night_label.setStyleSheet(
-                    "color: #8888ff; padding: 0 10px;"
+                self.live_temp_label.setText(f"🌡️ {current_temp}°C")
+                self.live_temp_label.setStyleSheet(
+                    f"color: {temp_color}; padding: 0 10px;"
                 )
 
-            # Collect population data for live graph (every 10 steps)
-            if self.time_step % 10 == 0:
+                # Update live day/night display
+                is_day = self.sim_model.stats.get("is_day", True)
+                if is_day:
+                    self.live_day_night_label.setText("☀️ Tag")
+                    self.live_day_night_label.setStyleSheet(
+                        "color: #ffcc44; padding: 0 10px;"
+                    )
+                else:
+                    self.live_day_night_label.setText("🌙 Nacht")
+                    self.live_day_night_label.setStyleSheet(
+                        "color: #8888ff; padding: 0 10px;"
+                    )
+
+                # Collect population data for live graph (every step for smoothness)
                 for group in data["groups"]:
                     species_name = group["name"]
                     # Calculate total population for this species
@@ -1577,6 +1580,14 @@ class SimulationScreen(QWidget):
                 # Update live graph (always shown during simulation)
                 self.update_live_graph()
 
+                # Update logs (every step for smoothness)
+                logs = data.get("logs", [])
+                if logs:
+                    self.log_text = "\n".join(logs[-50:])
+                    # Update popup if it's open
+                    if self.log_dialog and self.log_dialog.isVisible():
+                        self.log_dialog.update_log(self.log_text)
+
             # Check if 5 minutes reached
             if self.simulation_time >= self.max_simulation_time:
                 self.show_final_stats()
@@ -1593,18 +1604,6 @@ class SimulationScreen(QWidget):
                 self.show_final_stats()
                 self.stop_simulation()
                 return
-
-            # Update logs (nur alle 5 Steps für bessere Performance)
-            if self.time_step % 5 == 0:
-                logs = data.get("logs", [])
-                if logs:
-                    self.log_text = "\n".join(logs[-50:])
-                    # Update popup if it's open
-                    if self.log_dialog and self.log_dialog.isVisible():
-                        self.log_dialog.update_log(self.log_text)
-
-    def show_final_stats(self):
-        """Show final statistics dialog after 5 minutes."""
         if self.sim_model:
             stats = self.sim_model.get_final_stats()
             dialog = StatsDialog(stats, self)
@@ -1677,6 +1676,18 @@ class SimulationScreen(QWidget):
                 )
                 self.graph_legend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(self.graph_legend_label)
+
+            # Create and add the log display widget if it doesn't exist
+            if not hasattr(self, "log_display") or self.log_display is None:
+                from PyQt6.QtWidgets import QTextEdit
+
+                self.log_display = QTextEdit()
+                self.log_display.setReadOnly(True)
+                self.log_display.setStyleSheet(
+                    "background-color: #222; color: #fff; font-size: 11px; margin-top: 6px; border: none;"
+                )
+                self.log_display.setMinimumHeight(80)
+                layout.addWidget(self.log_display)
 
             # Update graph immediately
             self.update_live_graph()
@@ -1767,6 +1778,12 @@ class SimulationScreen(QWidget):
 
         self.live_graph_widget.draw()
         self.update_graph_legend()
+
+        # Update log display under the graph
+        if hasattr(self, "log_display") and self.log_display is not None:
+            # Show the last 15 log lines (adjust as needed)
+            log_lines = self.log_text.split("\n")[-15:]
+            self.log_display.setPlainText("\n".join(log_lines))
 
     def on_back(self):
         """Go back to start screen."""

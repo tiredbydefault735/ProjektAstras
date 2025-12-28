@@ -613,6 +613,29 @@ class SimulationModel:
             return 1.0 - progress_ratio
 
     def step(self):
+        # --- Random loner spawn logic ---
+        # 1% chance per step per species to spawn a loner (adjust as needed)
+        for species_name, stats in self.species_config.items():
+            if random.random() < 0.01:
+                color_map = {
+                    "Icefang": (0.8, 0.9, 1, 1),
+                    "Crushed_Critters": (0.6, 0.4, 0.2, 1),
+                    "Spores": (0.2, 0.8, 0.2, 1),
+                    "The_Corrupted": (0.5, 0, 0.5, 1),
+                }
+                color = color_map.get(species_name, (0.5, 0.5, 0.5, 1))
+                hp = stats.get("hp", 25)
+                food_intake = stats.get("food_intake", 5)
+                can_cannibalize = species_name in ["Spores", "The_Corrupted"]
+                x = random.uniform(50, self.map_width - 50)
+                y = random.uniform(50, self.map_height - 50)
+                loner = Loner(
+                    species_name, x, y, color, hp, food_intake, 0, can_cannibalize
+                )
+                self.loners.append(loner)
+                self.add_log(
+                    f"🔹 Ein neuer Einzelgänger der Spezies {species_name} ist erschienen!"
+                )
         """Simulationsschritt."""
         # SimPy step
         target = self.env.now + 1
