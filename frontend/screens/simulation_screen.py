@@ -1008,6 +1008,7 @@ class SimulationScreen(QWidget):
         self.max_simulation_time = 300  # 5 minutes = 300 seconds
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
         self.population_data = {}  # Store population history for live graph
+        self.live_graph_widget = None  # Widget for live graph, initialized later
 
         # Load species config
         json_path = get_static_path("data/species.json")
@@ -1178,49 +1179,28 @@ class SimulationScreen(QWidget):
         right_layout.addWidget(self.stats_log_widget)
 
         # Live graph area (shown during simulation)
-        self.live_graph_widget = None
-        self.graph_container = QFrame()
-        self.graph_container.setVisible(False)
-        self.graph_container.setStyleSheet(
-            "background-color: #1a1a1a; border: 1px solid #666666;"
-        )
-        self.graph_container.setMinimumHeight(250)
-        self.graph_container.setMaximumHeight(350)
-        graph_container_layout = QVBoxLayout(self.graph_container)
-        graph_container_layout.setContentsMargins(5, 5, 5, 5)
-
-        # Legend text area below graph
-        self.graph_legend_label = QLabel("")
-        legend_font = QFont("Minecraft", 10)
-        legend_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.graph_legend_label.setFont(legend_font)
-        self.graph_legend_label.setWordWrap(True)
-        self.graph_legend_label.setStyleSheet("color: #ffffff; padding: 5px;")
-        graph_container_layout.addWidget(self.graph_legend_label)
-
-        right_layout.addWidget(self.graph_container)
-
-        # Control buttons section
-        control_section = QFrame()
+        control_section = QWidget()
         control_layout = QVBoxLayout(control_section)
-        control_layout.setContentsMargins(0, 10, 0, 0)
+        control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(10)
+        # (All matplotlib axis configuration and plotting is handled in update_live_graph after the axis is created)
+        # (spine styling for live_graph_ax is handled after creation in initialize_live_graph or update_live_graph)
 
-        # Play controls row
+        # (All grid configuration for live_graph_ax is handled after creation in initialize_live_graph or update_live_graph)
+
+        # (Live graph widget and axis are initialized only when simulation starts)
+        # (Do not reference self.live_graph_widget or self.live_graph_ax here)
+
+        # Play/Pause and Stop Buttons
         play_controls_layout = QHBoxLayout()
-        play_controls_layout.setSpacing(10)
-
-        # Play/Pause Toggle Button
         self.btn_play_pause = QPushButton("▶")
-        play_pause_font = QFont("Minecraft", 16)
-        play_pause_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_play_pause.setFont(play_pause_font)
-        self.btn_play_pause.setFixedWidth(50)
+        play_font = QFont("Minecraft", 16)
+        play_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_play_pause.setFont(play_font)
         self.btn_play_pause.setFixedHeight(40)
         self.btn_play_pause.clicked.connect(self.toggle_play_pause)
         play_controls_layout.addWidget(self.btn_play_pause)
 
-        # Stop Button
         self.btn_stop = QPushButton("Reset/Stop")
         stop_font = QFont("Minecraft", 16)
         stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -1314,6 +1294,12 @@ class SimulationScreen(QWidget):
 
         # Add control section to right column
         right_layout.addWidget(control_section)
+
+        # Add graph container (for live graph)
+        self.graph_container = QFrame()
+        self.graph_container.setVisible(False)
+        right_layout.addWidget(self.graph_container)
+
         right_layout.addStretch()
 
         # Add right column to splitter
@@ -1670,9 +1656,27 @@ class SimulationScreen(QWidget):
             for spine in self.live_graph_ax.spines.values():
                 spine.set_color("#666666")
 
-            # Add to container at the top (before legend label)
+            # Ensure graph_container has a layout
+            if self.graph_container.layout() is None:
+                self.graph_container.setLayout(QVBoxLayout())
             layout = self.graph_container.layout()
+
+            # Add the live graph widget
             layout.insertWidget(0, self.live_graph_widget)
+
+            # Create and add the legend label if it doesn't exist
+            if (
+                not hasattr(self, "graph_legend_label")
+                or self.graph_legend_label is None
+            ):
+                from PyQt6.QtWidgets import QLabel
+
+                self.graph_legend_label = QLabel()
+                self.graph_legend_label.setStyleSheet(
+                    "color: #ffffff; font-size: 11px; padding: 4px 0 0 0;"
+                )
+                self.graph_legend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(self.graph_legend_label)
 
             # Update graph immediately
             self.update_live_graph()
@@ -1712,43 +1716,57 @@ class SimulationScreen(QWidget):
             self.graph_legend_label.setText("")
 
     def update_live_graph(self):
-        """Update the live population graph with current data."""
-        if self.live_graph_widget is None:
+        """Update the live population graph with current data using matplotlib."""
+        if self.live_graph_widget is None or not hasattr(self, "live_graph_ax"):
             return
 
-        if not hasattr(self, "plot_curves"):
-            return
+        self.live_graph_ax.clear()
 
-        try:
-            import pyqtgraph as pg
+        # Get species colors
+        colors = {
+            "Icefang": "#cce6ff",
+            "Crushed_Critters": "#cc9966",
+            "Spores": "#66cc66",
+            "The_Corrupted": "#cc66cc",
+        }
 
-            # Get species colors
-            colors = {
-                "Icefang": "#cce6ff",
-                "Crushed_Critters": "#cc9966",
-                "Spores": "#66cc66",
-                "The_Corrupted": "#cc66cc",
-            }
+        # Only plot enabled (active) species
+        enabled_species = set()
+        if hasattr(self, "species_panel") and hasattr(
+            self.species_panel, "get_enabled_species_populations"
+        ):
+            enabled_species = set(
+                self.species_panel.get_enabled_species_populations().keys()
+            )
+        for species_name, history in self.population_data.items():
+            if enabled_species and species_name not in enabled_species:
+                continue
+            if history:
+                time_points = [i * 0.1 for i in range(len(history))]
+                color = colors.get(species_name, "#ffffff")
+                self.live_graph_ax.plot(
+                    time_points,
+                    history,
+                    label=species_name.replace("_", " "),
+                    color=color,
+                )
 
-            # Plot each species
-            for species_name, history in self.population_data.items():
-                if history:
-                    time_points = [i * 10 for i in range(len(history))]
-                    color = colors.get(species_name, "#ffffff")
+        self.live_graph_ax.set_facecolor("#1a1a1a")
+        self.live_graph_ax.tick_params(colors="#ffffff", labelsize=8)
+        self.live_graph_ax.set_xlabel("Time (s)", color="#ffffff", fontsize=9)
+        self.live_graph_ax.set_ylabel("Population", color="#ffffff", fontsize=9)
+        self.live_graph_ax.set_title("Live Population", color="#ffffff", fontsize=10)
+        for spine in self.live_graph_ax.spines.values():
+            spine.set_color("#666666")
 
-                    # Create or update curve for this species
-                    if species_name not in self.plot_curves:
-                        self.plot_curves[species_name] = self.live_graph_widget.plot(
-                            time_points, history, pen=pg.mkPen(color=color, width=2)
-                        )
-                    else:
-                        self.plot_curves[species_name].setData(time_points, history)
+        # Only show legend if there is data
+        if any(len(history) > 0 for history in self.population_data.values()):
+            self.live_graph_ax.legend(
+                loc="upper right", fontsize=8, facecolor="#1a1a1a", labelcolor="#ffffff"
+            )
 
-            # Update text legend below graph
-            self.update_graph_legend()
-
-        except Exception as e:
-            print(f"Error updating live graph: {e}")
+        self.live_graph_widget.draw()
+        self.update_graph_legend()
 
     def on_back(self):
         """Go back to start screen."""
