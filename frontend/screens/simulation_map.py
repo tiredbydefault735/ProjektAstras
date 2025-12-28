@@ -3,8 +3,11 @@ SimulationMapWidget - Neu: Direktes Rendering für glitch-freie Darstellung
 """
 
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsTextItem
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPixmap
 from PyQt6.QtCore import Qt
+
+
+import os
 
 
 class SimulationMapWidget(QGraphicsView):
@@ -21,30 +24,72 @@ class SimulationMapWidget(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Region colors (can be replaced with images later)
-        self.region_colors = {
-            "Snowy Abyss": QColor(200, 220, 240),  # Hellblau/Eisig
-            "Wasteland": QColor(210, 180, 140),  # Sand/Braun
-            "Evergreen Forest": QColor(120, 160, 100),  # Dunkelgrün
-            "Corrupted Caves": QColor(80, 60, 90),  # Dunkel Lila/Schwarz
+        # Region image mapping
+        self.region_images = {
+            "Snowy Abyss": os.path.join("static", "textures", "snowy_abyss.png"),
+            "Wasteland": os.path.join("static", "textures", "wasteland.png"),
+            "Evergreen Forest": os.path.join(
+                "static", "textures", "evergreen_forest.png"
+            ),
+            "Corrupted Caves": os.path.join(
+                "static", "textures", "corrupted_caves.png"
+            ),
         }
+        self.bg_pixmap = None
 
         # Current region
         self.current_region = "Snowy Abyss"
 
         # Set initial background
-        self.setBackgroundBrush(
-            self.region_colors.get(self.current_region, QColor(255, 255, 255))
-        )
+        self.set_region(self.current_region)
 
         # Optimierte Darstellung
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
     def set_region(self, region_name):
-        """Set the current region and update background color."""
+        """Set the current region and update background image."""
         self.current_region = region_name
-        bg_color = self.region_colors.get(region_name, QColor(255, 255, 255))
-        self.setBackgroundBrush(bg_color)
+        image_path = self.region_images.get(region_name)
+        if image_path and os.path.exists(image_path):
+            self.bg_pixmap = QPixmap(image_path)
+        else:
+            self.bg_pixmap = None
+        self.update_background()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_background()
+
+    def update_background(self):
+        # Remove any previous background pixmap item
+        if hasattr(self, "_bg_item") and self._bg_item:
+            self.scene.removeItem(self._bg_item)
+            self._bg_item = None
+        width = self.viewport().width()
+        height = self.viewport().height()
+        if self.bg_pixmap:
+            scaled = self.bg_pixmap.scaled(
+                width,
+                height,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            from PyQt6.QtWidgets import QGraphicsPixmapItem
+
+            self._bg_item = QGraphicsPixmapItem(scaled)
+            self._bg_item.setZValue(-100)
+            self.scene.addItem(self._bg_item)
+        else:
+            self._bg_item = None
+            # Optionally fill with white rect if no image
+            from PyQt6.QtWidgets import QGraphicsRectItem
+
+            rect = QGraphicsRectItem(0, 0, width, height)
+            rect.setBrush(QColor(255, 255, 255))
+            rect.setPen(QPen(Qt.PenStyle.NoPen))
+            rect.setZValue(-100)
+            self.scene.addItem(rect)
+            self._bg_item = rect
 
     def draw_groups(
         self,
@@ -54,7 +99,12 @@ class SimulationMapWidget(QGraphicsView):
         transition_progress=1.0,
     ):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
-        self.scene.clear()
+
+        # Remove all items except the background
+        for item in self.scene.items():
+            if getattr(self, "_bg_item", None) and item is self._bg_item:
+                continue
+            self.scene.removeItem(item)
 
         # Get viewport dimensions (actual display size)
         width = self.viewport().width()
