@@ -103,43 +103,45 @@ class StartScreen(QWidget):
             QPushButton {
                 background-color: rgba(60, 56, 58, 0);
                 color: white;
-                border: 2px solid rgba(80, 76, 78, 0);
-                border-radius: 0px;
                 padding: 8px;
             }
             QPushButton:hover {
-                background-color: rgba(70, 66, 68, 0);
-                border-color: rgba(90, 86, 88, 0);
+                background-color: rgba(180, 75, 75, 0);
             }
         """
 
         # Buttons
-        btn_start = QPushButton("Start Simulation")
+        self.btn_start = QPushButton("Start Simulation")
         btn_start_font = QFont("Minecraft", 11)
         btn_start_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_start.setFont(btn_start_font)
-        btn_start.setFixedHeight(40)
-        btn_start.setStyleSheet(button_style)
-        btn_start.clicked.connect(self.go_to_simulation)
-        button_layout.addWidget(btn_start)
+        self.btn_start.setFont(btn_start_font)
+        self.btn_start.setFixedHeight(40)
+        self.btn_start.setStyleSheet(button_style)
+        self.btn_start.clicked.connect(self._on_start_clicked)
+        button_layout.addWidget(self.btn_start)
 
-        btn_settings = QPushButton("Settings")
+        self.btn_settings = QPushButton("Settings")
         btn_settings_font = QFont("Minecraft", 11)
         btn_settings_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_settings.setFont(btn_settings_font)
-        btn_settings.setFixedHeight(40)
-        btn_settings.setStyleSheet(button_style)
-        btn_settings.clicked.connect(self.on_settings)
-        button_layout.addWidget(btn_settings)
+        self.btn_settings.setFont(btn_settings_font)
+        self.btn_settings.setFixedHeight(40)
+        self.btn_settings.setStyleSheet(button_style)
+        self.btn_settings.clicked.connect(self.on_settings)
+        button_layout.addWidget(self.btn_settings)
 
-        btn_exit = QPushButton("Exit")
+        self.btn_exit = QPushButton("Exit")
         btn_exit_font = QFont("Minecraft", 11)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_exit.setFont(btn_exit_font)
-        btn_exit.setFixedHeight(40)
-        btn_exit.setStyleSheet(button_style)
-        btn_exit.clicked.connect(self.on_exit)
-        button_layout.addWidget(btn_exit)
+        self.btn_exit.setFont(btn_exit_font)
+        self.btn_exit.setFixedHeight(40)
+        self.btn_exit.setStyleSheet(button_style)
+        self.btn_exit.clicked.connect(self.on_exit)
+        button_layout.addWidget(self.btn_exit)
+
+    def _on_start_clicked(self):
+        self.btn_start.setVisible(False)
+        if self.go_to_simulation:
+            self.go_to_simulation()
 
     def resizeEvent(self, event):
         """Handle resize to scale background properly and reposition elements."""
