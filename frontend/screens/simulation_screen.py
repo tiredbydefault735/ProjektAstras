@@ -143,6 +143,19 @@ class StatsDialog(QDialog):
         text += f"<br><b>Maximale Clans:</b> {stats['max_clans']}<br>"
         text += f"<b>Futterplätze:</b> {stats['food_places']}"
 
+        # Disaster events
+        disasters = stats.get("disasters", [])
+        if disasters:
+            text += "<br><br><b>Naturkatastrophen während der Simulation:</b><br>"
+            for d in disasters:
+                start = d.get("start", "?")
+                end = d.get("end", "?")
+                name = d.get("name", "Unbekannt")
+                if end is not None:
+                    text += f"• {name} (Start: {start}, Ende: {end})<br>"
+                else:
+                    text += f"• {name} (Start: {start}, läuft noch)<br>"
+
         stats_text.setText(text)
         content_layout.addWidget(stats_text, 1)
 
@@ -160,6 +173,7 @@ class StatsDialog(QDialog):
 
             # Plot population history for each species
             population_history = stats.get("population_history", {})
+            disasters = stats.get("disasters", [])
             if population_history:
                 colors = {
                     "Icefang": "#cce6ff",
@@ -179,6 +193,50 @@ class StatsDialog(QDialog):
                             label=species,
                             color=colors.get(species, "#ffffff"),
                             linewidth=2,
+                        )
+
+                # Draw disaster events as vertical lines
+                for d in disasters:
+                    start = d.get("start")
+                    end = d.get("end")
+                    name = d.get("name", "?")
+                    if start is not None:
+                        ax.axvline(
+                            x=start,
+                            color="#ff4444",
+                            linestyle="--",
+                            alpha=0.7,
+                            linewidth=1.5,
+                        )
+                        ax.text(
+                            start,
+                            ax.get_ylim()[1],
+                            f"{name} Start",
+                            color="#ff4444",
+                            fontsize=8,
+                            rotation=90,
+                            va="top",
+                            ha="right",
+                            alpha=0.7,
+                        )
+                    if end is not None:
+                        ax.axvline(
+                            x=end,
+                            color="#ffaa44",
+                            linestyle=":",
+                            alpha=0.7,
+                            linewidth=1.2,
+                        )
+                        ax.text(
+                            end,
+                            ax.get_ylim()[1],
+                            f"{name} Ende",
+                            color="#ffaa44",
+                            fontsize=8,
+                            rotation=90,
+                            va="top",
+                            ha="left",
+                            alpha=0.7,
                         )
 
                 ax.set_xlabel("Zeit (Steps)", color="#ffffff", fontsize=10)
@@ -1034,6 +1092,16 @@ class SimulationScreen(QWidget):
         self.update_timer = None
         self.animation_timer = None
         self.last_stats = None  # Holds stats from the previous simulation
+
+        # Disaster visual placeholder
+        self.disaster_label = QLabel("")
+        disaster_font = QFont("Minecraft", 13, QFont.Weight.Bold)
+        disaster_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.disaster_label.setFont(disaster_font)
+        self.disaster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.disaster_label.setStyleSheet(
+            "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
+        )
         self.log_dialog = None
         self.time_step = 0
         self.log_expanded = False  # Track log expansion state
@@ -1100,6 +1168,9 @@ class SimulationScreen(QWidget):
         left_layout = QVBoxLayout(left_column)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
+
+        # Add disaster label at the top
+        left_layout.addWidget(self.disaster_label)
 
         self.map_frame = QFrame()
         self.map_frame.setStyleSheet(
@@ -1415,7 +1486,11 @@ class SimulationScreen(QWidget):
                 food_amount = self.environment_panel.get_food_amount()
                 start_temp = self.environment_panel.get_temperature()
                 start_is_day = self.environment_panel.get_is_day()
-                region = self.environment_panel.get_selected_region()
+                region_display = self.environment_panel.get_selected_region()
+                # Map display name to region key for backend
+                region_key = self.environment_panel.region_name_to_key.get(
+                    region_display, "Wasteland"
+                )
                 self.sim_model.setup(
                     self.species_config,
                     populations,
@@ -1423,10 +1498,11 @@ class SimulationScreen(QWidget):
                     food_amount,
                     start_temp,
                     start_is_day,
+                    region_key,
                 )
 
-                # Set region background
-                self.map_widget.set_region(region)
+                # Set region background (still use display name for UI)
+                self.map_widget.set_region(region_display)
 
                 # Initialize population data for live graph
                 self.population_data = {}
@@ -1550,16 +1626,34 @@ class SimulationScreen(QWidget):
         """Step simulation und update display."""
         if self.sim_model and self.is_running:
             data = self.sim_model.step()
+            stats = data.get("stats", {})
             self.map_widget.draw_groups(
                 data["groups"],
                 data.get("loners", []),
                 data.get("food_sources", []),
                 data.get("transition_progress", 1.0),
+                data.get("disaster_grid", None),
             )
             self.time_step = data["time"]
 
             # Track simulation time (each step = 0.1 seconds)
             self.simulation_time = self.time_step * 0.1
+
+            # --- Live graph and log update ---
+            # Always use backend's population_history for up-to-date graph
+            population_history = stats.get("population_history", {})
+            if population_history:
+                self.population_data = {
+                    k: list(v) for k, v in population_history.items()
+                }
+            self.update_live_graph()
+
+            # Update log text from backend logs
+            logs = data.get("logs", [])
+            if logs:
+                self.log_text = "\n".join(logs)
+                if self.log_dialog is not None and self.log_dialog.isVisible():
+                    self.log_dialog.update_log(self.log_text)
 
             if update_ui:
                 # Update timer display
@@ -1572,7 +1666,7 @@ class SimulationScreen(QWidget):
                 self.day_night_label.setText("☀️" if is_day else "🌙")
 
                 # Update live temperature display
-                current_temp = self.sim_model.stats.get("temperature", 0)
+                current_temp = stats.get("temperature", 0)
                 temp_color = (
                     "#88ccff"
                     if current_temp < 0
@@ -1584,7 +1678,7 @@ class SimulationScreen(QWidget):
                 )
 
                 # Update live day/night display
-                is_day = self.sim_model.stats.get("is_day", True)
+                is_day = stats.get("is_day", True)
                 if is_day:
                     self.live_day_night_label.setText("☀️ Tag")
                     self.live_day_night_label.setStyleSheet(
@@ -1596,52 +1690,56 @@ class SimulationScreen(QWidget):
                         "color: #8888ff; padding: 0 10px;"
                     )
 
-                # Collect population data for live graph (every step for smoothness)
-                for group in data["groups"]:
-                    species_name = group["name"]
-                    # Calculate total population for this species
-                    clan_pop = sum(c["population"] for c in group["clans"])
-                    loner_pop = sum(
-                        1
-                        for l in data.get("loners", [])
-                        if l["species"] == species_name
+                # --- Disaster visual update ---
+                # Use the most recent running disaster from stats if available
+                active_disaster = None
+                disasters = stats.get("disasters", [])
+                if disasters:
+                    for d in reversed(disasters):
+                        if d.get("end") is None:
+                            active_disaster = d.get("name")
+                            break
+                if active_disaster:
+                    self.disaster_label.setText(
+                        f"⚠️ Naturkatastrophe: {active_disaster}"
                     )
-                    total_pop = clan_pop + loner_pop
+                    # Start flashing animation if not already running
+                    if self.animation_timer is None:
+                        from PyQt6.QtCore import QTimer
 
-                    # Initialize list if needed
-                    if species_name not in self.population_data:
-                        self.population_data[species_name] = []
+                        self.animation_timer = QTimer(self)
+                        self.animation_timer.timeout.connect(self.flash_disaster_label)
+                        self.animation_timer.start(400)
+                else:
+                    self.disaster_label.setText("")
+                    # Stop flashing animation if running
+                    if self.animation_timer is not None:
+                        self.animation_timer.stop()
+                        self.animation_timer = None
+                        # Reset to default style
+                        self.disaster_label.setStyleSheet(
+                            "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
+                        )
 
-                    self.population_data[species_name].append(total_pop)
-
-                # Update live graph (always shown during simulation)
-                self.update_live_graph()
-
-                # Update logs (every step for smoothness)
-                logs = data.get("logs", [])
-                if logs:
-                    self.log_text = "\n".join(logs[-50:])
-                    # Update popup if it's open
-                    if self.log_dialog and self.log_dialog.isVisible():
-                        self.log_dialog.update_log(self.log_text)
-
-            # Check if 5 minutes reached
-            if self.simulation_time >= self.max_simulation_time:
-                self.show_final_stats()
+            # --- Stop simulation if all arach are dead ---
+            # Check if all populations are zero
+            if all(count == 0 for count in stats.get("species_counts", {}).values()):
                 self.stop_simulation()
-                return
 
-            # Check if everyone has died
-            total_population = sum(
-                sum(c["population"] for c in g["clans"]) for g in data["groups"]
+    def flash_disaster_label(self):
+        # Alternate background color for flashing effect
+        if not self.disaster_label.text():
+            return
+        if getattr(self, "disaster_flash_on", False):
+            self.disaster_label.setStyleSheet(
+                "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
             )
-            total_loners = len(data.get("loners", []))
-            if total_population == 0 and total_loners == 0:
-                self.log_text += "\n⚠️ Alle Arachfara sind gestorben!"
-                self.show_final_stats()
-                self.stop_simulation()
-                return
-        # No unconditional stats popup here. Only show stats when simulation ends.
+        else:
+            self.disaster_label.setStyleSheet(
+                "color: #fff; background: #ff4444; border: 2px solid #fff; padding: 8px; margin-bottom: 8px;"
+            )
+
+        self.disaster_flash_on = not getattr(self, "disaster_flash_on", False)
 
     def open_log_dialog(self):
         """Open log popup dialog."""
@@ -1689,7 +1787,7 @@ class SimulationScreen(QWidget):
 
             if layout is not None:
                 # Add the live graph widget
-                layout.insertWidget(0, self.live_graph_widget)
+                layout.addWidget(self.live_graph_widget)
 
                 # Create and add the legend label if it doesn't exist
                 if (
@@ -1728,7 +1826,8 @@ class SimulationScreen(QWidget):
             label.setStyleSheet("color: #ffffff; font-size: 12px;")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout = self.graph_container.layout()
-            layout.insertWidget(0, label)
+            if layout is not None:
+                layout.addWidget(label)
 
     def update_graph_legend(self):
         """Update the text legend below the graph."""
