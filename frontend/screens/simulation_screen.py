@@ -71,8 +71,8 @@ class CustomCheckBox(QCheckBox):
         )
         self.setMinimumHeight(28)
 
-    def paintEvent(self, event):
-        super().paintEvent(event)
+    def paintEvent(self, a0):
+        super().paintEvent(a0)
         from PyQt6.QtGui import QPainter
 
         painter = QPainter(self)
@@ -330,9 +330,12 @@ class LogDialog(QDialog):
 
     def update_log(self, log_text):
         """Update the log text in the dialog."""
-        # Check if user is at the bottom before updating
         scrollbar = self.text_edit.verticalScrollBar()
-        was_at_bottom = scrollbar.value() >= scrollbar.maximum() - 10  # 10px threshold
+        was_at_bottom = False
+        if scrollbar is not None:
+            was_at_bottom = (
+                scrollbar.value() >= scrollbar.maximum() - 10
+            )  # 10px threshold
 
         self.text_edit.setHtml(self.colorize_logs(log_text))
 
@@ -340,7 +343,7 @@ class LogDialog(QDialog):
         self.text_edit.ensureCursorVisible()
 
         # Only auto-scroll if user was already at the bottom
-        if was_at_bottom:
+        if scrollbar is not None and was_at_bottom:
             scrollbar.setValue(scrollbar.maximum())
 
 
@@ -386,16 +389,10 @@ class SpeciesPanel(QWidget):
             # Checkbox for enable/disable with custom icons
             unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
             checked_path = str(get_static_path("ui/Checkbox_checked.png"))
-            try:
-                from frontend.main import debug_log
-
-                debug_log(
-                    f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
-                )
-            except:
-                print(
-                    f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
-                )
+            # Debug logging removed: debug_log does not exist
+            print(
+                f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
+            )
 
             checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
             checkbox_font = QFont("Minecraft", 12)
@@ -658,6 +655,12 @@ class EnvironmentPanel(QWidget):
         layout.addWidget(self.food_label_title)
 
         # Anzahl Nahrungsplätze
+        # Food Level Label (missing initialization fix)
+        self.food_label = QLabel("1/10")
+        food_label_font = QFont("Minecraft", 11)
+        food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.food_label.setFont(food_label_font)
+        layout.addWidget(self.food_label)
         self.food_places_label = QLabel("Nahrungsplätze: 5")
         food_places_font = QFont("Minecraft", 11)
         food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -991,6 +994,28 @@ class EnvironmentPanel(QWidget):
 
 
 class SimulationScreen(QWidget):
+    def show_final_stats(self):
+        """Show final statistics dialog and save stats for later viewing."""
+        if self.sim_model:
+            stats = self.sim_model.get_final_stats()
+            self.last_stats = stats  # Save stats for later
+            dialog = StatsDialog(stats, self)
+            dialog.exec()
+
+    def show_previous_stats(self):
+        """Show stats from the previous simulation if available."""
+        if hasattr(self, "last_stats") and self.last_stats:
+            dialog = StatsDialog(self.last_stats, self)
+            dialog.exec()
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Keine Statistik",
+                "Es sind keine Statistiken der vorherigen Simulation verfügbar.",
+            )
+
     """Main simulation screen."""
 
     def __init__(self, go_to_start_callback, color_preset=None):
@@ -998,9 +1023,17 @@ class SimulationScreen(QWidget):
         self.go_to_start = go_to_start_callback
         self.color_preset = color_preset
         self.is_running = False
+        # Add missing speed value labels
+        self.loner_speed_value_label = QLabel("1.0x")
+        self.clan_speed_value_label = QLabel("1.0x")
+        speed_value_font = QFont("Minecraft", 10)
+        speed_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.loner_speed_value_label.setFont(speed_value_font)
+        self.clan_speed_value_label.setFont(speed_value_font)
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
+        self.last_stats = None  # Holds stats from the previous simulation
         self.log_dialog = None
         self.time_step = 0
         self.log_expanded = False  # Track log expansion state
@@ -1012,25 +1045,16 @@ class SimulationScreen(QWidget):
 
         # Load species config
         json_path = get_static_path("data/species.json")
-        try:
-            from frontend.main import debug_log
-
-            debug_log(f"species.json path: {json_path}")
-            debug_log(f"species.json exists: {json_path.exists()}")
-        except:
-            print(f"DEBUG: species.json path: {json_path}")
-            print(f"DEBUG: species.json exists: {json_path.exists()}")
+        # Debug logging removed: debug_log does not exist
+        print(f"DEBUG: species.json path: {json_path}")
+        print(f"DEBUG: species.json exists: {json_path.exists()}")
         try:
             with open(json_path, "r") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
-            try:
-                from frontend.main import debug_log
-
-                debug_log(f"ERROR: Could not load species.json from {json_path}")
-            except:
-                print(f"Warning: Could not load species.json from {json_path}")
+            # Debug logging removed: debug_log does not exist
+            print(f"Warning: Could not load species.json from {json_path}")
 
         # Don't initialize simulation model here - will be created on first start
         # self.sim_model is already set to None above
@@ -1342,6 +1366,7 @@ class SimulationScreen(QWidget):
             try:
                 self.species_panel.update_theme(preset)
             except Exception:
+                # Ignore theme update errors silently
                 pass
 
         # Environment panel updates itself
@@ -1451,6 +1476,8 @@ class SimulationScreen(QWidget):
 
     def stop_simulation(self):
         """Stop and reset simulation."""
+        show_stats = self.is_running and self.sim_model
+
         self.environment_panel.set_controls_enabled(True)
 
         if self.update_timer:
@@ -1462,6 +1489,9 @@ class SimulationScreen(QWidget):
         self.btn_play_pause.setStyleSheet("")
         self.time_step = 0
         self.simulation_time = 0
+
+        # Save model reference for stats before clearing
+        sim_model_for_stats = self.sim_model
 
         # Reset Model to None so it will be recreated on next start
         self.sim_model = None
@@ -1477,6 +1507,13 @@ class SimulationScreen(QWidget):
         self.panel_stack.setVisible(True)
         self.stats_log_widget.setVisible(True)
         self.graph_container.setVisible(False)
+
+        # Show stats popup after everything is stopped/reset
+        if show_stats and sim_model_for_stats:
+            stats = sim_model_for_stats.get_final_stats()
+            self.last_stats = stats
+            dialog = StatsDialog(stats, self)
+            dialog.exec()
 
     def set_speed(self, speed):
         """Set simulation speed multiplier."""
@@ -1604,10 +1641,7 @@ class SimulationScreen(QWidget):
                 self.show_final_stats()
                 self.stop_simulation()
                 return
-        if self.sim_model:
-            stats = self.sim_model.get_final_stats()
-            dialog = StatsDialog(stats, self)
-            dialog.exec()
+        # No unconditional stats popup here. Only show stats when simulation ends.
 
     def open_log_dialog(self):
         """Open log popup dialog."""
@@ -1619,16 +1653,8 @@ class SimulationScreen(QWidget):
             self.log_dialog.activateWindow()
 
     def on_stats(self):
-        """Show statistics (placeholder)."""
-        # Add stats to logs
-        stats_info = f"\n[STATS] Zeit: {self.time_step}"
-        if self.log_text:
-            self.log_text += stats_info
-        else:
-            self.log_text = stats_info
-        # Update popup if open
-        if self.log_dialog and self.log_dialog.isVisible():
-            self.log_dialog.update_log(self.log_text)
+        """Show previous simulation statistics if available."""
+        self.show_previous_stats()
 
     def initialize_live_graph(self):
         """Initialize the live graph widget."""
@@ -1656,38 +1682,40 @@ class SimulationScreen(QWidget):
                 spine.set_color("#666666")
 
             # Ensure graph_container has a layout
+
             if self.graph_container.layout() is None:
                 self.graph_container.setLayout(QVBoxLayout())
             layout = self.graph_container.layout()
 
-            # Add the live graph widget
-            layout.insertWidget(0, self.live_graph_widget)
+            if layout is not None:
+                # Add the live graph widget
+                layout.insertWidget(0, self.live_graph_widget)
 
-            # Create and add the legend label if it doesn't exist
-            if (
-                not hasattr(self, "graph_legend_label")
-                or self.graph_legend_label is None
-            ):
-                from PyQt6.QtWidgets import QLabel
+                # Create and add the legend label if it doesn't exist
+                if (
+                    not hasattr(self, "graph_legend_label")
+                    or self.graph_legend_label is None
+                ):
+                    from PyQt6.QtWidgets import QLabel
 
-                self.graph_legend_label = QLabel()
-                self.graph_legend_label.setStyleSheet(
-                    "color: #ffffff; font-size: 11px; padding: 4px 0 0 0;"
-                )
-                self.graph_legend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout.addWidget(self.graph_legend_label)
+                    self.graph_legend_label = QLabel()
+                    self.graph_legend_label.setStyleSheet(
+                        "color: #ffffff; font-size: 11px; padding: 4px 0 0 0;"
+                    )
+                    self.graph_legend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    layout.addWidget(self.graph_legend_label)
 
-            # Create and add the log display widget if it doesn't exist
-            if not hasattr(self, "log_display") or self.log_display is None:
-                from PyQt6.QtWidgets import QTextEdit
+                # Create and add the log display widget if it doesn't exist
+                if not hasattr(self, "log_display") or self.log_display is None:
+                    from PyQt6.QtWidgets import QTextEdit
 
-                self.log_display = QTextEdit()
-                self.log_display.setReadOnly(True)
-                self.log_display.setStyleSheet(
-                    "background-color: #222; color: #fff; font-size: 11px; margin-top: 6px; border: none;"
-                )
-                self.log_display.setMinimumHeight(80)
-                layout.addWidget(self.log_display)
+                    self.log_display = QTextEdit()
+                    self.log_display.setReadOnly(True)
+                    self.log_display.setStyleSheet(
+                        "background-color: #222; color: #fff; font-size: 11px; margin-top: 6px; border: none;"
+                    )
+                    self.log_display.setMinimumHeight(80)
+                    layout.addWidget(self.log_display)
 
             # Update graph immediately
             self.update_live_graph()
