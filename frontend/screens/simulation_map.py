@@ -97,8 +97,10 @@ class SimulationMapWidget(QGraphicsView):
         loners_data=None,
         food_sources_data=None,
         transition_progress=1.0,
+        disaster_grid=None,
+        cell_size=40,
     ):
-        """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
+        """Zeichne Clans, Loners, Nahrungsplätze und Disaster-Overlay - DIREKTES Rendering."""
 
         # Remove all items except the background
         for item in self.scene.items():
@@ -119,6 +121,28 @@ class SimulationMapWidget(QGraphicsView):
         # Scale from logical coordinates (1200x600) to actual display size
         scale_x = width / 1200.0
         scale_y = height / 600.0
+
+        # Draw areal disaster grid overlay if present
+        if disaster_grid:
+            rows = len(disaster_grid)
+            cols = len(disaster_grid[0]) if rows > 0 else 0
+            for gy in range(rows):
+                for gx in range(cols):
+                    if disaster_grid[gy][gx]:
+                        # Draw a semi-transparent red rectangle for affected cell
+                        x = gx * cell_size * scale_x
+                        y = gy * cell_size * scale_y
+                        w = cell_size * scale_x
+                        h = cell_size * scale_y
+                        rect = self.scene.addRect(
+                            x,
+                            y,
+                            w,
+                            h,
+                            pen=QPen(Qt.PenStyle.NoPen),
+                            brush=QBrush(QColor(255, 0, 0, 80)),
+                        )
+                        rect.setZValue(5)
 
         # Zeichne Nahrungsplätze (grüne Kreise)
         if food_sources_data:

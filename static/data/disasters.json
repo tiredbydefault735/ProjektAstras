@@ -2,7 +2,7 @@
     "Blizzard": {
         "name": "Schneesturm",
         "regions": ["Snowy_Abyss"],
-        "probability": 0.12,
+        "probability": 0.02,
         "duration": 5,
         "effects": {
             "temperature_modifier": -15,
@@ -19,7 +19,7 @@
     "Avalanche": {
         "name": "Lawine",
         "regions": ["Snowy_Abyss"],
-        "probability": 0.03,
+        "probability": 0.01,
         "duration": 1,
         "effects": {
             "population_damage": 0.15,
@@ -30,7 +30,7 @@
     "Sandstorm": {
         "name": "Sandsturm",
         "regions": ["Wasteland"],
-        "probability": 0.15,
+        "probability": 0.025,
         "duration": 4,
         "effects": {
             "temperature_modifier": 10,
@@ -42,7 +42,7 @@
     "Drought": {
         "name": "Dürre",
         "regions": ["Wasteland"],
-        "probability": 0.08,
+        "probability": 0.015,
         "duration": 10,
         "effects": {
             "food_growth_rate": 0.2,
@@ -53,7 +53,7 @@
     "Heatwave": {
         "name": "Hitzewelle",
         "regions": ["Wasteland"],
-        "probability": 0.1,
+        "probability": 0.02,
         "duration": 6,
         "effects": {
             "temperature_modifier": 15,
@@ -64,7 +64,7 @@
     "Wildfire": {
         "name": "Waldbrand",
         "regions": ["Evergreen_Forest"],
-        "probability": 0.06,
+        "probability": 0.01,
         "duration": 7,
         "effects": {
             "population_damage": 0.2,
@@ -76,7 +76,7 @@
     "Flood": {
         "name": "Überschwemmung",
         "regions": ["Evergreen_Forest"],
-        "probability": 0.09,
+        "probability": 0.01,
         "duration": 5,
         "effects": {
             "movement_speed": 0.4,
@@ -87,7 +87,7 @@
     "Storm": {
         "name": "Sturm",
         "regions": ["Evergreen_Forest"],
-        "probability": 0.13,
+        "probability": 0.01,
         "duration": 3,
         "effects": {
             "movement_speed": 0.7,
@@ -98,7 +98,7 @@
     "Cave_Collapse": {
         "name": "Höhleneinsturz",
         "regions": ["Corrupted_Caves"],
-        "probability": 0.07,
+        "probability": 0.01,
         "duration": 1,
         "effects": {
             "population_damage": 0.25,
@@ -110,7 +110,7 @@
     "Toxic_Gas": {
         "name": "Giftige Dämpfe",
         "regions": ["Corrupted_Caves"],
-        "probability": 0.11,
+        "probability": 0.02,
         "duration": 8,
         "effects": {
             "health_drain": 0.08,
@@ -122,7 +122,7 @@
     "Earthquake": {
         "name": "Erdbeben",
         "regions": ["Corrupted_Caves", "Wasteland"],
-        "probability": 0.04,
+        "probability": 0.01,
         "duration": 1,
         "effects": {
             "population_damage": 0.18,
@@ -133,7 +133,7 @@
     "Corruption_Surge": {
         "name": "Korruptionswelle",
         "regions": ["Corrupted_Caves"],
-        "probability": 0.09,
+        "probability": 0.015,
         "duration": 6,
         "effects": {
             "corruption_spread": 0.5,
