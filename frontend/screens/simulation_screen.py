@@ -1387,6 +1387,49 @@ class SimulationScreen(QWidget):
         live_info_layout.addStretch()
         control_layout.addLayout(live_info_layout)
 
+        # Disaster severity slider (0-100 -> 0.0-1.0)
+        disaster_layout = QHBoxLayout()
+        disaster_layout.setSpacing(5)
+
+        disaster_label = QLabel("Disaster Severity:")
+        disaster_label_font = QFont("Minecraft", 11)
+        disaster_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        disaster_label.setFont(disaster_label_font)
+        disaster_label.setFixedWidth(120)
+        disaster_layout.addWidget(disaster_label)
+
+        self.disaster_severity_value_label = QLabel("50%")
+        sev_value_font = QFont("Minecraft", 11)
+        sev_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.disaster_severity_value_label.setFont(sev_value_font)
+        self.disaster_severity_value_label.setFixedWidth(50)
+        self.disaster_severity_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.disaster_severity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.disaster_severity_slider.setMinimum(0)
+        self.disaster_severity_slider.setMaximum(100)
+        self.disaster_severity_slider.setValue(50)
+        self.disaster_severity_slider.valueChanged.connect(
+            lambda v: self.on_disaster_severity_changed(v)
+        )
+
+        disaster_layout.addWidget(self.disaster_severity_slider)
+        disaster_layout.addWidget(self.disaster_severity_value_label)
+        control_layout.addLayout(disaster_layout)
+
+        # Dev: Force Disaster button for testing
+        force_layout = QHBoxLayout()
+        force_layout.setSpacing(5)
+
+        self.btn_force_disaster = QPushButton("Force Disaster")
+        btn_force_font = QFont("Minecraft", 11)
+        btn_force_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_force_disaster.setFont(btn_force_font)
+        self.btn_force_disaster.setFixedHeight(30)
+        self.btn_force_disaster.clicked.connect(self.on_force_disaster)
+        force_layout.addWidget(self.btn_force_disaster)
+        control_layout.addLayout(force_layout)
+
         # Add control section to right column
         right_layout.addWidget(control_section)
 
@@ -1470,6 +1513,40 @@ class SimulationScreen(QWidget):
             """
             self.btn_species_tab.setStyleSheet(tab_button_style)
             self.btn_region_tab.setStyleSheet(tab_button_style)
+        # Style disaster severity slider if present
+        if hasattr(self, "disaster_severity_slider") and hasattr(self, "color_preset"):
+            accent = preset.get_color("accent_primary")
+            bg_tertiary = preset.get_color("bg_tertiary")
+            slider_style = f"""
+                QSlider::groove:horizontal {{
+                    border: none;
+                    height: 6px;
+                    background: {bg_tertiary};
+                }}
+                QSlider::handle:horizontal {{
+                    background: {accent};
+                    border: none;
+                    width: 16px;
+                    height: 16px;
+                    margin: -5px 0;
+                }}
+            """
+            try:
+                self.disaster_severity_slider.setStyleSheet(slider_style)
+                self.disaster_severity_value_label.setStyleSheet(
+                    f"color: {preset.get_color('text_primary')};"
+                )
+            except Exception:
+                pass
+
+        # Style force disaster button if present
+        if hasattr(self, "btn_force_disaster"):
+            try:
+                self.btn_force_disaster.setStyleSheet(
+                    f"background-color: {preset.get_color('bg_tertiary')}; color: {preset.get_color('text_primary')};"
+                )
+            except Exception:
+                pass
 
     def toggle_simulation(self):
         """Start/resume simulation."""
@@ -1500,6 +1577,14 @@ class SimulationScreen(QWidget):
                     start_is_day,
                     region_key,
                 )
+
+                # Set initial disaster severity from UI slider (if present)
+                try:
+                    init_sev = getattr(self, "disaster_severity_slider", None)
+                    if init_sev and self.sim_model:
+                        self.sim_model.disaster_severity = init_sev.value() / 100.0
+                except Exception:
+                    pass
 
                 # Set region background (still use display name for UI)
                 self.map_widget.set_region(region_display)
@@ -1616,6 +1701,97 @@ class SimulationScreen(QWidget):
         if self.sim_model:
             self.sim_model.set_clan_speed(multiplier)
 
+    def on_disaster_severity_changed(self, value):
+        """Handle disaster severity slider changes and update backend."""
+        pct = int(value)
+        self.disaster_severity_value_label.setText(f"{pct}%")
+        severity = pct / 100.0
+        if self.sim_model:
+            # Back-end expects disaster_severity (0.0 - 1.0)
+            try:
+                self.sim_model.disaster_severity = severity
+            except Exception:
+                pass
+
+    def on_force_disaster(self):
+        """Developer helper: force-start an areal disaster in the simulation center."""
+        if not self.sim_model:
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self, "Info", "Start the simulation first to force a disaster."
+            )
+            return
+
+        try:
+            mx = getattr(self.sim_model, "map_width", 1200) / 2
+            my = getattr(self.sim_model, "map_height", 600) / 2
+            # Use simulation API to start an areal disaster at map center
+            try:
+                self.sim_model.start_areal_disaster(mx, my, sigma=2)
+            except Exception:
+                # Best-effort: if method missing, try to set disaster grid directly
+                try:
+                    self.sim_model.init_grid()
+                    self.sim_model.areal_disaster_origin = (
+                        int(mx // self.sim_model.cell_size),
+                        int(my // self.sim_model.cell_size),
+                    )
+                    self.sim_model.update_areal_disaster_grid()
+                except Exception:
+                    pass
+
+            # Also register an active areal disaster with the DisasterManager so it ends properly
+            try:
+                dm = getattr(self.sim_model, "disaster_manager", None)
+                if dm is not None:
+                    # Find a matching areal disaster definition
+                    chosen = None
+                    for name, d in getattr(dm, "disasters", {}).items():
+                        if d.get("type") == "areal":
+                            # Optional: ensure region matches
+                            regions = d.get("regions", [])
+                            if not regions or getattr(dm, "region", None) in regions:
+                                chosen = (name, d)
+                                break
+                    if chosen is None:
+                        # Fallback synthetic disaster
+                        chosen = (
+                            "Forced",
+                            {
+                                "name": "Forced Disaster",
+                                "type": "areal",
+                                "duration": 300,
+                                "effects": {"population_damage": 5},
+                            },
+                        )
+                    dm.active_disaster = chosen
+                    dm.disaster_timer = chosen[1].get("duration", 300)
+                    dm.set_areal_area((mx, my), 40)
+                    # Register in simulation model's current event for UI/stats
+                    try:
+                        self.sim_model.current_disaster_event = {
+                            "name": chosen[1].get("name", chosen[0]),
+                            "start": self.sim_model.time,
+                            "end": None,
+                        }
+                        self.sim_model.add_log(
+                            f"⚠️ Dev: {chosen[1].get('name', chosen[0])} forced at center."
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                self.sim_model.add_log("Dev: Forced areal disaster started.")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                self.sim_model.add_log(f"Dev: Force disaster failed: {e}")
+            except Exception:
+                pass
+
     def update_simulation_with_speed(self):
         """Update simulation multiple times based on speed setting."""
         for i in range(self.simulation_speed):
@@ -1632,7 +1808,7 @@ class SimulationScreen(QWidget):
                 data.get("loners", []),
                 data.get("food_sources", []),
                 data.get("transition_progress", 1.0),
-                data.get("disaster_grid", None),
+                data.get("disaster_area", None),
             )
             self.time_step = data["time"]
 
@@ -1700,8 +1876,22 @@ class SimulationScreen(QWidget):
                             active_disaster = d.get("name")
                             break
                 if active_disaster:
+                    # Append remaining duration (approx seconds) from DisasterManager if available
+                    remaining_text = ""
+                    try:
+                        dm = getattr(self.sim_model, "disaster_manager", None)
+                        if (
+                            dm is not None
+                            and getattr(dm, "disaster_timer", None) is not None
+                        ):
+                            # Each simulation step is ~0.1s
+                            secs = int(dm.disaster_timer * 0.1)
+                            remaining_text = f" ({secs}s)"
+                    except Exception:
+                        remaining_text = ""
+
                     self.disaster_label.setText(
-                        f"⚠️ Naturkatastrophe: {active_disaster}"
+                        f"⚠️ Naturkatastrophe: {active_disaster}{remaining_text}"
                     )
                     # Start flashing animation if not already running
                     if self.animation_timer is None:
