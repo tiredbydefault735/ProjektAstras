@@ -64,6 +64,7 @@
     "Wildfire": {
         "name": "Waldbrand",
         "regions": ["Evergreen_Forest"],
+        "type": "areal",
         "probability": 0.01,
         "duration": 7,
         "effects": {

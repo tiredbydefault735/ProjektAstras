@@ -234,6 +234,20 @@ class Clan:
 class SpeciesGroup:
     """Verwaltet alle Clans einer Spezies."""
 
+    def kill_in_disaster_area(self, center_x, center_y, radius):
+        """Kill all clans and loners within the disaster area (circle)."""
+        # Remove clans in area
+        for clan in self.clans[:]:
+            dist = math.hypot(clan.x - center_x, clan.y - center_y)
+            if dist <= radius:
+                clan.population = 0  # Mark for removal
+        # If you have loners, repeat for loners (add self.loners if present)
+        if hasattr(self, "loners"):
+            for loner in self.loners[:]:
+                dist = math.hypot(loner.x - center_x, loner.y - center_y)
+                if dist <= radius:
+                    loner.hp = 0  # Mark for removal
+
     def __init__(
         self,
         env,
@@ -387,6 +401,17 @@ class SpeciesGroup:
 
 
 class SimulationModel:
+    def add_log(self, message):
+        """Log-Nachricht hinzufügen."""
+        log_entry = f"[t={getattr(self, 'time', 0)}] {message}"
+        if not hasattr(self, "logs"):
+            self.logs = []
+        if not hasattr(self, "max_logs"):
+            self.max_logs = 300
+        self.logs.append(log_entry)
+        if len(self.logs) > self.max_logs:
+            self.logs = self.logs[-self.max_logs :]
+
     # --- Areal Disaster Grid System ---
     def init_grid(self, cell_size=40):
         """Initialize a grid for areal disasters. cell_size in pixels."""
@@ -420,40 +445,36 @@ class SimulationModel:
             for x in range(self.grid_width):
                 self.disaster_grid[y][x] = 1 if (x + y) % 2 == 0 else 0
 
-    def is_cell_affected(self, x, y):
-        """Check if a map coordinate (x, y) is in an affected cell."""
-        if not hasattr(self, "disaster_grid") or self.disaster_grid is None:
-            return False
-        gx, gy = int(x // self.cell_size), int(y // self.cell_size)
-        if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
-            return self.disaster_grid[gy][gx] == 1
-        return False
+    def setup(
+        self,
+        species_config,
+        population_overrides,
+        food_places=5,
+        food_amount=50,
+        start_temperature=None,
+        start_is_day=True,
+        region_name=None,
+    ):
+        """Initialisiere Simulation."""
 
-    """Haupt-Simulation."""
-
-    def __init__(self):
+        # Re-initialize SimPy environment for each setup
         self.env = simpy.Environment()
+        # Ensure time exists before any logging
+        self.time = 0
         self.groups = []
         self.loners = []
-        self.food_sources = []
+
+        # Ensure map dimensions are always set before use
         self.map_width = 1200
         self.map_height = 600
-        self.logs = []
-        self.max_logs = 300  # Increased from 50 for longer history
-        self.time = 0
 
-        # Speed multipliers (1.0 = normal speed)
-        self.loner_speed_multiplier = 1.0
+        # Movement multipliers
         self.clan_speed_multiplier = 1.0
+        self.loner_speed_multiplier = 1.0
+        # Global disaster severity multiplier (0.0 - 1.0). <1 reduces damage.
+        self.disaster_severity = 0.5
 
-        # Disaster system
-        from backend.disasters import DisasterManager
-
-        self.disaster_manager = None  # Will be set in setup()
-        self.disaster_events = []  # Track disaster events (start, end, name, time)
-        self.current_disaster_event = None
-
-        # Statistics tracking
+        # Re-initialize statistics to ensure temperature is included and avoid AttributeError
         self.stats = {
             "species_counts": {},  # Initial counts per species
             "deaths": {
@@ -467,26 +488,9 @@ class SimulationModel:
             "disasters": [],  # List of disaster events for stats dialog
         }
 
-    def add_log(self, message):
-        """Log-Nachricht hinzufügen."""
-        log_entry = f"[t={self.time}] {message}"
-        self.logs.append(log_entry)
-        if len(self.logs) > self.max_logs:
-            self.logs = self.logs[-self.max_logs :]
-
-    def setup(
-        self,
-        species_config,
-        population_overrides,
-        food_places=5,
-        food_amount=50,
-        start_temperature=None,
-        start_is_day=True,
-        region_name=None,
-    ):
-        """Initialisiere Simulation."""
-        self.groups = []
-        self.loners = []
+        # Disaster tracking
+        self.disaster_events = []
+        self.current_disaster_event = None
 
         # Temperatur-System initialisieren
         if start_temperature is not None:
@@ -508,9 +512,6 @@ class SimulationModel:
         self.in_transition = False
         self.transition_timer = 0
         self.transition_to_day = True  # Zielzustand des Übergangs
-
-        # Re-initialize statistics to ensure temperature is included
-        self.stats["deaths"]["temperature"] = {}
 
         # Farben für Spezies
         color_map = {
@@ -637,6 +638,7 @@ class SimulationModel:
         # --- Natural Disaster Logic ---
         active_disaster = None
         disaster_effects = None
+        areal_area = None
         if self.disaster_manager:
             # Try to trigger a new disaster if none is active
             if not self.disaster_manager.get_active_disaster():
@@ -654,8 +656,19 @@ class SimulationModel:
                     }
                     active_disaster = d
                     disaster_effects = d.get("effects", {})
+                    # If areal, set initial area (center, radius)
+                    if d.get("type") == "areal":
+                        x = random.uniform(0, self.map_width)
+                        y = random.uniform(0, self.map_height)
+                        initial_radius = 40
+                        self.disaster_manager.set_areal_area((x, y), initial_radius)
+                        areal_area = {
+                            "center_x": x,
+                            "center_y": y,
+                            "radius": initial_radius,
+                        }
             else:
-                # Advance disaster timer
+                # Advance disaster timer and spread areal disaster
                 self.disaster_manager.step()
                 # If disaster just ended, log it and track end
                 if (
@@ -673,72 +686,76 @@ class SimulationModel:
                         _, d = ad
                         active_disaster = d
                         disaster_effects = d.get("effects", {})
+                        if d.get("type") == "areal":
+                            area = self.disaster_manager.get_areal_area()
+                            if area:
+                                x, y = area["center"]
+                                r = area["radius"]
+                                areal_area = {"center_x": x, "center_y": y, "radius": r}
 
         # Apply disaster effects if any
         if disaster_effects:
-            # --- Areal disaster grid for Wildfire (Waldbrand) ---
-            if active_disaster and active_disaster.get("name") == "Waldbrand":
-                # If not already started, pick a random origin and start grid
-                if (
-                    not hasattr(self, "disaster_grid")
-                    or self.disaster_grid is None
-                    or self.areal_disaster_origin is None
-                ):
-                    # Pick a random origin in map coordinates
-                    x = random.uniform(0, self.map_width)
-                    y = random.uniform(0, self.map_height)
-                    self.init_grid(cell_size=40)
-                    self.start_areal_disaster(x, y, sigma=2)
-                else:
-                    # Optionally, animate spread (not implemented here)
-                    self.update_areal_disaster_grid()
+            # --- Areal disaster logic ---
+            if (
+                active_disaster
+                and active_disaster.get("type") == "areal"
+                and areal_area
+            ):
+                cx = areal_area["center_x"]
+                cy = areal_area["center_y"]
+                radius = areal_area["radius"]
             else:
-                # For non-areal disasters, provide a blank grid (all 0s) so overlay is only visible for areal disasters
-                self.init_grid(cell_size=40)
-                for y in range(self.grid_height):
-                    for x in range(self.grid_width):
-                        self.disaster_grid[y][x] = 0
-                self.areal_disaster_origin = None
+                cx = cy = radius = None
 
-            # Population damage (only in affected grid cells for areal disasters)
+            # Population damage (5hp/sec for anyone in area, none outside)
             pop_damage = disaster_effects.get("population_damage")
             if pop_damage:
-                # Reduce lethality: halve the effect for all disasters, cap at 5% per step
-                pop_damage = min(0.05, pop_damage * 0.5)
+                # Determine damage per step (support numeric values or default to 5 HP/sec)
+                steps_per_sec = 10
+                base_hp_per_sec = (
+                    pop_damage if isinstance(pop_damage, (int, float)) else 5.0
+                )
+                hp_loss = (
+                    base_hp_per_sec * getattr(self, "disaster_severity", 0.5)
+                ) / steps_per_sec
+
                 for group in self.groups:
                     for clan in group.clans:
                         affected = True
-                        # For Wildfire, only affect if in grid
                         if (
                             active_disaster
-                            and active_disaster.get("name") == "Waldbrand"
+                            and active_disaster.get("type") == "areal"
+                            and areal_area
                         ):
-                            affected = self.is_cell_affected(clan.x, clan.y)
+                            dist = math.hypot(clan.x - cx, clan.y - cy)
+                            affected = dist <= radius
                         if clan.population > 0 and affected:
-                            deaths = max(1, int(clan.population * pop_damage))
-                            old_pop = clan.population
-                            clan.population -= deaths
-                            if clan.population < 0:
-                                clan.population = 0
-                            if old_pop > clan.population:
-                                self.stats["deaths"].setdefault(
-                                    "disaster", {}
-                                ).setdefault(group.name, 0)
-                                self.stats["deaths"]["disaster"][group.name] += (
-                                    old_pop - clan.population
+                            if hasattr(clan, "hp_per_member"):
+                                clan.hp_per_member = max(
+                                    1, clan.hp_per_member - hp_loss
                                 )
-                                self.add_log(
-                                    f"☠️ {group.name} Clan #{clan.clan_id} verliert {old_pop - clan.population} Mitglieder durch Katastrophe!"
-                                )
+
+                # Affect loners in disaster area using same hp_loss (safe even if zero)
+                if (
+                    active_disaster
+                    and active_disaster.get("type") == "areal"
+                    and areal_area
+                ):
+                    for loner in self.loners:
+                        dist = math.hypot(loner.x - cx, loner.y - cy)
+                        if dist <= radius:
+                            # scaled HP loss for loners per step
+                            loner.hp = max(0, loner.hp - hp_loss)
             # Health drain (flat HP loss per step)
             health_drain = disaster_effects.get("health_drain")
             if health_drain:
                 for group in self.groups:
                     for clan in group.clans:
                         if hasattr(clan, "hp_per_member") and clan.population > 0:
-                            clan.hp_per_member = max(
-                                1, clan.hp_per_member - health_drain
+                            scaled = health_drain * getattr(
+                                self, "disaster_severity", 0.5
                             )
+                            clan.hp_per_member = max(1, clan.hp_per_member - scaled)
             # Movement speed multiplier
             move_mult = disaster_effects.get("movement_speed")
             if move_mult:
@@ -751,7 +768,11 @@ class SimulationModel:
             food_destruction = disaster_effects.get("food_destruction")
             if food_destruction:
                 for food in self.food_sources:
-                    destroyed = int(food.amount * food_destruction)
+                    destroyed = int(
+                        food.amount
+                        * food_destruction
+                        * getattr(self, "disaster_severity", 0.5)
+                    )
                     if destroyed > 0:
                         food.amount = max(0, food.amount - destroyed)
                         self.add_log(
@@ -761,7 +782,11 @@ class SimulationModel:
             food_contamination = disaster_effects.get("food_contamination")
             if food_contamination:
                 for food in self.food_sources:
-                    contaminated = int(food.amount * food_contamination)
+                    contaminated = int(
+                        food.amount
+                        * food_contamination
+                        * getattr(self, "disaster_severity", 0.5)
+                    )
                     if contaminated > 0:
                         food.amount = max(0, food.amount - contaminated)
                         self.add_log(
@@ -1040,10 +1065,33 @@ class SimulationModel:
             for f in self.food_sources
         ]
 
-        # Add areal disaster grid for visualization if present
-        disaster_grid = None
-        if hasattr(self, "disaster_grid") and self.disaster_grid:
-            disaster_grid = self.disaster_grid
+        # Add disaster_area dict for visualization if present (spreading area)
+        disaster_area = None
+        # Prefer DisasterManager's areal area (map coordinates) if available
+        if self.disaster_manager:
+            area = self.disaster_manager.get_areal_area()
+            if area:
+                cx, cy = area["center"]
+                r = area["radius"]
+                disaster_area = {"center_x": cx, "center_y": cy, "radius": r}
+        # Fallback: legacy areal_disaster_origin (grid coords) -> convert to map coords
+        if (
+            disaster_area is None
+            and hasattr(self, "areal_disaster_origin")
+            and self.areal_disaster_origin is not None
+        ):
+            spread_speed = 8  # pixels per step
+            elapsed = 0
+            if self.current_disaster_event:
+                elapsed = self.time - self.current_disaster_event.get(
+                    "start", self.time
+                )
+            cell = getattr(self, "cell_size", 40)
+            disaster_area = {
+                "center_x": self.areal_disaster_origin[0] * cell,
+                "center_y": self.areal_disaster_origin[1] * cell,
+                "radius": 40 + spread_speed * max(0, elapsed),
+            }
         return {
             "time": self.time,
             "groups": groups_data,
@@ -1053,7 +1101,7 @@ class SimulationModel:
             "is_day": self.is_day,
             "transition_progress": self._calculate_transition_progress(),
             "stats": self.stats.copy(),
-            "disaster_grid": disaster_grid,
+            "disaster_area": disaster_area,
         }
 
     def _process_food_seeking(self):
@@ -1098,7 +1146,7 @@ class SimulationModel:
                             max_hp,
                         )
                         self.add_log(
-                            f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{clan.hp_per_member - old_hp} HP)"
+                            f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{int(clan.hp_per_member - old_hp)} HP)"
                         )
 
                         # Kein automatisches Wachstum beim Essen mehr
@@ -1140,7 +1188,7 @@ class SimulationModel:
                     old_hp = loner.hp
                     loner.hp = min(loner.hp + (consumed * 5), loner.max_hp)
                     self.add_log(
-                        f"🍽️ {loner.species} Einzelgänger isst {consumed} Food (+{loner.hp - old_hp} HP)"
+                        f"🍽️ {loner.species} Einzelgänger isst {consumed} Food (+{int(loner.hp - old_hp)} HP)"
                     )
 
     def _process_interactions(self):
