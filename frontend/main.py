@@ -15,9 +15,7 @@ from PyQt6.QtGui import QIcon, QFontDatabase
 
 from screens.start_screen import StartScreen
 from screens.simulation_screen import SimulationScreen
-from screens.settings_screen import SettingsScreen
 from styles.stylesheet import get_stylesheet
-from styles.color_presets import DEFAULT_PRESET
 from frontend.i18n import _
 
 
@@ -29,8 +27,8 @@ class ArachfaraApp(QMainWindow):
         self.setWindowTitle(_("PROJEKT ASTRAS"))
         self.setWindowIconText("Astras")
 
-        # Set color preset (default if not provided)
-        self.color_preset = color_preset or DEFAULT_PRESET
+        # Set color preset (optional)
+        self.color_preset = color_preset
 
         # Window size and position
         self.setGeometry(100, 100, 1400, 900)
@@ -42,66 +40,116 @@ class ArachfaraApp(QMainWindow):
         self.stacked = QStackedWidget()
         self.setCentralWidget(self.stacked)
 
-        # Create screens with color preset
-        self.start_screen = StartScreen(
-            self.go_to_simulation, self.open_settings, self.color_preset
-        )
+        # Create screens with optional color preset. Settings screen removed.
+        self.start_screen = StartScreen(self.go_to_simulation, None, self.color_preset)
         self.simulation_screen = SimulationScreen(self.go_to_start, self.color_preset)
-        self.settings_screen = SettingsScreen(
-            self.apply_theme, self.go_to_start, self.color_preset
-        )
+
+        # Register screens with i18n so they're guaranteed to be notified
+        try:
+            from frontend.i18n import register_language_listener
+
+            if hasattr(self.start_screen, "update_language"):
+                register_language_listener(self.start_screen.update_language)
+            if hasattr(self.simulation_screen, "update_language"):
+                register_language_listener(self.simulation_screen.update_language)
+        except Exception:
+            pass
 
         # Add screens to stacked widget
         self.stacked.addWidget(self.start_screen)
         self.stacked.addWidget(self.simulation_screen)
-        self.stacked.addWidget(self.settings_screen)
 
         # Start with start screen
         self.stacked.setCurrentWidget(self.start_screen)
 
+        # Ensure screens refresh their language when the visible screen changes
+        try:
+            self.stacked.currentChanged.connect(self._on_screen_changed)
+        except Exception:
+            pass
+
         # Apply stylesheet with current preset
         self.setStyleSheet(get_stylesheet(self.color_preset))
+        # Register to update window title on language change
+        try:
+            from frontend.i18n import register_language_listener
+
+            def _update_title():
+                try:
+                    # use module-level _ (imported at top) to translate
+                    self.setWindowTitle(_("PROJEKT ASTRAS"))
+                except Exception:
+                    pass
+
+            register_language_listener(_update_title)
+        except Exception:
+            pass
 
     def go_to_simulation(self):
         """Switch to simulation screen."""
         self.stacked.setCurrentWidget(self.simulation_screen)
 
     def open_settings(self):
-        """Open settings screen."""
-        self.stacked.setCurrentWidget(self.settings_screen)
+        """Settings screen removed; noop callback."""
+        return
 
-    def apply_theme(self, preset_name):
-        """Apply a theme by name at runtime and notify screens to refresh inline styles."""
-        from styles.color_presets import get_preset_by_name
-
-        preset = get_preset_by_name(preset_name)
-        if not preset:
-            return
-        self.color_preset = preset
-        # Apply global stylesheet
-        self.setStyleSheet(get_stylesheet(self.color_preset))
-
-        # Notify screens so they can update inline styles
-        try:
-            if hasattr(self.start_screen, "update_theme"):
-                self.start_screen.update_theme(self.color_preset)
-            if hasattr(self.simulation_screen, "update_theme"):
-                self.simulation_screen.update_theme(self.color_preset)
-            if hasattr(self.settings_screen, "update_theme"):
-                self.settings_screen.update_theme(self.color_preset)
-        except Exception:
-            # Avoid crashing on theme application; stylesheet will still be applied globally
-            pass
+    # Theme application and settings UI removed.
 
     def go_to_start(self):
         """Switch to start screen."""
         self.stacked.setCurrentWidget(self.start_screen)
+        # Ensure start button is visible again if it was hidden
+        try:
+            if (
+                hasattr(self.start_screen, "btn_start")
+                and self.start_screen.btn_start is not None
+            ):
+                self.start_screen.btn_start.setVisible(True)
+        except Exception:
+            pass
 
     def closeEvent(self, event):
         """Handle window close."""
         if self.simulation_screen.is_running:
             self.simulation_screen.stop_simulation()
         super().closeEvent(event)
+
+    def _on_screen_changed(self, index: int):
+        """Called when the stacked widget changes visible screen.
+
+        Force a language refresh for the newly shown screen so translations
+        appear immediately without user interaction.
+        """
+        try:
+            widget = self.stacked.widget(index)
+            if widget is None:
+                return
+            if hasattr(widget, "update_language"):
+                try:
+                    widget.update_language()
+                except Exception:
+                    pass
+            # Also refresh known child panels on SimulationScreen for immediate update
+            try:
+                if isinstance(widget, SimulationScreen):
+                    try:
+                        if hasattr(widget, "species_panel") and hasattr(
+                            widget.species_panel, "update_language"
+                        ):
+                            widget.species_panel.update_language()
+                    except Exception:
+                        pass
+                    try:
+                        if hasattr(widget, "environment_panel") and hasattr(
+                            widget.environment_panel, "update_language"
+                        ):
+                            widget.environment_panel.update_language()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 
 def main(preset_name=None):
