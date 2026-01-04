@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
 )
-from PyQt6.QtGui import QPixmap, QFont, QColor, QMovie
+from PyQt6.QtGui import QPixmap, QFont, QColor, QMovie, QIcon
 from PyQt6.QtCore import Qt
 from utils import get_static_path
 from frontend.i18n import _, set_language, get_language
@@ -51,19 +51,45 @@ class StartScreen(QWidget):
         top_row = QHBoxLayout()
         top_row.addStretch()
 
-        # Flag icons (look for static/ui/flag_en.png and flag_de.png)
-        en_flag = get_static_path("ui/flag_en.png")
-        de_flag = get_static_path("ui/flag_de.png")
+        # Flag icons (try common names in static/icons)
+        possible_en = ["icons/flag_en.png", "icons/us_flag.png", "icons/flag_us.png"]
+        possible_de = [
+            "icons/flag_de.png",
+            "icons/german_flag.png",
+            "icons/flag_deutsch.png",
+        ]
+
+        def find_first(paths):
+            for p in paths:
+                pth = get_static_path(p)
+                if pth.exists():
+                    return pth
+            # fallback to first path (may not exist)
+            return get_static_path(paths[0])
+
+        en_flag = find_first(possible_en)
+        de_flag = find_first(possible_de)
 
         def make_flag_button(path, code):
             btn = QPushButton()
-            btn.setFixedSize(36, 24)
-            btn.setStyleSheet("border: none; background: transparent;")
-            if Path(path).exists():
-                pix = QPixmap(str(path))
-                if not pix.isNull():
-                    btn.setIcon(pix)
-                    btn.setIconSize(btn.size())
+            btn.setFixedSize(48, 32)
+            btn.setStyleSheet("border: none; background: transparent; color: #ffffff;")
+            try:
+                if Path(path).exists():
+                    pix = QPixmap(str(path))
+                    if not pix.isNull():
+                        btn.setIcon(QIcon(pix))
+                        btn.setIconSize(btn.size())
+            except Exception:
+                pass
+            # Fallback: show language code if icon missing
+            if btn.icon().isNull():
+                btn.setText(code.upper())
+                btn.setStyleSheet(
+                    "border: none; background: transparent; color: #ffffff; font-weight: bold;"
+                )
+                btn.setFont(QFont("Minecraft", 12))
+            btn.show()
             btn.clicked.connect(lambda _, c=code: self.change_language(c))
             return btn
 
@@ -165,6 +191,32 @@ class StartScreen(QWidget):
         self.btn_exit.clicked.connect(self.on_exit)
         button_layout.addWidget(self.btn_exit)
 
+        # Register to receive language change notifications
+        try:
+            from frontend.i18n import register_language_listener
+
+            register_language_listener(self.update_language)
+        except Exception:
+            pass
+
+    def update_language(self):
+        """Update UI texts when global language changes (do not call set_language here)."""
+        try:
+            # Update header and buttons
+            if hasattr(self, "_header_html"):
+                # Replace header HTML content
+                header = self.findChild(QLabel, "start_header")
+                if header is not None:
+                    header.setText(self._header_html())
+            if hasattr(self, "btn_start"):
+                self.btn_start.setText(_("Start Simulation"))
+            if hasattr(self, "btn_settings"):
+                self.btn_settings.setText(_("Settings"))
+            if hasattr(self, "btn_exit"):
+                self.btn_exit.setText(_("Exit"))
+        except Exception:
+            pass
+
     def _on_start_clicked(self):
         self.btn_start.setVisible(False)
         if self.go_to_simulation:
@@ -231,18 +283,37 @@ class StartScreen(QWidget):
         # Resize background to match widget size
         self._resize_background(event)
 
-        # Position language flags at top-right corner
+        # Position language flags at bottom-right corner (20px padding)
         try:
-            margin = 16
+            padding = 20
             spacing = 6
-            fx = width - margin - self.btn_flag_de.width()
-            fy = margin
+            fx = (
+                width
+                - padding
+                - (self.btn_flag_de.width() if hasattr(self, "btn_flag_de") else 0)
+            )
+            fy = (
+                height
+                - padding
+                - (self.btn_flag_de.height() if hasattr(self, "btn_flag_de") else 0)
+            )
             # Place right-most (de) then en to its left
             if hasattr(self, "btn_flag_de"):
                 self.btn_flag_de.move(fx, fy)
+                self.btn_flag_de.raise_()
                 fx -= self.btn_flag_en.width() + spacing
             if hasattr(self, "btn_flag_en"):
                 self.btn_flag_en.move(fx, fy)
+                self.btn_flag_en.raise_()
+        except Exception:
+            pass
+
+        # Ensure flags are above the background/movie as well
+        try:
+            if hasattr(self, "btn_flag_de"):
+                self.btn_flag_de.raise_()
+            if hasattr(self, "btn_flag_en"):
+                self.btn_flag_en.raise_()
         except Exception:
             pass
 
