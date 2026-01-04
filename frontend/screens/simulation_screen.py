@@ -2,6 +2,10 @@
 SimulationScreen - Main simulation view with map and controls.
 """
 
+# Log rendering constants
+LOG_FONT_FAMILY = "Consolas"
+LOG_FONT_SIZE = 12
+
 import json
 import sys
 from pathlib import Path
@@ -31,6 +35,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap
 
 from backend.model import SimulationModel
 from screens.simulation_map import SimulationMapWidget
+from frontend.i18n import _
 
 
 class CustomCheckBox(QCheckBox):
@@ -102,7 +107,7 @@ class StatsDialog(QDialog):
         main_layout.setSpacing(15)
 
         # Title
-        title = QLabel("Simulations-Statistiken (5 Minuten)")
+        title = QLabel(_("Simulations-Statistiken (5 Minuten)"))
         title_font = QFont("Minecraft", 16, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         title.setFont(title_font)
@@ -128,33 +133,35 @@ class StatsDialog(QDialog):
         for species, count in stats["species_counts"].items():
             text += f"• {species}: {count}<br>"
 
-        text += "<br><b>Todesfälle (Kampf):</b><br>"
+            text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
         for species, count in stats["deaths"]["combat"].items():
             text += f"• {species}: {count}<br>"
 
-        text += "<br><b>Todesfälle (Verhungert):</b><br>"
+            text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
         for species, count in stats["deaths"]["starvation"].items():
             text += f"• {species}: {count}<br>"
 
-        text += "<br><b>Todesfälle (Temperatur):</b><br>"
+            text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
         for species, count in stats["deaths"].get("temperature", {}).items():
             text += f"• {species}: {count}<br>"
 
-        text += f"<br><b>Maximale Clans:</b> {stats['max_clans']}<br>"
-        text += f"<b>Futterplätze:</b> {stats['food_places']}"
+            text += f"<br><b>{_('Maximale Clans:')}</b> {stats['max_clans']}<br>"
+            text += f"<b>{_('Futterplätze:')}</b> {stats['food_places']}"
 
         # Disaster events
         disasters = stats.get("disasters", [])
         if disasters:
-            text += "<br><br><b>Naturkatastrophen während der Simulation:</b><br>"
+            text += (
+                f"<br><br><b>{_('Naturkatastrophen während der Simulation:')}</b><br>"
+            )
             for d in disasters:
                 start = d.get("start", "?")
                 end = d.get("end", "?")
                 name = d.get("name", "Unbekannt")
                 if end is not None:
-                    text += f"• {name} (Start: {start}, Ende: {end})<br>"
+                    text += f"• {name} ({_('Start')}: {start}, {_('Ende')}: {end})<br>"
                 else:
-                    text += f"• {name} (Start: {start}, läuft noch)<br>"
+                    text += f"• {name} ({_('Start')}: {start}, {_('läuft noch')})<br>"
 
         stats_text.setText(text)
         content_layout.addWidget(stats_text, 1)
@@ -264,7 +271,7 @@ class StatsDialog(QDialog):
             content_layout.addWidget(canvas, 2)
         except ImportError:
             # Fallback if matplotlib not available
-            no_graph_label = QLabel("Graph nicht verfügbar\n(matplotlib benötigt)")
+            no_graph_label = QLabel(_("Graph nicht verfügbar\n(matplotlib benötigt)"))
             no_graph_label.setStyleSheet("color: #999999;")
             no_graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             content_layout.addWidget(no_graph_label, 2)
@@ -272,7 +279,7 @@ class StatsDialog(QDialog):
         main_layout.addLayout(content_layout)
 
         # Close button
-        close_btn = QPushButton("Schließen")
+        close_btn = QPushButton(_("Schließen"))
         close_btn_font = QFont("Minecraft", 12)
         close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         close_btn.setFont(close_btn_font)
@@ -290,7 +297,7 @@ class LogDialog(QDialog):
 
     def __init__(self, log_text, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Simulation Logs")
+        self.setWindowTitle(_("Simulation Logs"))
         self.setModal(False)
         self.resize(600, 400)
 
@@ -301,7 +308,7 @@ class LogDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # Title
-        title = QLabel("Simulation Logs")
+        title = QLabel(_("Simulation Logs"))
         title_font = QFont("Minecraft", 14)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         title.setFont(title_font)
@@ -311,11 +318,11 @@ class LogDialog(QDialog):
         # Text area with scroll
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        text_font = QFont("Minecraft", 11)
+        text_font = QFont(LOG_FONT_FAMILY, LOG_FONT_SIZE)
         text_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.text_edit.setFont(text_font)
         self.text_edit.setStyleSheet(
-            "background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666;"
+            f"background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px;"
         )
         # Enable word wrapping and scrolling
         self.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
@@ -324,7 +331,7 @@ class LogDialog(QDialog):
         layout.addWidget(self.text_edit)
 
         # Close button
-        close_btn = QPushButton("Schließen")
+        close_btn = QPushButton(_("Schließen"))
         close_btn_font = QFont("Minecraft", 12)
         close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         close_btn.setFont(close_btn_font)
@@ -346,45 +353,72 @@ class LogDialog(QDialog):
         for line in lines:
             # Verhungert - Dunkles Rot
             if "☠️" in line and "verhungert" in line:
-                colored_lines.append(f'<span style="color: #cc3333;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #cc3333;">{line}</div>'
+                )
             # Erfroren (Temperatur + Kälte) - Helles Blau
             elif "❄️" in line and "Temperatur" in line:
-                colored_lines.append(f'<span style="color: #99ddff;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #99ddff;">{line}</div>'
+                )
             # Hitzetod (Temperatur bei Hitze, über ~30°C) - Helles Rot
             elif "stirbt an Temperatur" in line:
                 # Check if temperature is high (heuristic: if no ❄️ emoji, it's heat)
                 if "❄️" not in line:
-                    colored_lines.append(f'<span style="color: #ff9999;">{line}</span>')
+                    colored_lines.append(
+                        f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #ff9999;">{line}</div>'
+                    )
                 else:
-                    colored_lines.append(f'<span style="color: #99ddff;">{line}</span>')
+                    colored_lines.append(
+                        f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #99ddff;">{line}</div>'
+                    )
             # Isst (Food/Eating) - Braun
             elif "🍽️" in line or "🍖" in line or "isst" in line:
-                colored_lines.append(f'<span style="color: #cd853f;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #cd853f;">{line}</div>'
+                )
             # Clan beigetreten - Lila
             elif "👥" in line and "tritt" in line and "bei" in line:
-                colored_lines.append(f'<span style="color: #bb88ff;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #bb88ff;">{line}</div>'
+                )
             # Clan verlassen - Orange (falls implementiert)
             elif "verlässt" in line or "verlassen" in line:
-                colored_lines.append(f'<span style="color: #ff9944;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #ff9944;">{line}</div>'
+                )
             # Combat/Attack - Red
             elif "⚔️" in line or "💀" in line:
-                colored_lines.append(f'<span style="color: #ff6666;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #ff6666;">{line}</div>'
+                )
             # Temperature Info - Cyan
             elif "🌡️" in line:
-                colored_lines.append(f'<span style="color: #66ccff;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #66ccff;">{line}</div>'
+                )
             # Day/Night - Yellow/Purple
             elif "☀️" in line:
-                colored_lines.append(f'<span style="color: #ffdd44;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #ffdd44;">{line}</div>'
+                )
             elif "🌙" in line:
-                colored_lines.append(f'<span style="color: #aa88ff;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #aa88ff;">{line}</div>'
+                )
             # Friendly - Light Green
             elif "🤝" in line:
-                colored_lines.append(f'<span style="color: #88ff88;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #88ff88;">{line}</div>'
+                )
             # Start/Info - White
             else:
-                colored_lines.append(f'<span style="color: #ffffff;">{line}</span>')
+                colored_lines.append(
+                    f'<div style="display:block; padding:2px 6px; white-space:pre-wrap; font-family: {LOG_FONT_FAMILY}, monospace; color: #ffffff;">{line}</div>'
+                )
 
-        return "<br>".join(colored_lines)
+            # Wrap in a container that preserves whitespace and uses consistent font
+            return "".join(colored_lines)
 
     def update_log(self, log_text):
         """Update the log text in the dialog."""
@@ -423,13 +457,13 @@ class SpeciesPanel(QWidget):
         layout.setSpacing(12)
 
         # Title
-        self.title = QLabel("Spezies")
+        self.title = QLabel(_("Spezies"))
         title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
 
-        self.subtitle = QLabel("Subspezies:")
+        self.subtitle = QLabel(_("Subspezies:"))
         subtitle_font = QFont("Minecraft", 12)
         subtitle_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.subtitle.setFont(subtitle_font)
@@ -464,7 +498,7 @@ class SpeciesPanel(QWidget):
             loner_speed_layout = QHBoxLayout()
             loner_speed_layout.setSpacing(5)
 
-            loner_speed_label = QLabel("Loner Speed:")
+            loner_speed_label = QLabel(_("Loner Speed:"))
             loner_speed_label_font = QFont("Minecraft", 11)
             loner_speed_label_font.setLetterSpacing(
                 QFont.SpacingType.AbsoluteSpacing, 1
@@ -486,7 +520,7 @@ class SpeciesPanel(QWidget):
             clan_speed_layout = QHBoxLayout()
             clan_speed_layout.setSpacing(5)
 
-            clan_speed_label = QLabel("Clan Speed:")
+            clan_speed_label = QLabel(_("Clan Speed:"))
             clan_speed_label_font = QFont("Minecraft", 11)
             clan_speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
             clan_speed_label.setFont(clan_speed_label_font)
@@ -506,7 +540,7 @@ class SpeciesPanel(QWidget):
             member_layout = QHBoxLayout()
             member_layout.setSpacing(5)
 
-            member_label = QLabel("Mitglieder:")
+            member_label = QLabel(_("Mitglieder:"))
             member_label_font = QFont("Minecraft", 11)
             member_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
             member_label.setFont(member_label_font)
@@ -650,14 +684,14 @@ class EnvironmentPanel(QWidget):
         layout.setSpacing(15)
 
         # Title
-        self.title = QLabel("Region")
+        self.title = QLabel(_("Region"))
         title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
 
         # Region Selection
-        self.region_label = QLabel("Region:")
+        self.region_label = QLabel(_("Region:"))
         region_label_font = QFont("Minecraft", 12)
         region_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.region_label.setFont(region_label_font)
@@ -682,7 +716,7 @@ class EnvironmentPanel(QWidget):
         }
 
         # Temperature Section
-        self.temp_label = QLabel("Temperatur:")
+        self.temp_label = QLabel(_("Temperatur:"))
         temp_label_font = QFont("Minecraft", 12)
         temp_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.temp_label.setFont(temp_label_font)
@@ -694,7 +728,7 @@ class EnvironmentPanel(QWidget):
         self.temp_slider.setValue(20)
         layout.addWidget(self.temp_slider)
 
-        self.temp_value_label = QLabel("Temp: 20 C°")
+        self.temp_value_label = QLabel(_("Temp: 20 C°"))
         temp_value_font = QFont("Minecraft", 11)
         temp_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.temp_value_label.setFont(temp_value_font)
@@ -706,7 +740,7 @@ class EnvironmentPanel(QWidget):
         self.update_temperature_range("Snowy Abyss")
 
         # Food Section
-        self.food_label_title = QLabel("Nahrung:")
+        self.food_label_title = QLabel(_("Nahrung:"))
         food_title_font = QFont("Minecraft", 12)
         food_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_label_title.setFont(food_title_font)
@@ -719,7 +753,7 @@ class EnvironmentPanel(QWidget):
         food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_label.setFont(food_label_font)
         layout.addWidget(self.food_label)
-        self.food_places_label = QLabel("Nahrungsplätze: 5")
+        self.food_places_label = QLabel(_("Nahrungsplätze: 5"))
         food_places_font = QFont("Minecraft", 11)
         food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_places_label.setFont(food_places_font)
@@ -730,12 +764,14 @@ class EnvironmentPanel(QWidget):
         self.food_places_slider.setMaximum(10)
         self.food_places_slider.setValue(5)
         self.food_places_slider.valueChanged.connect(
-            lambda v: self.food_places_label.setText(f"Nahrungsplätze: {v}")
+            lambda v: self.food_places_label.setText(
+                _("Nahrungsplätze: {v}").format(v=v)
+            )
         )
         layout.addWidget(self.food_places_slider)
 
         # Nahrungsmenge pro Platz
-        self.food_amount_label = QLabel("Nahrungsmenge: 50")
+        self.food_amount_label = QLabel(_("Nahrungsmenge: 50"))
         food_amount_font = QFont("Minecraft", 11)
         food_amount_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_amount_label.setFont(food_amount_font)
@@ -746,12 +782,14 @@ class EnvironmentPanel(QWidget):
         self.food_amount_slider.setMaximum(200)
         self.food_amount_slider.setValue(50)
         self.food_amount_slider.valueChanged.connect(
-            lambda v: self.food_amount_label.setText(f"Nahrungsmenge: {v}")
+            lambda v: self.food_amount_label.setText(
+                _("Nahrungsmenge: {v}").format(v=v)
+            )
         )
         layout.addWidget(self.food_amount_slider)
 
         # Day/Night Section
-        self.day_night_label = QLabel("Tag - Nacht:")
+        self.day_night_label = QLabel(_("Tag - Nacht:"))
         day_night_label_font = QFont("Minecraft", 12)
         day_night_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.day_night_label.setFont(day_night_label_font)
@@ -760,7 +798,7 @@ class EnvironmentPanel(QWidget):
         day_night_layout = QHBoxLayout()
         day_night_layout.setSpacing(5)
 
-        day_btn = QPushButton("Tag")
+        day_btn = QPushButton(_("Tag"))
         day_btn_font = QFont("Minecraft", 11)
         day_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         day_btn.setFont(day_btn_font)
@@ -770,7 +808,7 @@ class EnvironmentPanel(QWidget):
         day_btn.clicked.connect(lambda: self.on_day_night_toggle(True))
         day_night_layout.addWidget(day_btn)
 
-        night_btn = QPushButton("Nacht")
+        night_btn = QPushButton(_("Nacht"))
         night_btn_font = QFont("Minecraft", 11)
         night_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         night_btn.setFont(night_btn_font)
@@ -1102,6 +1140,8 @@ class SimulationScreen(QWidget):
         self.disaster_label.setStyleSheet(
             "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
         )
+        # Fix a visible height for the disaster banner so layout doesn't shift
+        self.disaster_label.setFixedHeight(60)
         self.log_dialog = None
         self.time_step = 0
         self.log_expanded = False  # Track log expansion state
@@ -1139,7 +1179,7 @@ class SimulationScreen(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
 
-        btn_back = QPushButton("← Back")
+        btn_back = QPushButton(_("← Back"))
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         btn_back.setFont(btn_back_font)
@@ -1149,7 +1189,7 @@ class SimulationScreen(QWidget):
 
         top_bar.addStretch()
 
-        btn_exit = QPushButton("Exit")
+        btn_exit = QPushButton(_("Exit"))
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         btn_exit.setFont(btn_exit_font)
@@ -1197,7 +1237,7 @@ class SimulationScreen(QWidget):
         tab_buttons_layout = QHBoxLayout()
         tab_buttons_layout.setSpacing(5)
 
-        self.btn_region_tab = QPushButton("Region")
+        self.btn_region_tab = QPushButton(_("Region"))
         region_tab_font = QFont("Minecraft", 12)
         region_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_region_tab.setFont(region_tab_font)
@@ -1207,7 +1247,7 @@ class SimulationScreen(QWidget):
         self.btn_region_tab.clicked.connect(lambda: self.switch_sidebar_tab("region"))
         tab_buttons_layout.addWidget(self.btn_region_tab)
 
-        self.btn_species_tab = QPushButton("Spezies")
+        self.btn_species_tab = QPushButton(_("Spezies"))
         species_tab_font = QFont("Minecraft", 12)
         species_tab_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_species_tab.setFont(species_tab_font)
@@ -1255,7 +1295,7 @@ class SimulationScreen(QWidget):
         stats_log_layout.setContentsMargins(0, 0, 0, 0)
         stats_log_layout.setSpacing(10)
 
-        self.btn_stats = QPushButton("Stats")
+        self.btn_stats = QPushButton(_("Stats"))
         stats_font = QFont("Minecraft", 12)
         stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_stats.setFont(stats_font)
@@ -1263,7 +1303,7 @@ class SimulationScreen(QWidget):
         self.btn_stats.clicked.connect(self.on_stats)
         stats_log_layout.addWidget(self.btn_stats)
 
-        self.btn_log = QPushButton("Log")
+        self.btn_log = QPushButton(_("Log"))
         log_btn_font = QFont("Minecraft", 12)
         log_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_log.setFont(log_btn_font)
@@ -1296,7 +1336,7 @@ class SimulationScreen(QWidget):
         self.btn_play_pause.clicked.connect(self.toggle_play_pause)
         play_controls_layout.addWidget(self.btn_play_pause)
 
-        self.btn_stop = QPushButton("Reset/Stop")
+        self.btn_stop = QPushButton(_("Reset/Stop"))
         stop_font = QFont("Minecraft", 16)
         stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_stop.setFont(stop_font)
@@ -1378,7 +1418,7 @@ class SimulationScreen(QWidget):
         live_info_layout.addWidget(self.live_temp_label)
 
         # Day/Night indicator (live)
-        self.live_day_night_label = QLabel("☀️ Tag")
+        self.live_day_night_label = QLabel(_("☀️ Tag"))
         live_dn_font = QFont("Minecraft", 11)
         live_dn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.live_day_night_label.setFont(live_dn_font)
@@ -1391,7 +1431,7 @@ class SimulationScreen(QWidget):
         disaster_layout = QHBoxLayout()
         disaster_layout.setSpacing(5)
 
-        disaster_label = QLabel("Disaster Severity:")
+        disaster_label = QLabel(_("Disaster Severity") + ":")
         disaster_label_font = QFont("Minecraft", 11)
         disaster_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         disaster_label.setFont(disaster_label_font)
@@ -1421,7 +1461,7 @@ class SimulationScreen(QWidget):
         force_layout = QHBoxLayout()
         force_layout.setSpacing(5)
 
-        self.btn_force_disaster = QPushButton("Force Disaster")
+        self.btn_force_disaster = QPushButton(_("Force Disaster"))
         btn_force_font = QFont("Minecraft", 11)
         btn_force_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_force_disaster.setFont(btn_force_font)
@@ -1759,7 +1799,7 @@ class SimulationScreen(QWidget):
                         chosen = (
                             "Forced",
                             {
-                                "name": "Forced Disaster",
+                                "name": _("Forced Disaster"),
                                 "type": "areal",
                                 "duration": 300,
                                 "effects": {"population_damage": 5},
@@ -1776,19 +1816,23 @@ class SimulationScreen(QWidget):
                             "end": None,
                         }
                         self.sim_model.add_log(
-                            f"⚠️ Dev: {chosen[1].get('name', chosen[0])} forced at center."
+                            _("⚠️ Dev: {name} forced at center.").format(
+                                name=chosen[1].get("name", chosen[0])
+                            )
                         )
                     except Exception:
                         pass
             except Exception:
                 pass
             try:
-                self.sim_model.add_log("Dev: Forced areal disaster started.")
+                self.sim_model.add_log(_("Dev: Forced areal disaster started."))
             except Exception:
                 pass
         except Exception as e:
             try:
-                self.sim_model.add_log(f"Dev: Force disaster failed: {e}")
+                self.sim_model.add_log(
+                    _("Dev: Force disaster failed: {err}").format(err=e)
+                )
             except Exception:
                 pass
 
@@ -1856,12 +1900,12 @@ class SimulationScreen(QWidget):
                 # Update live day/night display
                 is_day = stats.get("is_day", True)
                 if is_day:
-                    self.live_day_night_label.setText("☀️ Tag")
+                    self.live_day_night_label.setText(_("☀️ Tag"))
                     self.live_day_night_label.setStyleSheet(
                         "color: #ffcc44; padding: 0 10px;"
                     )
                 else:
-                    self.live_day_night_label.setText("🌙 Nacht")
+                    self.live_day_night_label.setText(_("🌙 Nacht"))
                     self.live_day_night_label.setStyleSheet(
                         "color: #8888ff; padding: 0 10px;"
                     )
@@ -1891,7 +1935,7 @@ class SimulationScreen(QWidget):
                         remaining_text = ""
 
                     self.disaster_label.setText(
-                        f"⚠️ Naturkatastrophe: {active_disaster}{remaining_text}"
+                        f"{_('⚠️ Naturkatastrophe:')} {active_disaster}{remaining_text}"
                     )
                     # Start flashing animation if not already running
                     if self.animation_timer is None:
@@ -1999,8 +2043,9 @@ class SimulationScreen(QWidget):
 
                     self.log_display = QTextEdit()
                     self.log_display.setReadOnly(True)
+                    # Use monospace and slightly larger font for readability
                     self.log_display.setStyleSheet(
-                        "background-color: #222; color: #fff; font-size: 11px; margin-top: 6px; border: none;"
+                        f"background-color: #222; color: #fff; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px; margin-top: 6px; border: none;"
                     )
                     self.log_display.setMinimumHeight(80)
                     layout.addWidget(self.log_display)
@@ -2100,7 +2145,8 @@ class SimulationScreen(QWidget):
         if hasattr(self, "log_display") and self.log_display is not None:
             # Show the last 15 log lines (adjust as needed)
             log_lines = self.log_text.split("\n")[-15:]
-            self.log_display.setPlainText("\n".join(log_lines))
+            # Use colorized HTML for the embedded log display as well
+            self.log_display.setHtml(self.colorize_logs("\n".join(log_lines)))
 
     def on_back(self):
         """Go back to start screen."""

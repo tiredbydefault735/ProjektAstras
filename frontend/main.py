@@ -18,6 +18,7 @@ from screens.simulation_screen import SimulationScreen
 from screens.settings_screen import SettingsScreen
 from styles.stylesheet import get_stylesheet
 from styles.color_presets import DEFAULT_PRESET
+from frontend.i18n import _
 
 
 class ArachfaraApp(QMainWindow):
@@ -25,7 +26,7 @@ class ArachfaraApp(QMainWindow):
 
     def __init__(self, color_preset=None):
         super().__init__()
-        self.setWindowTitle("Projekt Astras")
+        self.setWindowTitle(_("PROJEKT ASTRAS"))
         self.setWindowIconText("Astras")
 
         # Set color preset (default if not provided)

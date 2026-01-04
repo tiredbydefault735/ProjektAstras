@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QFont, QColor, QMovie
 from PyQt6.QtCore import Qt
 from utils import get_static_path
+from frontend.i18n import _, set_language, get_language
 
 
 class StartScreen(QWidget):
@@ -45,6 +46,38 @@ class StartScreen(QWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(40, 40, 40, 80)
         main_layout.setSpacing(0)
+
+        # Top row: language flags (right aligned)
+        top_row = QHBoxLayout()
+        top_row.addStretch()
+
+        # Flag icons (look for static/ui/flag_en.png and flag_de.png)
+        en_flag = get_static_path("ui/flag_en.png")
+        de_flag = get_static_path("ui/flag_de.png")
+
+        def make_flag_button(path, code):
+            btn = QPushButton()
+            btn.setFixedSize(36, 24)
+            btn.setStyleSheet("border: none; background: transparent;")
+            if Path(path).exists():
+                pix = QPixmap(str(path))
+                if not pix.isNull():
+                    btn.setIcon(pix)
+                    btn.setIconSize(btn.size())
+            btn.clicked.connect(lambda _, c=code: self.change_language(c))
+            return btn
+
+        self.btn_flag_en = make_flag_button(en_flag, "en")
+        self.btn_flag_de = make_flag_button(de_flag, "de")
+
+        # Attach flags to this widget so we can position them manually
+        self.btn_flag_en.setParent(self)
+        self.btn_flag_de.setParent(self)
+        # Initialize selection visuals
+        try:
+            self.change_language(get_language())
+        except Exception:
+            pass
 
         # Get background color from preset if available (with transparency built-in)
         bg_color = (
@@ -83,14 +116,8 @@ class StartScreen(QWidget):
         # Title and subtitle as single HTML label for tight spacing control
         header = QLabel()
         header.setTextFormat(Qt.TextFormat.RichText)
-        header.setText(
-            '<div style="text-align: center; line-height: 0.8;">'
-            '<p style="font-family: Minecraft; font-size: 24pt; font-weight: bold; '
-            'color: #ffffff; margin: 0px; padding: 0px; letter-spacing: 1px;">PROJEKT ASTRAS</p>'
-            '<p style="font-family: Minecraft; font-size: 14pt; '
-            'color: #cccccc; margin: 0px; margin-top: 5px; padding: 0px; letter-spacing: 1px;">Simulation v1.0</p>'
-            "</div>"
-        )
+        header.setObjectName("start_header")
+        header.setText(self._header_html())
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet("background-color: transparent;")
         header.setContentsMargins(0, 0, 0, 0)
@@ -111,7 +138,7 @@ class StartScreen(QWidget):
         """
 
         # Buttons
-        self.btn_start = QPushButton("Start Simulation")
+        self.btn_start = QPushButton(_("Start Simulation"))
         btn_start_font = QFont("Minecraft", 11)
         btn_start_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_start.setFont(btn_start_font)
@@ -120,7 +147,7 @@ class StartScreen(QWidget):
         self.btn_start.clicked.connect(self._on_start_clicked)
         button_layout.addWidget(self.btn_start)
 
-        self.btn_settings = QPushButton("Settings")
+        self.btn_settings = QPushButton(_("Settings"))
         btn_settings_font = QFont("Minecraft", 11)
         btn_settings_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_settings.setFont(btn_settings_font)
@@ -129,7 +156,7 @@ class StartScreen(QWidget):
         self.btn_settings.clicked.connect(self.on_settings)
         button_layout.addWidget(self.btn_settings)
 
-        self.btn_exit = QPushButton("Exit")
+        self.btn_exit = QPushButton(_("Exit"))
         btn_exit_font = QFont("Minecraft", 11)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_exit.setFont(btn_exit_font)
@@ -142,6 +169,43 @@ class StartScreen(QWidget):
         self.btn_start.setVisible(False)
         if self.go_to_simulation:
             self.go_to_simulation()
+
+    def _header_html(self):
+        # Compose header HTML using translations
+        title = _("PROJEKT ASTRAS")
+        subtitle = _("Simulation v1.0")
+        return (
+            '<div style="text-align: center; line-height: 0.8;">'
+            f'<p style="font-family: Minecraft; font-size: 24pt; font-weight: bold; '
+            f'color: #ffffff; margin: 0px; padding: 0px; letter-spacing: 1px;">{title}</p>'
+            f'<p style="font-family: Minecraft; font-size: 14pt; '
+            f'color: #cccccc; margin: 0px; margin-top: 5px; padding: 0px; letter-spacing: 1px;">{subtitle}</p>'
+            "</div>"
+        )
+
+    def change_language(self, code):
+        try:
+            set_language(code)
+        except Exception:
+            pass
+        # Update UI labels
+        self.btn_start.setText(_("Start Simulation"))
+        self.btn_settings.setText(_("Settings"))
+        self.btn_exit.setText(_("Exit"))
+        # Update header
+        header = self.findChild(QLabel, "start_header")
+        if header:
+            header.setText(self._header_html())
+        # Update flag visibility to indicate selection (simple opacity)
+        current = get_language()
+
+        def set_opacity(widget, on):
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(1.0 if on else 0.45)
+            widget.setGraphicsEffect(effect)
+
+        set_opacity(self.btn_flag_en, current == "en")
+        set_opacity(self.btn_flag_de, current == "de")
 
     def resizeEvent(self, event):
         """Handle resize to scale background properly and reposition elements."""
@@ -166,6 +230,21 @@ class StartScreen(QWidget):
 
         # Resize background to match widget size
         self._resize_background(event)
+
+        # Position language flags at top-right corner
+        try:
+            margin = 16
+            spacing = 6
+            fx = width - margin - self.btn_flag_de.width()
+            fy = margin
+            # Place right-most (de) then en to its left
+            if hasattr(self, "btn_flag_de"):
+                self.btn_flag_de.move(fx, fy)
+                fx -= self.btn_flag_en.width() + spacing
+            if hasattr(self, "btn_flag_en"):
+                self.btn_flag_en.move(fx, fy)
+        except Exception:
+            pass
 
     def _resize_background(self, event):
         """Handle resize to scale background properly."""
