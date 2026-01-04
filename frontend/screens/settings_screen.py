@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from styles.color_presets import get_all_preset_names
+from frontend.i18n import _
 
 
 class SettingsScreen(QWidget):
@@ -39,13 +40,13 @@ class SettingsScreen(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        title = QLabel("Settings")
+        title = QLabel(_("Settings"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         layout.addWidget(title)
 
         # Theme selector
-        theme_label = QLabel("Color Theme:")
+        theme_label = QLabel(_("Color Theme:"))
         layout.addWidget(theme_label)
 
         self.theme_combo = QComboBox()
@@ -55,11 +56,11 @@ class SettingsScreen(QWidget):
 
         # Buttons
         btn_row = QHBoxLayout()
-        btn_apply = QPushButton("Apply")
+        btn_apply = QPushButton(_("Apply"))
         btn_apply.clicked.connect(self.on_apply)
         btn_row.addWidget(btn_apply)
 
-        btn_cancel = QPushButton("Cancel")
+        btn_cancel = QPushButton(_("Cancel"))
         btn_cancel.clicked.connect(self.on_cancel)
         btn_row.addWidget(btn_cancel)
 
