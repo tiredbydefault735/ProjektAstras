@@ -1,4 +1,4 @@
-{
+﻿{
     "PROJEKT ASTRAS": "PROJEKT ASTRAS",
     "Simulation v1.0": "Simulation v1.0",
     "Start Simulation": "Start Simulation",
@@ -6,24 +6,24 @@
     "Exit": "Exit",
 
     "Simulation Logs": "Simulation Logs",
-    "Schließen": "Close",
+    "SchlieÃŸen": "Close",
 
     "Apply": "Apply",
     "Cancel": "Cancel",
     "Color Theme:": "Color Theme:",
-    "Graph nicht verf�gbar\n(matplotlib ben�tigt)": "Graph not available\n(matplotlib required)",
+    "Graph nicht verfï¿½gbar\n(matplotlib benï¿½tigt)": "Graph not available\n(matplotlib required)",
 
     "Simulations-Statistiken (5 Minuten)": "Simulation Statistics (5 minutes)",
-    "Todesfälle (Kampf):": "Deaths (Combat):",
-    "Todesfälle (Verhungert):": "Deaths (Starvation):",
-    "Todesfälle (Temperatur):": "Deaths (Temperature):",
+    "TodesfÃ¤lle (Kampf):": "Deaths (Combat):",
+    "TodesfÃ¤lle (Verhungert):": "Deaths (Starvation):",
+    "TodesfÃ¤lle (Temperatur):": "Deaths (Temperature):",
     "Maximale Clans:": "Max Clans:",
-    "Futterplätze:": "Food places:",
+    "FutterplÃ¤tze:": "Food places:",
     "Start": "Start",
     "Ende": "End",
-    "läuft noch": "ongoing",
+    "lÃ¤uft noch": "ongoing",
 
-    "Graph nicht verfügbar\n(matplotlib benötigt)": "Graph not available\n(matplotlib required)",
+    "Graph nicht verfÃ¼gbar\n(matplotlib benÃ¶tigt)": "Graph not available\n(matplotlib required)",
 
     "Spezies": "Species",
     "Subspezies:": "Subspecies:",
@@ -34,12 +34,12 @@
     "Region": "Region",
     "Region:": "Region:",
     "Temperatur:": "Temperature:",
-    "Temp: 20 C°": "Temp: 20 C°",
-    "Temp: {value} C° ({min} bis {max})": "Temp: {value} C° ({min} to {max})",
-    "🌡️ {val}°C": "🌡️ {val}°C",
+    "Temp: 20 CÂ°": "Temp: 20 CÂ°",
+    "Temp: {value} CÂ° ({min} bis {max})": "Temp: {value} CÂ° ({min} to {max})",
+    "ðŸŒ¡ï¸ {val}Â°C": "ðŸŒ¡ï¸ {val}Â°C",
     "Nahrung:": "Food:",
-    "Nahrungsplätze: 5": "Food places: 5",
-    "Nahrungsplätze: {v}": "Food places: {v}",
+    "NahrungsplÃ¤tze: 5": "Food places: 5",
+    "NahrungsplÃ¤tze: {v}": "Food places: {v}",
     "Nahrungsmenge: 50": "Food amount: 50",
     "Nahrungsmenge: {v}": "Food amount: {v}",
 
@@ -49,14 +49,14 @@
 
     
 
-    "← Back": "← Back",
+    "â† Back": "â† Back",
 
     "Stats": "Stats",
     "Log": "Log",
     "Reset/Stop": "Reset/Stop",
 
-    "☀️ Tag": "☀️ Day",
+    "â˜€ï¸ Tag": "â˜€ï¸ Day",
 
-    "🌙 Nacht": "🌙 Night",
-    
+    "ðŸŒ™ Nacht": "ðŸŒ™ Night"`n
 }
+
