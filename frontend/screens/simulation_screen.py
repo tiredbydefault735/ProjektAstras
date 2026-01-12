@@ -36,9 +36,6 @@ from PyQt6.QtCore import (
     QTimer,
     QSize,
     QRegularExpression,
-    pyqtSignal,
-    QObject,
-    QThread,
 )
 import time
 from PyQt6.QtGui import (
@@ -97,45 +94,7 @@ class LogHighlighter(QSyntaxHighlighter):
                 self.setFormat(start, length, fmt)
 
 
-class SimulationWorker(QObject):
-    """Background worker that runs simulation steps and emits results."""
-
-    stepReady = pyqtSignal(object)
-    finished = pyqtSignal()
-
-    def __init__(self, sim_model, speed=1, interval_ms=100):
-        super().__init__()
-        self.sim_model = sim_model
-        self.speed = max(1, int(speed))
-        self.interval_ms = int(interval_ms)
-        self._running = True
-
-    def set_speed(self, speed):
-        self.speed = max(1, int(speed))
-
-    def stop(self):
-        self._running = False
-
-    def run(self):
-        last = None
-        while self._running and self.sim_model:
-            # Run `speed` simulation steps back-to-back
-            for _ in range(self.speed):
-                if not self._running:
-                    break
-                try:
-                    last = self.sim_model.step()
-                except Exception:
-                    last = None
-            # Emit last step result for UI update
-            if last is not None:
-                try:
-                    self.stepReady.emit(last)
-                except Exception:
-                    pass
-            # Sleep between frames to avoid starving the UI thread
-            QThread.msleep(self.interval_ms)
-        self.finished.emit()
+# Background worker removed. Main UI now uses QTimer and batches steps per tick.
 
 
 class CustomCheckBox(QCheckBox):
@@ -334,28 +293,13 @@ class StatsDialog(QDialog):
 
                 for species, history in population_history.items():
                     if history:  # Only plot if there's data
-                        time_points = [
-                            i * 10 for i in range(len(history))
-                        ]  # Every 10 steps
+                        time_points = [i * 10 for i in range(len(history))]
                         ax.plot(
                             time_points,
                             history,
                             label=species,
                             color=colors.get(species, "#ffffff"),
                             linewidth=2,
-                        )
-
-                        # Disaster event plotting removed
-                        ax.text(
-                            end,
-                            ax.get_ylim()[1],
-                            f"{name} Ende",
-                            color="#ffaa44",
-                            fontsize=8,
-                            rotation=90,
-                            va="top",
-                            ha="left",
-                            alpha=0.7,
                         )
 
                 ax.set_xlabel("Zeit (Steps)", color="#ffffff", fontsize=10)
@@ -1406,9 +1350,8 @@ class SimulationScreen(QWidget):
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
-        # Threaded simulation worker
-        self.worker = None
-        self.worker_thread = None
+        # Timer-driven simulation updates
+        self.update_timer = None
         self.last_stats = None  # Holds stats from the previous simulation
 
         # Disaster UI removed
@@ -1947,15 +1890,15 @@ class SimulationScreen(QWidget):
             # Resume (oder Start)
             self.is_running = True
             self.btn_play_pause.setText("⏸")
-            # Start background simulation worker thread
-            self.start_simulation_worker()
+            # Start timer-based simulation loop
+            self.start_simulation_timer()
 
     def toggle_play_pause(self):
         """Toggle between play and pause."""
         if self.is_running:
             # Currently running, so pause
-            # stop worker gracefully
-            self.stop_simulation_worker()
+            # stop timer-driven loop
+            self.stop_simulation_timer()
             self.is_running = False
             self.btn_play_pause.setText("▶")
             self.btn_play_pause.setStyleSheet(
@@ -1976,8 +1919,8 @@ class SimulationScreen(QWidget):
 
         self.environment_panel.set_controls_enabled(True)
 
-        # stop background worker if running
-        self.stop_simulation_worker()
+        # stop timer-driven loop if running
+        self.stop_simulation_timer()
 
         self.is_running = False
         self.btn_play_pause.setText("▶")
@@ -2018,16 +1961,8 @@ class SimulationScreen(QWidget):
         self.btn_speed_1x.setChecked(speed == 1)
         self.btn_speed_2x.setChecked(speed == 2)
         self.btn_speed_5x.setChecked(speed == 5)
-        # Update background worker if running
-        try:
-            if self.worker:
-                # update step rate and interval
-                self.worker.set_speed(self.simulation_speed)
-                self.worker.interval_ms = max(
-                    50, 100 * max(1, int(self.simulation_speed))
-                )
-        except Exception:
-            pass
+        # Timer-driven updates use `update_simulation_with_speed` which
+        # will run `simulation_speed` steps per timer tick; no worker here.
 
     def on_loner_speed_changed(self, value):
         """Handle loner speed slider change."""
@@ -2140,147 +2075,31 @@ class SimulationScreen(QWidget):
             if all(count == 0 for count in stats.get("species_counts", {}).values()):
                 self.stop_simulation()
 
-    # Background worker management
-    def start_simulation_worker(self):
-        """Create and start the background simulation worker thread."""
+    # Timer-based simulation management (replaces threaded worker)
+    def start_simulation_timer(self):
+        """Start QTimer that runs simulation steps in the main thread.
+
+        The timer calls `update_simulation_with_speed`, which runs
+        `simulation_speed` steps per tick and updates the UI once.
+        """
         if not self.sim_model:
             return
-        # If worker already running, update speed
-        if self.worker and self.worker_thread:
-            try:
-                self.worker.set_speed(self.simulation_speed)
-            except Exception:
-                pass
+        if getattr(self, "update_timer", None) and self.update_timer.isActive():
             return
+        self.update_timer = QTimer(self)
+        # Base interval: 100ms per UI update; backend steps per tick scale with speed
+        self.update_timer.setInterval(100)
+        self.update_timer.timeout.connect(self.update_simulation_with_speed)
+        self.update_timer.start()
 
-        # Choose interval proportional to simulation speed so UI is not overloaded
-        interval_ms = max(50, 100 * max(1, int(self.simulation_speed)))
-        self.worker = SimulationWorker(
-            self.sim_model, speed=self.simulation_speed, interval_ms=interval_ms
-        )
-        self.worker_thread = QThread()
-        self.worker.moveToThread(self.worker_thread)
-        # Connect signals
-        self.worker.stepReady.connect(self.on_worker_step)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker_thread.started.connect(self.worker.run)
-        self.worker_thread.start()
-
-    def stop_simulation_worker(self):
-        """Stop the background worker cleanly."""
+    def stop_simulation_timer(self):
+        """Stop the QTimer if running."""
         try:
-            if self.worker:
-                self.worker.stop()
+            if getattr(self, "update_timer", None) and self.update_timer.isActive():
+                self.update_timer.stop()
         except Exception:
             pass
-        try:
-            if self.worker_thread:
-                self.worker_thread.quit()
-                self.worker_thread.wait(2000)
-        except Exception:
-            pass
-        # clear references
-        self.worker = None
-        self.worker_thread = None
-
-    def on_worker_step(self, data):
-        """Slot called when the worker emits a simulation step result."""
-        try:
-            # Always store the latest data but throttle rendering to UI
-            self._latest_step = data
-            now = time.monotonic()
-            min_dt = 1.0 / max(1, self._ui_target_fps)
-            if now - getattr(self, "_last_ui_update_time", 0.0) < min_dt:
-                return
-            # update last render time and frame counter
-            self._last_ui_update_time = now
-            self._ui_frame_count = getattr(self, "_ui_frame_count", 0) + 1
-
-            stats = data.get("stats", {})
-
-            # Draw map (cached items reuse inside draw_groups)
-            try:
-                self.map_widget.draw_groups(
-                    data["groups"],
-                    data.get("loners", []),
-                    data.get("food_sources", []),
-                    data.get("transition_progress", 1.0),
-                )
-            except Exception:
-                pass
-
-            self.time_step = data["time"]
-            self.simulation_time = self.time_step * 0.1
-
-            # Update population data used by graph (keep latest)
-            population_history = stats.get("population_history", {})
-            if population_history:
-                self.population_data = {
-                    k: list(v) for k, v in population_history.items()
-                }
-
-            # Update logs (only store latest text)
-            logs = data.get("logs", [])
-            if logs:
-                try:
-                    from frontend.i18n import _
-
-                    self.log_text = "\n".join([_(l) for l in logs])
-                except Exception:
-                    self.log_text = "\n".join(logs)
-                if self.log_dialog is not None and self.log_dialog.isVisible():
-                    self.log_dialog.update_log(self.log_text)
-
-            # Update UI elements (timer, temp, day/night)
-            minutes = int(self.simulation_time // 60)
-            seconds = int(self.simulation_time % 60)
-            self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
-
-            is_day = data.get("is_day", True)
-            self.day_night_label.setText("☀️" if is_day else "🌙")
-
-            current_temp = stats.get("temperature", 0)
-            temp_color = (
-                "#88ccff"
-                if current_temp < 0
-                else "#ffcc44" if current_temp > 25 else "#ffffff"
-            )
-            try:
-                from frontend.i18n import _
-
-                self.live_temp_label.setText(_("🌡️ {val}°C").format(val=current_temp))
-            except Exception:
-                self.live_temp_label.setText(f"🌡️ {current_temp}°C")
-            self.live_temp_label.setStyleSheet(f"color: {temp_color}; padding: 0 10px;")
-
-            is_day_ui = stats.get("is_day", True)
-            if is_day_ui:
-                self.live_day_night_label.setText(_("☀️ Tag"))
-                self.live_day_night_label.setStyleSheet(
-                    "color: #ffcc44; padding: 0 10px;"
-                )
-            else:
-                self.live_day_night_label.setText(_("🌙 Nacht"))
-                self.live_day_night_label.setStyleSheet(
-                    "color: #8888ff; padding: 0 10px;"
-                )
-
-            # Disaster banner handling removed
-
-            # Update graph less frequently to reduce matplotlib cost
-            try:
-                if getattr(self, "enable_live_graph", False) and (
-                    self._ui_frame_count % getattr(self, "_ui_frame_skip_graph", 3) == 0
-                ):
-                    self.update_live_graph()
-            except Exception:
-                pass
-
-            # Stop simulation if all populations are zero
-            if all(count == 0 for count in stats.get("species_counts", {}).values()):
-                self.stop_simulation()
-        except Exception:
-            pass
+        self.update_timer = None
 
     # Disaster flash removed
 
@@ -2364,6 +2183,10 @@ class SimulationScreen(QWidget):
                     LogHighlighter(self.log_display.document())
                     layout.addWidget(self.log_display)
 
+            # Prepare line objects cache for efficient updates
+            self._live_lines = {}
+            self._live_last_xlim = (0, 1)
+            self._live_last_ylim = (0, 1)
             # Update graph immediately
             self.update_live_graph()
 
@@ -2458,8 +2281,6 @@ class SimulationScreen(QWidget):
         if self.live_graph_widget is None or not hasattr(self, "live_graph_ax"):
             return
 
-        self.live_graph_ax.clear()
-
         # Get species colors
         colors = {
             "Icefang": "#cce6ff",
@@ -2476,18 +2297,34 @@ class SimulationScreen(QWidget):
             enabled_species = set(
                 self.species_panel.get_enabled_species_populations().keys()
             )
+        # Update or create Line2D objects instead of clearing the axes
+        max_x = 0
+        max_y = 1
         for species_name, history in self.population_data.items():
             if enabled_species and species_name not in enabled_species:
+                # hide line if exists
+                if species_name in self._live_lines:
+                    line = self._live_lines[species_name]
+                    line.set_visible(False)
                 continue
-            if history:
-                time_points = [i * 0.1 for i in range(len(history))]
-                color = colors.get(species_name, "#ffffff")
-                self.live_graph_ax.plot(
-                    time_points,
-                    history,
-                    label=species_name.replace("_", " "),
-                    color=color,
-                )
+            if not history:
+                continue
+            time_points = [i * 0.1 for i in range(len(history))]
+            color = colors.get(species_name, "#ffffff")
+            if species_name not in self._live_lines:
+                # create a new line and add to cache
+                (line,) = self.live_graph_ax.plot(time_points, history, label=species_name.replace("_", " "), color=color)
+                self._live_lines[species_name] = line
+            else:
+                line = self._live_lines[species_name]
+                line.set_xdata(time_points)
+                line.set_ydata(history)
+                line.set_visible(True)
+
+            if len(time_points) > max_x:
+                max_x = len(time_points) * 0.1
+            if max(history) > max_y:
+                max_y = max(history)
 
         self.live_graph_ax.set_facecolor("#1a1a1a")
         self.live_graph_ax.tick_params(colors="#ffffff", labelsize=8)
@@ -2503,7 +2340,26 @@ class SimulationScreen(QWidget):
                 loc="upper right", fontsize=8, facecolor="#1a1a1a", labelcolor="#ffffff"
             )
 
-        self.live_graph_widget.draw()
+        # Adjust axes limits only when needed
+        try:
+            cur_xlim = self.live_graph_ax.get_xlim()
+            cur_ylim = self.live_graph_ax.get_ylim()
+        except Exception:
+            cur_xlim = (0, 1)
+            cur_ylim = (0, 1)
+
+        new_xlim = (0, max(1, max_x))
+        new_ylim = (0, max(1, max_y * 1.1))
+        if new_xlim != cur_xlim:
+            self.live_graph_ax.set_xlim(new_xlim)
+        if new_ylim != cur_ylim:
+            self.live_graph_ax.set_ylim(new_ylim)
+
+        # Draw only the canvas (non-blocking where possible)
+        try:
+            self.live_graph_widget.draw_idle()
+        except Exception:
+            self.live_graph_widget.draw()
         self.update_graph_legend()
 
         # Update log display under the graph
