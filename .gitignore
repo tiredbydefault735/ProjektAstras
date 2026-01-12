@@ -2,4 +2,5 @@
 **/__pycache__
 .clip
 **/pyc
-/build/ProjektAstras
+**/build/ProjektAstras
+**/main.onefile-build

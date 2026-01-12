@@ -174,7 +174,6 @@ def set_language(lang: str):
                     for attr in (
                         "start_screen",
                         "simulation_screen",
-                        "settings_screen",
                     ):
                         obj = getattr(w, attr, None)
                         if obj is not None and hasattr(obj, "update_language"):

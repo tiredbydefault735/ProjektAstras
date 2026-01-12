@@ -14,7 +14,6 @@
     "Todesfälle (Temperatur):": "Todesfälle (Temperatur):",
     "Maximale Clans:": "Maximale Clans:",
     "Futterplätze:": "Futterplätze:",
-    "Naturkatastrophen während der Simulation:": "Naturkatastrophen während der Simulation:",
     "Start": "Start",
     "Ende": "Ende",
     "läuft noch": "läuft noch",
@@ -49,14 +48,7 @@
     "Reset/Stop": "Zurücksetzen/Stop",
 
     "☀️ Tag": "☀️ Tag",
-    "Disaster Severity": "Schwere der Katastrophe",
-    "Force Disaster": "Katastrophe erzwingen",
-    "Forced Disaster": "Erzwungene Katastrophe",
-
-    "⚠️ Dev: {name} forced at center.": "⚠️ Dev: {name} in der Mitte erzwungen.",
-    "Dev: Forced areal disaster started.": "Dev: Erzwungene Flächenkatastrophe gestartet.",
-    "Dev: Force disaster failed: {err}": "Dev: Erzwingen der Katastrophe fehlgeschlagen: {err}",
 
     "🌙 Nacht": "🌙 Nacht",
-    "⚠️ Naturkatastrophe:": "⚠️ Naturkatastrophe:"
+    
 }
