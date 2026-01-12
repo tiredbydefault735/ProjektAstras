@@ -97,10 +97,9 @@ class SimulationMapWidget(QGraphicsView):
         loners_data=None,
         food_sources_data=None,
         transition_progress=1.0,
-        disaster_area=None,
         cell_size=40,
     ):
-        """Zeichne Clans, Loners, Nahrungsplätze und Disaster-Overlay - DIREKTES Rendering."""
+        """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
 
         # Remove all items except the background
         for item in self.scene.items():
@@ -122,24 +121,7 @@ class SimulationMapWidget(QGraphicsView):
         scale_x = width / 1200.0
         scale_y = height / 600.0
 
-        # Draw disaster area as a spreading ellipse/circle if present
-        if disaster_area:
-            cx = disaster_area.get("center_x", 600)  # default center
-            cy = disaster_area.get("center_y", 300)
-            radius = disaster_area.get("radius", 40)
-            x = (cx - radius) * scale_x
-            y = (cy - radius) * scale_y
-            w = 2 * radius * scale_x
-            h = 2 * radius * scale_y
-            ellipse = self.scene.addEllipse(
-                x,
-                y,
-                w,
-                h,
-                pen=QPen(Qt.PenStyle.NoPen),
-                brush=QBrush(QColor(255, 0, 0, 80)),
-            )
-            ellipse.setZValue(5)
+        # Disaster visuals removed
 
         # Zeichne Nahrungsplätze (grüne Kreise)
         if food_sources_data:

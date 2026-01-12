@@ -31,7 +31,16 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QSplitter,
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QRegularExpression
+from PyQt6.QtCore import (
+    Qt,
+    QTimer,
+    QSize,
+    QRegularExpression,
+    pyqtSignal,
+    QObject,
+    QThread,
+)
+import time
 from PyQt6.QtGui import (
     QFont,
     QIcon,
@@ -42,7 +51,7 @@ from PyQt6.QtGui import (
 )
 
 from backend.model import SimulationModel
-from screens.simulation_map import SimulationMapWidget
+from .simulation_map import SimulationMapWidget
 from frontend.i18n import _
 
 
@@ -78,6 +87,7 @@ class LogHighlighter(QSyntaxHighlighter):
     def highlightBlock(self, text: str | None) -> None:
         if not text:
             return
+        # Apply each regex rule to the provided text block
         for rx, fmt in self.rules:
             it = rx.globalMatch(text)
             while it.hasNext():
@@ -85,6 +95,47 @@ class LogHighlighter(QSyntaxHighlighter):
                 start = m.capturedStart()
                 length = m.capturedLength()
                 self.setFormat(start, length, fmt)
+
+
+class SimulationWorker(QObject):
+    """Background worker that runs simulation steps and emits results."""
+
+    stepReady = pyqtSignal(object)
+    finished = pyqtSignal()
+
+    def __init__(self, sim_model, speed=1, interval_ms=100):
+        super().__init__()
+        self.sim_model = sim_model
+        self.speed = max(1, int(speed))
+        self.interval_ms = int(interval_ms)
+        self._running = True
+
+    def set_speed(self, speed):
+        self.speed = max(1, int(speed))
+
+    def stop(self):
+        self._running = False
+
+    def run(self):
+        last = None
+        while self._running and self.sim_model:
+            # Run `speed` simulation steps back-to-back
+            for _ in range(self.speed):
+                if not self._running:
+                    break
+                try:
+                    last = self.sim_model.step()
+                except Exception:
+                    last = None
+            # Emit last step result for UI update
+            if last is not None:
+                try:
+                    self.stepReady.emit(last)
+                except Exception:
+                    pass
+            # Sleep between frames to avoid starving the UI thread
+            QThread.msleep(self.interval_ms)
+        self.finished.emit()
 
 
 class CustomCheckBox(QCheckBox):
@@ -245,20 +296,7 @@ class StatsDialog(QDialog):
         text += f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
         text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
 
-        # Disaster events
-        disasters = stats.get("disasters", [])
-        if disasters:
-            text += (
-                f"<br><br><b>{_('Naturkatastrophen während der Simulation:')}</b><br>"
-            )
-            for d in disasters:
-                start = d.get("start", "?")
-                end = d.get("end", "?")
-                name = d.get("name", "Unbekannt")
-                if end is not None:
-                    text += f"• {name} ({_('Start')}: {start}, {_('Ende')}: {end})<br>"
-                else:
-                    text += f"• {name} ({_('Start')}: {start}, {_('läuft noch')})<br>"
+        # Disaster events removed
 
         stats_text.setText(text)
         # store for language refresh
@@ -286,7 +324,6 @@ class StatsDialog(QDialog):
 
             # Plot population history for each species
             population_history = stats.get("population_history", {})
-            disasters = stats.get("disasters", [])
             if population_history:
                 colors = {
                     "Icefang": "#cce6ff",
@@ -308,38 +345,7 @@ class StatsDialog(QDialog):
                             linewidth=2,
                         )
 
-                # Draw disaster events as vertical lines
-                for d in disasters:
-                    start = d.get("start")
-                    end = d.get("end")
-                    name = d.get("name", "?")
-                    if start is not None:
-                        ax.axvline(
-                            x=start,
-                            color="#ff4444",
-                            linestyle="--",
-                            alpha=0.7,
-                            linewidth=1.5,
-                        )
-                        ax.text(
-                            start,
-                            ax.get_ylim()[1],
-                            f"{name} Start",
-                            color="#ff4444",
-                            fontsize=8,
-                            rotation=90,
-                            va="top",
-                            ha="right",
-                            alpha=0.7,
-                        )
-                    if end is not None:
-                        ax.axvline(
-                            x=end,
-                            color="#ffaa44",
-                            linestyle=":",
-                            alpha=0.7,
-                            linewidth=1.2,
-                        )
+                        # Disaster event plotting removed
                         ax.text(
                             end,
                             ax.get_ylim()[1],
@@ -438,17 +444,7 @@ class StatsDialog(QDialog):
                     f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
                 )
                 text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
-                disasters = stats.get("disasters", [])
-                if disasters:
-                    text += f"<br><br><b>{_('Naturkatastrophen während der Simulation:')}</b><br>"
-                    for d in disasters:
-                        start = d.get("start", "?")
-                        end = d.get("end", "?")
-                        name = d.get("name", "Unbekannt")
-                        if end is not None:
-                            text += f"• {name} ({_('Start')}: {start}, {_('Ende')}: {end})<br>"
-                        else:
-                            text += f"• {name} ({_('Start')}: {start}, {_('läuft noch')})<br>"
+                # Disaster events removed
                 if hasattr(self, "_stats_text") and self._stats_text is not None:
                     try:
                         self._stats_text.setText(text)
@@ -551,6 +547,8 @@ class SpeciesPanel(QWidget):
         self.species_checkboxes = {}
         self.loner_speed_sliders = {}
         self.clan_speed_sliders = {}
+        self.loner_speed_value_labels = {}
+        self.clan_speed_value_labels = {}
         self.member_sliders = {}
         self.member_value_labels = {}
         # Keep label widgets so we can update their text on language change
@@ -615,6 +613,13 @@ class SpeciesPanel(QWidget):
             self.loner_speed_sliders[species_id] = loner_slider
             loner_speed_layout.addWidget(loner_slider)
 
+            loner_speed_value = QLabel("1.0x")
+            loner_speed_value.setFont(loner_speed_label_font)
+            loner_speed_value.setFixedWidth(50)
+            loner_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self.loner_speed_value_labels[species_id] = loner_speed_value
+            loner_speed_layout.addWidget(loner_speed_value)
+
             layout.addLayout(loner_speed_layout)
 
             # Clan speed slider
@@ -635,6 +640,13 @@ class SpeciesPanel(QWidget):
             clan_slider.setValue(5)
             self.clan_speed_sliders[species_id] = clan_slider
             clan_speed_layout.addWidget(clan_slider)
+
+            clan_speed_value = QLabel("1.0x")
+            clan_speed_value.setFont(clan_speed_label_font)
+            clan_speed_value.setFixedWidth(50)
+            clan_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self.clan_speed_value_labels[species_id] = clan_speed_value
+            clan_speed_layout.addWidget(clan_speed_value)
 
             layout.addLayout(clan_speed_layout)
 
@@ -759,6 +771,18 @@ class SpeciesPanel(QWidget):
                 }}
             """
             )
+        # Value labels styling (per-species speed labels)
+        value_style = f"color: {preset.get_color('text_secondary') if preset else '#cccccc'}; background: transparent;"
+        for lbl in self.loner_speed_value_labels.values():
+            try:
+                lbl.setStyleSheet(value_style)
+            except Exception:
+                pass
+        for lbl in self.clan_speed_value_labels.values():
+            try:
+                lbl.setStyleSheet(value_style)
+            except Exception:
+                pass
 
         slider_style = f"""
             QSlider {{
@@ -1382,19 +1406,13 @@ class SimulationScreen(QWidget):
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
+        # Threaded simulation worker
+        self.worker = None
+        self.worker_thread = None
         self.last_stats = None  # Holds stats from the previous simulation
 
-        # Disaster visual placeholder
-        self.disaster_label = QLabel("")
-        disaster_font = QFont("Minecraft", 13, QFont.Weight.Bold)
-        disaster_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.disaster_label.setFont(disaster_font)
-        self.disaster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.disaster_label.setStyleSheet(
-            "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
-        )
-        # Fix a visible height for the disaster banner so layout doesn't shift
-        self.disaster_label.setFixedHeight(60)
+        # Disaster UI removed
+        self.disaster_label = None
         self.log_dialog = None
         self.time_step = 0
         self.log_expanded = False  # Track log expansion state
@@ -1403,6 +1421,14 @@ class SimulationScreen(QWidget):
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
         self.population_data = {}  # Store population history for live graph
         self.live_graph_widget = None  # Widget for live graph, initialized later
+        # Live graph enabled by default
+        self.enable_live_graph = True
+        # UI throttling state
+        self._last_ui_update_time = 0.0
+        self._ui_frame_count = 0
+        self._ui_target_fps = 12  # cap UI updates to 12 FPS
+        self._ui_frame_skip_graph = 3  # update graph every 3 UI frames
+        self._latest_step = None
 
         # Load species config
         json_path = get_static_path("data/species.json")
@@ -1468,8 +1494,7 @@ class SimulationScreen(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
 
-        # Add disaster label at the top
-        left_layout.addWidget(self.disaster_label)
+        # Disaster label removed
 
         self.map_frame = QFrame()
         self.map_frame.setStyleSheet(
@@ -1800,6 +1825,104 @@ class SimulationScreen(QWidget):
                     region_key,
                 )
 
+                # Wire per-species speed sliders to the simulation model.
+                # We compute the average of all species sliders and apply it
+                # as a global multiplier in the refactored backend.
+                def update_global_speeds():
+                    try:
+                        # For each species slider, compute per-species multiplier and
+                        # apply it to the SimulationModel. Also compute averages
+                        # for display in the global labels.
+                        loner_vals = []
+                        clan_vals = []
+                        for sid, s in self.species_panel.loner_speed_sliders.items():
+                            try:
+                                m = s.value() / 5.0
+                                loner_vals.append(m)
+                                # update per-species UI label if present
+                                try:
+                                    lbl = (
+                                        self.species_panel.loner_speed_value_labels.get(
+                                            sid
+                                        )
+                                    )
+                                    if lbl:
+                                        lbl.setText(f"{m:.1f}x")
+                                except Exception:
+                                    pass
+                                if self.sim_model:
+                                    # call per-species setter if available
+                                    try:
+                                        self.sim_model.set_loner_speed_for_species(
+                                            sid, m
+                                        )
+                                    except Exception:
+                                        # fallback to global setter
+                                        self.sim_model.set_loner_speed(m)
+                            except Exception:
+                                continue
+
+                        for sid, s in self.species_panel.clan_speed_sliders.items():
+                            try:
+                                m = s.value() / 5.0
+                                clan_vals.append(m)
+                                # update per-species UI label if present
+                                try:
+                                    lbl = (
+                                        self.species_panel.clan_speed_value_labels.get(
+                                            sid
+                                        )
+                                    )
+                                    if lbl:
+                                        lbl.setText(f"{m:.1f}x")
+                                except Exception:
+                                    pass
+                                if self.sim_model:
+                                    try:
+                                        self.sim_model.set_clan_speed_for_species(
+                                            sid, m
+                                        )
+                                    except Exception:
+                                        self.sim_model.set_clan_speed(m)
+                            except Exception:
+                                continue
+
+                        avg_loner = (
+                            sum(loner_vals) / len(loner_vals) if loner_vals else 1.0
+                        )
+                        avg_clan = sum(clan_vals) / len(clan_vals) if clan_vals else 1.0
+
+                        # Update UI labels
+                        try:
+                            self.loner_speed_value_label.setText(f"{avg_loner:.1f}x")
+                            self.clan_speed_value_label.setText(f"{avg_clan:.1f}x")
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                # Connect signals (use current slider objects to avoid late-binding)
+                for sid, slider in list(self.species_panel.loner_speed_sliders.items()):
+                    try:
+                        slider.valueChanged.connect(
+                            lambda v, s=slider: update_global_speeds()
+                        )
+                    except Exception:
+                        pass
+                for sid, slider in list(self.species_panel.clan_speed_sliders.items()):
+                    try:
+                        slider.valueChanged.connect(
+                            lambda v, s=slider: update_global_speeds()
+                        )
+                    except Exception:
+                        pass
+
+                # Set initial global speeds from current slider positions
+                try:
+                    update_global_speeds()
+                except Exception:
+                    pass
+
                 # Initial disaster severity is managed by the backend; UI control removed.
 
                 # Set region background (still use display name for UI)
@@ -1824,19 +1947,15 @@ class SimulationScreen(QWidget):
             # Resume (oder Start)
             self.is_running = True
             self.btn_play_pause.setText("⏸")
-
-            # Start Update-Timer with speed multiplier
-            if not self.update_timer:
-                self.update_timer = QTimer()
-                self.update_timer.timeout.connect(self.update_simulation_with_speed)
-            self.update_timer.start(100)
+            # Start background simulation worker thread
+            self.start_simulation_worker()
 
     def toggle_play_pause(self):
         """Toggle between play and pause."""
         if self.is_running:
             # Currently running, so pause
-            if self.update_timer:
-                self.update_timer.stop()
+            # stop worker gracefully
+            self.stop_simulation_worker()
             self.is_running = False
             self.btn_play_pause.setText("▶")
             self.btn_play_pause.setStyleSheet(
@@ -1857,9 +1976,8 @@ class SimulationScreen(QWidget):
 
         self.environment_panel.set_controls_enabled(True)
 
-        if self.update_timer:
-            self.update_timer.stop()
-            self.update_timer = None
+        # stop background worker if running
+        self.stop_simulation_worker()
 
         self.is_running = False
         self.btn_play_pause.setText("▶")
@@ -1900,6 +2018,16 @@ class SimulationScreen(QWidget):
         self.btn_speed_1x.setChecked(speed == 1)
         self.btn_speed_2x.setChecked(speed == 2)
         self.btn_speed_5x.setChecked(speed == 5)
+        # Update background worker if running
+        try:
+            if self.worker:
+                # update step rate and interval
+                self.worker.set_speed(self.simulation_speed)
+                self.worker.interval_ms = max(
+                    50, 100 * max(1, int(self.simulation_speed))
+                )
+        except Exception:
+            pass
 
     def on_loner_speed_changed(self, value):
         """Handle loner speed slider change."""
@@ -1935,7 +2063,6 @@ class SimulationScreen(QWidget):
                 data.get("loners", []),
                 data.get("food_sources", []),
                 data.get("transition_progress", 1.0),
-                data.get("disaster_area", None),
             )
             self.time_step = data["time"]
 
@@ -2006,70 +2133,156 @@ class SimulationScreen(QWidget):
                         "color: #8888ff; padding: 0 10px;"
                     )
 
-                # --- Disaster visual update ---
-                # Use the most recent running disaster from stats if available
-                active_disaster = None
-                disasters = stats.get("disasters", [])
-                if disasters:
-                    for d in reversed(disasters):
-                        if d.get("end") is None:
-                            active_disaster = d.get("name")
-                            break
-                if active_disaster:
-                    # Append remaining duration (approx seconds) from DisasterManager if available
-                    remaining_text = ""
-                    try:
-                        dm = getattr(self.sim_model, "disaster_manager", None)
-                        if (
-                            dm is not None
-                            and getattr(dm, "disaster_timer", None) is not None
-                        ):
-                            # Each simulation step is ~0.1s
-                            secs = int(dm.disaster_timer * 0.1)
-                            remaining_text = f" ({secs}s)"
-                    except Exception:
-                        remaining_text = ""
-
-                    self.disaster_label.setText(
-                        f"{_('⚠️ Naturkatastrophe:')} {active_disaster}{remaining_text}"
-                    )
-                    # Start flashing animation if not already running
-                    if self.animation_timer is None:
-                        from PyQt6.QtCore import QTimer
-
-                        self.animation_timer = QTimer(self)
-                        self.animation_timer.timeout.connect(self.flash_disaster_label)
-                        self.animation_timer.start(400)
-                else:
-                    self.disaster_label.setText("")
-                    # Stop flashing animation if running
-                    if self.animation_timer is not None:
-                        self.animation_timer.stop()
-                        self.animation_timer = None
-                        # Reset to default style
-                        self.disaster_label.setStyleSheet(
-                            "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
-                        )
+                # Disaster visuals removed
 
             # --- Stop simulation if all arach are dead ---
             # Check if all populations are zero
             if all(count == 0 for count in stats.get("species_counts", {}).values()):
                 self.stop_simulation()
 
-    def flash_disaster_label(self):
-        # Alternate background color for flashing effect
-        if not self.disaster_label.text():
+    # Background worker management
+    def start_simulation_worker(self):
+        """Create and start the background simulation worker thread."""
+        if not self.sim_model:
             return
-        if getattr(self, "disaster_flash_on", False):
-            self.disaster_label.setStyleSheet(
-                "color: #ff4444; background: #222; border: 2px solid #a00; padding: 8px; margin-bottom: 8px;"
-            )
-        else:
-            self.disaster_label.setStyleSheet(
-                "color: #fff; background: #ff4444; border: 2px solid #fff; padding: 8px; margin-bottom: 8px;"
-            )
+        # If worker already running, update speed
+        if self.worker and self.worker_thread:
+            try:
+                self.worker.set_speed(self.simulation_speed)
+            except Exception:
+                pass
+            return
 
-        self.disaster_flash_on = not getattr(self, "disaster_flash_on", False)
+        # Choose interval proportional to simulation speed so UI is not overloaded
+        interval_ms = max(50, 100 * max(1, int(self.simulation_speed)))
+        self.worker = SimulationWorker(
+            self.sim_model, speed=self.simulation_speed, interval_ms=interval_ms
+        )
+        self.worker_thread = QThread()
+        self.worker.moveToThread(self.worker_thread)
+        # Connect signals
+        self.worker.stepReady.connect(self.on_worker_step)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker_thread.start()
+
+    def stop_simulation_worker(self):
+        """Stop the background worker cleanly."""
+        try:
+            if self.worker:
+                self.worker.stop()
+        except Exception:
+            pass
+        try:
+            if self.worker_thread:
+                self.worker_thread.quit()
+                self.worker_thread.wait(2000)
+        except Exception:
+            pass
+        # clear references
+        self.worker = None
+        self.worker_thread = None
+
+    def on_worker_step(self, data):
+        """Slot called when the worker emits a simulation step result."""
+        try:
+            # Always store the latest data but throttle rendering to UI
+            self._latest_step = data
+            now = time.monotonic()
+            min_dt = 1.0 / max(1, self._ui_target_fps)
+            if now - getattr(self, "_last_ui_update_time", 0.0) < min_dt:
+                return
+            # update last render time and frame counter
+            self._last_ui_update_time = now
+            self._ui_frame_count = getattr(self, "_ui_frame_count", 0) + 1
+
+            stats = data.get("stats", {})
+
+            # Draw map (cached items reuse inside draw_groups)
+            try:
+                self.map_widget.draw_groups(
+                    data["groups"],
+                    data.get("loners", []),
+                    data.get("food_sources", []),
+                    data.get("transition_progress", 1.0),
+                )
+            except Exception:
+                pass
+
+            self.time_step = data["time"]
+            self.simulation_time = self.time_step * 0.1
+
+            # Update population data used by graph (keep latest)
+            population_history = stats.get("population_history", {})
+            if population_history:
+                self.population_data = {
+                    k: list(v) for k, v in population_history.items()
+                }
+
+            # Update logs (only store latest text)
+            logs = data.get("logs", [])
+            if logs:
+                try:
+                    from frontend.i18n import _
+
+                    self.log_text = "\n".join([_(l) for l in logs])
+                except Exception:
+                    self.log_text = "\n".join(logs)
+                if self.log_dialog is not None and self.log_dialog.isVisible():
+                    self.log_dialog.update_log(self.log_text)
+
+            # Update UI elements (timer, temp, day/night)
+            minutes = int(self.simulation_time // 60)
+            seconds = int(self.simulation_time % 60)
+            self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
+
+            is_day = data.get("is_day", True)
+            self.day_night_label.setText("☀️" if is_day else "🌙")
+
+            current_temp = stats.get("temperature", 0)
+            temp_color = (
+                "#88ccff"
+                if current_temp < 0
+                else "#ffcc44" if current_temp > 25 else "#ffffff"
+            )
+            try:
+                from frontend.i18n import _
+
+                self.live_temp_label.setText(_("🌡️ {val}°C").format(val=current_temp))
+            except Exception:
+                self.live_temp_label.setText(f"🌡️ {current_temp}°C")
+            self.live_temp_label.setStyleSheet(f"color: {temp_color}; padding: 0 10px;")
+
+            is_day_ui = stats.get("is_day", True)
+            if is_day_ui:
+                self.live_day_night_label.setText(_("☀️ Tag"))
+                self.live_day_night_label.setStyleSheet(
+                    "color: #ffcc44; padding: 0 10px;"
+                )
+            else:
+                self.live_day_night_label.setText(_("🌙 Nacht"))
+                self.live_day_night_label.setStyleSheet(
+                    "color: #8888ff; padding: 0 10px;"
+                )
+
+            # Disaster banner handling removed
+
+            # Update graph less frequently to reduce matplotlib cost
+            try:
+                if getattr(self, "enable_live_graph", False) and (
+                    self._ui_frame_count % getattr(self, "_ui_frame_skip_graph", 3) == 0
+                ):
+                    self.update_live_graph()
+            except Exception:
+                pass
+
+            # Stop simulation if all populations are zero
+            if all(count == 0 for count in stats.get("species_counts", {}).values()):
+                self.stop_simulation()
+        except Exception:
+            pass
+
+    # Disaster flash removed
 
     def open_log_dialog(self):
         """Open log popup dialog."""
@@ -2086,6 +2299,10 @@ class SimulationScreen(QWidget):
 
     def initialize_live_graph(self):
         """Initialize the live graph widget."""
+        # Skip initialization when live graph is disabled
+        if not getattr(self, "enable_live_graph", False):
+            return
+
         try:
             import matplotlib
 
@@ -2235,6 +2452,9 @@ class SimulationScreen(QWidget):
 
     def update_live_graph(self):
         """Update the live population graph with current data using matplotlib."""
+        # Skip updating when live graph is disabled
+        if not getattr(self, "enable_live_graph", False):
+            return
         if self.live_graph_widget is None or not hasattr(self, "live_graph_ax"):
             return
 
