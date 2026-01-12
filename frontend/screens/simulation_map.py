@@ -100,6 +100,30 @@ class SimulationMapWidget(QGraphicsView):
         cell_size=40,
     ):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
+        # Lightweight change detection: avoid full redraw if nothing changed
+        try:
+            # Create a compact snapshot of positions/counts for quick equality checks
+            snap = (
+                tuple(
+                    (
+                        clan.get("x", 0),
+                        clan.get("y", 0),
+                        clan.get("population", 0),
+                    )
+                    for group in groups_data
+                    for clan in group.get("clans", [])
+                ),
+                tuple((loner.get("x", 0), loner.get("y", 0)) for loner in (loners_data or [])),
+                tuple((f.get("x", 0), f.get("y", 0), f.get("amount", 0)) for f in (food_sources_data or [])),
+                int(transition_progress * 100),
+            )
+        except Exception:
+            snap = None
+
+        if hasattr(self, "_last_snapshot") and self._last_snapshot == snap:
+            # nothing changed since last draw; skip expensive redraw
+            return
+        self._last_snapshot = snap
 
         # Remove all items except the background
         for item in self.scene.items():
