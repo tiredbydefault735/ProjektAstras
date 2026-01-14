@@ -51,1254 +51,14 @@ from backend.model import SimulationModel
 from .simulation_map import SimulationMapWidget
 from frontend.i18n import _
 
-
-class LogHighlighter(QSyntaxHighlighter):
-    """Simple syntax highlighter for log colorization using regex rules."""
-
-    def __init__(self, document):
-        super().__init__(document)
-
-        def fmt(color_hex, bold=False):
-            f = QTextCharFormat()
-            f.setForeground(QColor(color_hex))
-            f.setFontFamily(LOG_FONT_FAMILY)
-            f.setFontPointSize(LOG_FONT_SIZE)
-            if bold:
-                f.setFontWeight(QFont.Weight.Bold)
-            return f
-
-        # Use inline (?i) for case-insensitive matching to avoid enum differences
-        self.rules = [
-            (QRegularExpression(r"(?i)☠️.*verhungert.*"), fmt("#cc3333")),
-            (QRegularExpression(r"(?i)❄️.*Temperatur.*"), fmt("#99ddff")),
-            (QRegularExpression(r"(?i)stirbt an Temperatur"), fmt("#ff9999")),
-            (QRegularExpression(r"(?i)🍽️|🍖|\bisst\b"), fmt("#cd853f")),
-            (QRegularExpression(r"(?i)👥.*tritt.*bei"), fmt("#bb88ff")),
-            (QRegularExpression(r"(?i)verlässt|verlassen"), fmt("#ff9944")),
-            (QRegularExpression(r"(?i)⚔️|💀"), fmt("#ff6666")),
-            (QRegularExpression(r"(?i)🌡️"), fmt("#66ccff")),
-            (QRegularExpression(r"(?i)☀️"), fmt("#ffdd44")),
-            (QRegularExpression(r"(?i)🌙"), fmt("#aa88ff")),
-        ]
-
-    def highlightBlock(self, text: str | None) -> None:
-        if not text:
-            return
-        # Apply each regex rule to the provided text block
-        for rx, fmt in self.rules:
-            it = rx.globalMatch(text)
-            while it.hasNext():
-                m = it.next()
-                start = m.capturedStart()
-                length = m.capturedLength()
-                self.setFormat(start, length, fmt)
-
-
-# Background worker removed. Main UI now uses QTimer and batches steps per tick.
-
-
-class CustomCheckBox(QCheckBox):
-    """Custom checkbox that draws image directly."""
-
-    def __init__(self, text, unchecked_path, checked_path, parent=None):
-        super().__init__(text, parent)
-        self.unchecked_pixmap = QPixmap(unchecked_path)
-        self.checked_pixmap = QPixmap(checked_path)
-
-        # Scale pixmaps to 20x20 if needed
-        if not self.unchecked_pixmap.isNull():
-            self.unchecked_pixmap = self.unchecked_pixmap.scaled(
-                20,
-                20,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        if not self.checked_pixmap.isNull():
-            self.checked_pixmap = self.checked_pixmap.scaled(
-                20,
-                20,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-
-        # Hide default indicator and add spacing for our custom image
-        self.setStyleSheet(
-            """
-            QCheckBox {
-                spacing: 30px;
-            }
-            QCheckBox::indicator {
-                width: 0px;
-                height: 0px;
-            }
-        """
-        )
-        self.setMinimumHeight(28)
-
-    def paintEvent(self, a0):
-        super().paintEvent(a0)
-        from PyQt6.QtGui import QPainter
-
-        painter = QPainter(self)
-
-        # Draw checkbox image at left position
-        pixmap = self.checked_pixmap if self.isChecked() else self.unchecked_pixmap
-        if not pixmap.isNull():
-            painter.drawPixmap(0, (self.height() - 20) // 2, pixmap)
-
-        painter.end()
-
-
-class CustomImageButton(QPushButton):
-    """Button that draws a centered image; supports checked state with optional alternate image."""
-
-    def __init__(self, image_path, checked_image_path=None, parent=None, size=36):
-        super().__init__(parent)
-        self.pixmap = QPixmap(image_path)
-        self.checked_pixmap = (
-            QPixmap(checked_image_path) if checked_image_path else None
-        )
-        self.setCheckable(True)
-        self.setFixedSize(size, size)
-        self.setStyleSheet("border: none; background: transparent;")
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        from PyQt6.QtGui import QPainter
-
-        painter = QPainter(self)
-        pix = (
-            self.checked_pixmap
-            if (self.isChecked() and self.checked_pixmap)
-            else self.pixmap
-        )
-        if not pix.isNull():
-            scaled = pix.scaled(
-                max(4, self.width() - 8),
-                max(4, self.height() - 8),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            x = (self.width() - scaled.width()) // 2
-            y = (self.height() - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
-
-        painter.end()
-
-
-class StatsDialog(QDialog):
-    """Popup dialog to display final simulation statistics."""
-
-    def __init__(self, stats, parent=None):
-        super().__init__(parent)
-        try:
-            from frontend.i18n import _
-
-            self.setWindowTitle(_("Simulations-Statistiken"))
-        except Exception:
-            self.setWindowTitle("Simulations-Statistiken")
-        # keep stats so we can refresh text when language changes
-        self._stats = stats
-        self.setModal(True)
-        self.resize(900, 500)
-
-        # Set dark theme
-        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
-
-        # Title
-        title = QLabel(_("Simulations-Statistiken (5 Minuten)"))
-        title_font = QFont("Minecraft", 16, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #ffffff;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(title)
-
-        # Horizontal layout for text and graph
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(20)
-
-        # Left side: Stats text
-        stats_text = QLabel()
-        stats_font = QFont("Minecraft", 11)
-        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        stats_text.setFont(stats_font)
-        stats_text.setWordWrap(True)
-        stats_text.setStyleSheet("color: #ffffff; padding: 10px;")
-        stats_text.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # Build stats string (each section added once, loops separate)
-        text = "<b>" + _("Spezies im Spiel:") + "</b><br>"
-        for species, count in stats.get("species_counts", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Combat deaths
-        text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("combat", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Starvation deaths
-        text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("starvation", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Temperature deaths
-        text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("temperature", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Summary numbers
-        text += f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
-        text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
-
-        # Disaster events removed
-
-        stats_text.setText(text)
-        # store for language refresh
-        self._stats_text = stats_text
-        # Register listener so dialog updates if language changes while open
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self._refresh_texts)
-        except Exception:
-            pass
-        content_layout.addWidget(stats_text, 1)
-
-        # Right side: Population graph
-        try:
-            import matplotlib
-
-            matplotlib.use("QtAgg")  # Ensure Qt backend is used
-            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-            from matplotlib.figure import Figure
-
-            fig = Figure(figsize=(6, 4), facecolor="#1a1a1a")
-            canvas = FigureCanvasQTAgg(fig)
-            ax = fig.add_subplot(111)
-
-            # Plot population history for each species
-            population_history = stats.get("population_history", {})
-            if population_history:
-                colors = {
-                    "Icefang": "#cce6ff",
-                    "Crushed_Critters": "#cc9966",
-                    "Spores": "#66cc66",
-                    "The_Corrupted": "#cc66cc",
-                }
-
-                for species, history in population_history.items():
-                    if history:  # Only plot if there's data
-                        time_points = [i * 10 for i in range(len(history))]
-                        ax.plot(
-                            time_points,
-                            history,
-                            label=species,
-                            color=colors.get(species, "#ffffff"),
-                            linewidth=2,
-                        )
-
-                ax.set_xlabel("Zeit (Steps)", color="#ffffff", fontsize=10)
-                ax.set_ylabel("Population", color="#ffffff", fontsize=10)
-                ax.set_title(
-                    "Population im Zeitverlauf", color="#ffffff", fontsize=12, pad=10
-                )
-                ax.legend(
-                    loc="best",
-                    facecolor="#2a2a2a",
-                    edgecolor="#666666",
-                    labelcolor="#ffffff",
-                    fontsize=9,
-                )
-                ax.set_facecolor("#2a2a2a")
-                ax.tick_params(colors="#ffffff", labelsize=8)
-                ax.spines["bottom"].set_color("#666666")
-                ax.spines["top"].set_color("#666666")
-                ax.spines["left"].set_color("#666666")
-                ax.spines["right"].set_color("#666666")
-                ax.grid(True, alpha=0.2, color="#666666")
-
-                fig.tight_layout()
-
-            content_layout.addWidget(canvas, 2)
-        except ImportError:
-            # Fallback if matplotlib not available
-            no_graph_label = QLabel(_("Graph nicht verfügbar\n(matplotlib benötigt)"))
-            no_graph_label.setStyleSheet("color: #999999;")
-            no_graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            content_layout.addWidget(no_graph_label, 2)
-
-        main_layout.addLayout(content_layout)
-
-        # Close button
-        close_btn = QPushButton(_("Schließen"))
-        close_btn_font = QFont("Minecraft", 12)
-        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        close_btn.setFont(close_btn_font)
-        close_btn.setFixedHeight(40)
-        close_btn.setStyleSheet(
-            "background-color: #444444; color: #ffffff; "
-            "border: 2px solid #666666; padding: 5px;"
-        )
-        close_btn.clicked.connect(self.close)
-        main_layout.addWidget(close_btn)
-
-    def _refresh_texts(self):
-        """Rebuild localized strings for the dialog when language changes."""
-        try:
-            from frontend.i18n import _
-
-            # window title
-            try:
-                self.setWindowTitle(_("Simulations-Statistiken"))
-            except Exception:
-                pass
-            # title (first QLabel added in layout)
-            try:
-                # title is the first widget in the main layout
-                title_widget = self.findChild(QLabel)
-                if title_widget is not None:
-                    title_widget.setText(_("Simulations-Statistiken (5 Minuten)"))
-            except Exception:
-                pass
-            # rebuild the main text area using stored stats
-            try:
-                stats = getattr(self, "_stats", {})
-                text = "<b>" + _("Spezies im Spiel:") + "</b><br>"
-                for species, count in stats.get("species_counts", {}).items():
-                    text += f"• {species}: {count}<br>"
-                text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
-                for species, count in stats.get("deaths", {}).get("combat", {}).items():
-                    text += f"• {species}: {count}<br>"
-                text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
-                for species, count in (
-                    stats.get("deaths", {}).get("starvation", {}).items()
-                ):
-                    text += f"• {species}: {count}<br>"
-                text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
-                for species, count in (
-                    stats.get("deaths", {}).get("temperature", {}).items()
-                ):
-                    text += f"• {species}: {count}<br>"
-                text += (
-                    f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
-                )
-                text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
-                # Disaster events removed
-                if hasattr(self, "_stats_text") and self._stats_text is not None:
-                    try:
-                        self._stats_text.setText(text)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-        except Exception:
-            pass
-
-
-class LogDialog(QDialog):
-    """Popup dialog to display simulation logs."""
-
-    def __init__(self, log_text, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(_("Simulation Logs"))
-        self.setModal(False)
-        self.resize(600, 400)
-
-        # Set dark theme
-        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        # Title
-        title = QLabel(_("Simulation Logs"))
-        title_font = QFont("Minecraft", 14)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #ffffff; font-weight: bold;")
-        layout.addWidget(title)
-
-        # Text area with scroll (use QPlainTextEdit for performance)
-        self.text_edit = QPlainTextEdit()
-        self.text_edit.setReadOnly(True)
-        text_font = QFont(LOG_FONT_FAMILY, LOG_FONT_SIZE)
-        text_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.text_edit.setFont(text_font)
-        self.text_edit.setStyleSheet(
-            f"background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px;"
-        )
-        # Enable word wrapping and scrolling
-        self.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        # Populate plain text and attach highlighter for colorization
-        self.text_edit.setPlainText(log_text)
-        LogHighlighter(self.text_edit.document())
-        layout.addWidget(self.text_edit)
-
-        # Close button
-        close_btn = QPushButton(_("Schließen"))
-        close_btn_font = QFont("Minecraft", 12)
-        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        close_btn.setFont(close_btn_font)
-        close_btn.setStyleSheet(
-            "background-color: #444444; color: #ffffff; "
-            "border: 2px solid #666666; padding: 5px;"
-        )
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
-
-    def colorize_logs(self, log_text):
-        """Return plain log text. Coloring is handled by QSyntaxHighlighter."""
-        if not log_text:
-            return ""
-
-        # Keep as plain text; LogHighlighter applies formats to the document.
-        return log_text
-
-    def update_log(self, log_text):
-        """Update the log text in the dialog."""
-        scrollbar = self.text_edit.verticalScrollBar()
-        was_at_bottom = False
-        if scrollbar is not None:
-            was_at_bottom = (
-                scrollbar.value() >= scrollbar.maximum() - 10
-            )  # 10px threshold
-
-        # Replace plain text; highlighter will reformat visually
-        self.text_edit.setPlainText(self.colorize_logs(log_text))
-
-        # Force scrollbar update
-        self.text_edit.ensureCursorVisible()
-
-        # Only auto-scroll if user was already at the bottom
-        if scrollbar is not None and was_at_bottom:
-            scrollbar.setValue(scrollbar.maximum())
-
-
-class SpeciesPanel(QWidget):
-    """Species panel: subspecies controls."""
-
-    def __init__(self, species_config, color_preset=None):
-        super().__init__()
-        self.color_preset = color_preset
-        self.species_config = species_config
-        self.species_checkboxes = {}
-        self.loner_speed_sliders = {}
-        self.clan_speed_sliders = {}
-        self.loner_speed_value_labels = {}
-        self.clan_speed_value_labels = {}
-        self.member_sliders = {}
-        self.member_value_labels = {}
-        # Keep label widgets so we can update their text on language change
-        self.loner_speed_labels = {}
-        self.clan_speed_labels = {}
-        self.member_labels = {}
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 15, 10, 10)
-        layout.setSpacing(12)
-
-        # Title
-        self.title = QLabel(_("Spezies"))
-        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.title.setFont(title_font)
-        layout.addWidget(self.title)
-
-        # Create entry for each species
-        species_names = {
-            "Icefang": "Icefang",
-            "Crushed_Critters": "Crushed Critters",
-            "Spores": "Spores",
-            "The_Corrupted": "The Corrupted",
-        }
-
-        for species_id, display_name in species_names.items():
-            # Checkbox for enable/disable with custom icons
-            unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
-            checked_path = str(get_static_path("ui/Checkbox_checked.png"))
-            # Debug logging removed: debug_log does not exist
-            print(
-                f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
-            )
-
-            checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
-            checkbox_font = QFont("Minecraft", 12)
-            checkbox_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            checkbox.setFont(checkbox_font)
-            checkbox.setChecked(True)
-            self.species_checkboxes[species_id] = checkbox
-            layout.addWidget(checkbox)
-
-            # Loner speed slider
-            loner_speed_layout = QHBoxLayout()
-            loner_speed_layout.setSpacing(5)
-
-            loner_speed_label = QLabel(_("Loner Speed:"))
-            loner_speed_label_font = QFont("Minecraft", 11)
-            loner_speed_label_font.setLetterSpacing(
-                QFont.SpacingType.AbsoluteSpacing, 1
-            )
-            loner_speed_label.setFont(loner_speed_label_font)
-            loner_speed_label.setFixedWidth(110)
-            self.loner_speed_labels[species_id] = loner_speed_label
-            loner_speed_layout.addWidget(loner_speed_label)
-
-            loner_slider = QSlider(Qt.Orientation.Horizontal)
-            loner_slider.setMinimum(1)
-            loner_slider.setMaximum(10)
-            loner_slider.setValue(5)
-            self.loner_speed_sliders[species_id] = loner_slider
-            loner_speed_layout.addWidget(loner_slider)
-
-            loner_speed_value = QLabel("1.0x")
-            loner_speed_value.setFont(loner_speed_label_font)
-            loner_speed_value.setFixedWidth(50)
-            loner_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
-            self.loner_speed_value_labels[species_id] = loner_speed_value
-            loner_speed_layout.addWidget(loner_speed_value)
-
-            layout.addLayout(loner_speed_layout)
-
-            # Clan speed slider
-            clan_speed_layout = QHBoxLayout()
-            clan_speed_layout.setSpacing(5)
-
-            clan_speed_label = QLabel(_("Clan Speed:"))
-            clan_speed_label_font = QFont("Minecraft", 11)
-            clan_speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            clan_speed_label.setFont(clan_speed_label_font)
-            clan_speed_label.setFixedWidth(110)
-            self.clan_speed_labels[species_id] = clan_speed_label
-            clan_speed_layout.addWidget(clan_speed_label)
-
-            clan_slider = QSlider(Qt.Orientation.Horizontal)
-            clan_slider.setMinimum(1)
-            clan_slider.setMaximum(10)
-            clan_slider.setValue(5)
-            self.clan_speed_sliders[species_id] = clan_slider
-            clan_speed_layout.addWidget(clan_slider)
-
-            clan_speed_value = QLabel("1.0x")
-            clan_speed_value.setFont(clan_speed_label_font)
-            clan_speed_value.setFixedWidth(50)
-            clan_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight)
-            self.clan_speed_value_labels[species_id] = clan_speed_value
-            clan_speed_layout.addWidget(clan_speed_value)
-
-            layout.addLayout(clan_speed_layout)
-
-            # Member slider with value display
-            member_layout = QHBoxLayout()
-            member_layout.setSpacing(5)
-
-            member_label = QLabel(_("Mitglieder:"))
-            member_label_font = QFont("Minecraft", 11)
-            member_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            member_label.setFont(member_label_font)
-            member_label.setFixedWidth(110)
-            self.member_labels[species_id] = member_label
-            member_layout.addWidget(member_label)
-
-            member_value_label = QLabel("5")
-            member_value_font = QFont("Minecraft", 11)
-            member_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            member_value_label.setFont(member_value_font)
-            member_value_label.setFixedWidth(30)
-            member_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            self.member_value_labels[species_id] = member_value_label
-            member_layout.addWidget(member_value_label)
-
-            member_slider = QSlider(Qt.Orientation.Horizontal)
-            member_slider.setMinimum(0)
-            member_slider.setMaximum(20)
-            member_slider.setValue(5)
-            member_slider.valueChanged.connect(
-                lambda value, sid=species_id: self.update_member_value(sid, value)
-            )
-            self.member_sliders[species_id] = member_slider
-            member_layout.addWidget(member_slider)
-
-            layout.addLayout(member_layout)
-
-            # Add spacing between species
-            layout.addSpacing(25)
-
-        layout.addStretch()
-        self.setLayout(layout)
-        self.update_theme(self.color_preset)
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self.update_language)
-        except Exception:
-            pass
-
-    # Note: EnvironmentPanel handles its own language updates.
-
-    def update_language(self):
-        """Update UI texts when language changes."""
-        try:
-            from frontend.i18n import _
-
-            if hasattr(self, "title"):
-                self.title.setText(_("Spezies"))
-            # species subtitle removed
-            # Update per-species labels (loner/clan/member)
-            try:
-                for sid in self.species_checkboxes.keys():
-                    if sid in self.loner_speed_labels:
-                        self.loner_speed_labels[sid].setText(_("Loner Speed:"))
-                    if sid in self.clan_speed_labels:
-                        self.clan_speed_labels[sid].setText(_("Clan Speed:"))
-                    if sid in self.member_labels:
-                        self.member_labels[sid].setText(_("Mitglieder:"))
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def update_member_value(self, species_id, value):
-        """Update the member value label when slider changes."""
-        if species_id in self.member_value_labels:
-            self.member_value_labels[species_id].setText(str(value))
-
-    def get_enabled_species_populations(self):
-        """Get populations for enabled species based on member sliders."""
-        populations = {}
-        for species_id, checkbox in self.species_checkboxes.items():
-            if checkbox.isChecked():
-                populations[species_id] = self.member_sliders[species_id].value()
-        return populations
-
-    def update_theme(self, preset):
-        """Update inline styles for the species panel."""
-        self.color_preset = preset
-        bg = preset.get_color("bg_primary") if preset else "#1a1a1a"
-        border = preset.get_color("border_light") if preset else "#666666"
-        text = preset.get_color("text_primary") if preset else "#ffffff"
-        accent = preset.get_color("accent_primary") if preset else "#cc0000"
-        # Additional fallbacks used below to avoid calling preset.get_color when preset is None
-        bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
-        text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
-
-        # Panel background (no border for cleaner look)
-        self.setStyleSheet(f"background-color: {bg}; border: none;")
-
-        # Text elements
-        self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # species subtitle removed; no styling required
-
-        # Style checkboxes and sliders
-        for checkbox in self.species_checkboxes.values():
-            checkbox.setStyleSheet(
-                f"""
-                QCheckBox {{
-                    color: {text};
-                    background: transparent;
-                    spacing: 8px;
-                }}
-                QCheckBox::indicator {{
-                    width: 18px;
-                    height: 18px;
-                    border: none;
-                    background-color: {bg_tertiary};
-                }}
-                QCheckBox::indicator:checked {{
-                    background-color: {accent};
-                }}
-            """
-            )
-        # Value labels styling (per-species speed labels)
-        value_style = f"color: {preset.get_color('text_secondary') if preset else '#cccccc'}; background: transparent;"
-        for lbl in self.loner_speed_value_labels.values():
-            try:
-                lbl.setStyleSheet(value_style)
-            except Exception:
-                pass
-        for lbl in self.clan_speed_value_labels.values():
-            try:
-                lbl.setStyleSheet(value_style)
-            except Exception:
-                pass
-
-        slider_style = f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-
-        for slider in self.loner_speed_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-        for slider in self.clan_speed_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-        for slider in self.member_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-
-class EnvironmentPanel(QWidget):
-    """Region panel: environment controls."""
-
-    def __init__(
-        self,
-        color_preset=None,
-        map_widget=None,
-        species_config=None,
-        species_panel=None,
-    ):
-        super().__init__()
-        self.color_preset = color_preset
-        self.map_widget = map_widget  # Reference to map widget for updating background
-        self.species_config = species_config  # Reference to species config
-        self.species_panel = (
-            species_panel  # Reference to species panel for checkbox control
-        )
-        self.current_food_level = 5  # Default food level (1-10)
-
-        # Load region config for temperature ranges
-        self.region_config = {}
-        try:
-            region_json_path = get_static_path("data/region.json")
-            with open(region_json_path, "r") as f:
-                self.region_config = json.load(f)
-        except Exception as e:
-            print(f"Warning: Could not load region.json: {e}")
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
-
-        # Title
-        self.title = QLabel(_("Region"))
-        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.title.setFont(title_font)
-        layout.addWidget(self.title)
-
-        # Region Selection (subtitle removed; only title + combo)
-
-        from PyQt6.QtWidgets import QComboBox
-
-        self.region_combo = QComboBox()
-        self.region_combo.addItems(
-            ["Snowy Abyss", "Wasteland", "Evergreen Forest", "Corrupted Caves"]
-        )
-        self.region_combo.setFixedHeight(30)
-        self.region_combo.currentTextChanged.connect(self.on_region_changed)
-        layout.addWidget(self.region_combo)
-
-        # Store region name to key mapping
-        self.region_name_to_key = {
-            "Snowy Abyss": "Snowy_Abyss",
-            "Wasteland": "Wasteland",
-            "Evergreen Forest": "Evergreen_Forest",
-            "Corrupted Caves": "Corrupted_Caves",
-        }
-
-        # Temperature Section
-        self.temp_label = QLabel(_("Temperatur:"))
-        temp_label_font = QFont("Minecraft", 12)
-        temp_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.temp_label.setFont(temp_label_font)
-        layout.addWidget(self.temp_label)
-
-        self.temp_slider = QSlider(Qt.Orientation.Horizontal)
-        self.temp_slider.setMinimum(-50)
-        self.temp_slider.setMaximum(50)
-        self.temp_slider.setValue(20)
-        layout.addWidget(self.temp_slider)
-
-        self.temp_value_label = QLabel(_("Temp: 20 C°"))
-        temp_value_font = QFont("Minecraft", 11)
-        temp_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.temp_value_label.setFont(temp_value_font)
-        self.temp_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.temp_slider.valueChanged.connect(self.on_temp_value_changed)
-        layout.addWidget(self.temp_value_label)
-
-        # Set initial temperature range based on default region (Snowy Abyss)
-        self.update_temperature_range("Snowy Abyss")
-
-        # Food Section
-        self.food_label_title = QLabel(_("Nahrung:"))
-        food_title_font = QFont("Minecraft", 12)
-        food_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_label_title.setFont(food_title_font)
-        layout.addWidget(self.food_label_title)
-
-        # Anzahl Nahrungsplätze
-        # Food Level Label (missing initialization fix)
-        self.food_label = QLabel("1/10")
-        food_label_font = QFont("Minecraft", 11)
-        food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_label.setFont(food_label_font)
-        layout.addWidget(self.food_label)
-        self.food_places_label = QLabel(_("Nahrungsplätze: 5"))
-        food_places_font = QFont("Minecraft", 11)
-        food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_places_label.setFont(food_places_font)
-        layout.addWidget(self.food_places_label)
-
-        self.food_places_slider = QSlider(Qt.Orientation.Horizontal)
-        self.food_places_slider.setMinimum(1)
-        self.food_places_slider.setMaximum(10)
-        self.food_places_slider.setValue(5)
-        self.food_places_slider.valueChanged.connect(
-            lambda v: self.food_places_label.setText(
-                _("Nahrungsplätze: {v}").format(v=v)
-            )
-        )
-        layout.addWidget(self.food_places_slider)
-
-        # Nahrungsmenge pro Platz
-        self.food_amount_label = QLabel(_("Nahrungsmenge: 50"))
-        food_amount_font = QFont("Minecraft", 11)
-        food_amount_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_amount_label.setFont(food_amount_font)
-        layout.addWidget(self.food_amount_label)
-
-        self.food_amount_slider = QSlider(Qt.Orientation.Horizontal)
-        self.food_amount_slider.setMinimum(10)
-        self.food_amount_slider.setMaximum(200)
-        self.food_amount_slider.setValue(50)
-        self.food_amount_slider.valueChanged.connect(
-            lambda v: self.food_amount_label.setText(
-                _("Nahrungsmenge: {v}").format(v=v)
-            )
-        )
-        layout.addWidget(self.food_amount_slider)
-
-        # Day/Night Section
-        self.day_night_label = QLabel(_("Tag - Nacht:"))
-        day_night_label_font = QFont("Minecraft", 12)
-        day_night_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.day_night_label.setFont(day_night_label_font)
-        layout.addWidget(self.day_night_label)
-
-        day_night_layout = QHBoxLayout()
-        day_night_layout.setSpacing(5)
-
-        day_btn = QPushButton(_("Tag"))
-        day_btn_font = QFont("Minecraft", 11)
-        day_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        day_btn.setFont(day_btn_font)
-        day_btn.setFixedHeight(30)
-        day_btn.setCheckable(True)
-        day_btn.setChecked(True)
-        day_btn.clicked.connect(lambda: self.on_day_night_toggle(True))
-        day_night_layout.addWidget(day_btn)
-
-        night_btn = QPushButton(_("Nacht"))
-        night_btn_font = QFont("Minecraft", 11)
-        night_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        night_btn.setFont(night_btn_font)
-        night_btn.setFixedHeight(30)
-        night_btn.setCheckable(True)
-        night_btn.clicked.connect(lambda: self.on_day_night_toggle(False))
-        day_night_layout.addWidget(night_btn)
-
-        self.day_btn = day_btn
-        self.night_btn = night_btn
-        self.start_is_day = True  # Default: Start bei Tag
-
-        layout.addLayout(day_night_layout)
-
-        layout.addStretch()
-
-        self.setLayout(layout)
-        self.update_theme(self.color_preset)
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self.update_language)
-        except Exception:
-            pass
-
-    def on_day_night_toggle(self, is_day):
-        """Toggle between day and night mode."""
-        self.start_is_day = is_day
-        if is_day:
-            self.day_btn.setChecked(True)
-            self.night_btn.setChecked(False)
-        else:
-            self.day_btn.setChecked(False)
-            self.night_btn.setChecked(True)
-
-    def on_region_changed(self, region_name):
-        """Called when region selection changes."""
-        if self.map_widget:
-            self.map_widget.set_region(region_name)
-        # Update temperature slider range based on region
-        self.update_temperature_range(region_name)
-        # Update species checkboxes based on region temperature compatibility
-        self.update_species_compatibility(region_name)
-
-    def update_temperature_range(self, region_name):
-        """Update temperature slider min/max based on selected region."""
-        # Convert display name to JSON key
-        region_key = self.region_name_to_key.get(region_name, "Wasteland")
-
-        if region_key in self.region_config:
-            region_data = self.region_config[region_key]
-            min_temp = region_data.get("min_temp", -50)
-            max_temp = region_data.get("max_temp", 50)
-
-            # Update slider range
-            self.temp_slider.setMinimum(min_temp)
-            self.temp_slider.setMaximum(max_temp)
-
-            # Set value to middle of range
-            mid_temp = (min_temp + max_temp) // 2
-            self.temp_slider.setValue(mid_temp)
-
-            # Update label with range info
-            # Use translatable template for temperature display
-            try:
-                from frontend.i18n import _
-
-                self.temp_value_label.setText(
-                    _("Temp: {value} C° ({min} bis {max})").format(
-                        value=mid_temp, min=min_temp, max=max_temp
-                    )
-                )
-            except Exception:
-                self.temp_value_label.setText(
-                    f"Temp: {mid_temp} C° ({min_temp} bis {max_temp})"
-                )
-
-    def on_temp_value_changed(self, value):
-        """Update label when temperature slider value changes."""
-        min_temp = self.temp_slider.minimum()
-        max_temp = self.temp_slider.maximum()
-        try:
-            from frontend.i18n import _
-
-            self.temp_value_label.setText(
-                _("Temp: {value} C° ({min} bis {max})").format(
-                    value=value, min=min_temp, max=max_temp
-                )
-            )
-        except Exception:
-            self.temp_value_label.setText(
-                f"Temp: {value} C° ({min_temp} bis {max_temp})"
-            )
-        # Update species compatibility based on selected temperature
-        self.update_species_compatibility_by_temp(value)
-
-    def update_species_compatibility(self, region_name):
-        """Enable/disable species checkboxes based on region temperature compatibility."""
-        if not self.species_panel or not self.species_config:
-            return
-
-        # Get region temperature range
-        region_key = self.region_name_to_key.get(region_name, "Wasteland")
-        if region_key not in self.region_config:
-            return
-
-        region_data = self.region_config[region_key]
-        region_min_temp = region_data.get("min_temp", -50)
-        region_max_temp = region_data.get("max_temp", 50)
-
-        # Check each species
-        for species_id, checkbox in self.species_panel.species_checkboxes.items():
-            if species_id in self.species_config:
-                species_data = self.species_config[species_id]
-                species_min_temp = species_data.get("min_survival_temp", -100)
-                species_max_temp = species_data.get("max_survival_temp", 100)
-
-                # Check if species can survive in this region's temperature range
-                # Species can survive if there's ANY overlap between region temp and survival temp
-                can_survive = not (
-                    region_max_temp < species_min_temp
-                    or region_min_temp > species_max_temp
-                )
-
-                if not can_survive:
-                    # Disable and uncheck species that can't survive
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
-                else:
-                    # Enable species that can survive
-                    checkbox.setEnabled(True)
-                    # Reset style (will be updated by update_theme)
-
-    def update_species_compatibility_by_temp(self, temperature):
-        """Enable/disable species checkboxes based on specific temperature."""
-        if not self.species_panel or not self.species_config:
-            return
-
-        # Check each species
-        for species_id, checkbox in self.species_panel.species_checkboxes.items():
-            if species_id in self.species_config:
-                species_data = self.species_config[species_id]
-                species_min_temp = species_data.get("min_survival_temp", -100)
-                species_max_temp = species_data.get("max_survival_temp", 100)
-
-                # Check if species can survive at this specific temperature
-                can_survive = species_min_temp <= temperature <= species_max_temp
-
-                if not can_survive:
-                    # Disable and uncheck species that can't survive
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
-                else:
-                    # Enable and auto-check species that can survive
-                    checkbox.setEnabled(True)
-                    checkbox.setChecked(True)
-                    # Reset style (will be updated by update_theme)
-
-    def set_species_panel(self, species_panel):
-        """Set reference to species panel after it's created."""
-        self.species_panel = species_panel
-
-    def increase_food(self):
-        """Increase food level."""
-        self.current_food_level = min(10, self.current_food_level + 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
-
-    def decrease_food(self):
-        """Decrease food level."""
-        self.current_food_level = max(1, self.current_food_level - 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
-
-    def get_selected_region(self):
-        """Get currently selected region."""
-        return self.region_combo.currentText()
-
-    def get_temperature(self):
-        """Get current temperature value."""
-        return self.temp_slider.value()
-
-    def get_food_places(self):
-        """Get number of food places."""
-        return self.food_places_slider.value()
-
-    def get_food_amount(self):
-        """Get food amount per place."""
-        return self.food_amount_slider.value()
-
-    def get_is_day(self):
-        """Get day/night state."""
-        return self.day_btn.isChecked()
-
-    def set_controls_enabled(self, enabled):
-        """Enable/disable region selection (only before simulation starts)."""
-        self.region_combo.setEnabled(enabled)
-
-    def update_theme(self, preset):
-        """Update inline styles for the environment panel."""
-        self.color_preset = preset
-        bg = preset.get_color("bg_primary") if preset else "#1a1a1a"
-        border = preset.get_color("border_light") if preset else "#666666"
-        text = preset.get_color("text_primary") if preset else "#ffffff"
-        accent = preset.get_color("accent_primary") if preset else "#cc0000"
-        bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
-        text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
-
-        # Panel background (no border for cleaner look)
-        self.setStyleSheet(f"background-color: {bg}; border: none;")
-
-        # Text elements
-        self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # region subtitle removed; no styling required
-        self.temp_label.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-        self.temp_value_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.food_label_title.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-        self.food_places_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.food_amount_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.day_night_label.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-
-        # Style sliders (temp, food_places, food_amount)
-        slider_style = f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-        self.temp_slider.setStyleSheet(slider_style)
-        self.food_places_slider.setStyleSheet(slider_style)
-        self.food_amount_slider.setStyleSheet(
-            f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-        )
-
-        # Style combobox
-        combo_style = f"""
-            QComboBox {{
-                background-color: {bg_tertiary};
-                color: {text};
-                border: 1px solid {border};
-                padding: 5px;
-            }}
-            QComboBox::drop-down {{
-                border: none;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid {text};
-                margin-right: 5px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {bg_tertiary};
-                color: {text};
-                selection-background-color: {accent};
-            }}
-        """
-        self.region_combo.setStyleSheet(combo_style)
-
-        # Style buttons
-        button_style = f"""
-            QPushButton {{
-                background-color: {bg_tertiary};
-                color: {text};
-                border: none;
-                padding: 5px;
-            }}
-            QPushButton:hover {{
-                background-color: {accent};
-            }}
-            QPushButton:checked {{
-                background-color: {accent};
-            }}
-        """
-        self.day_btn.setStyleSheet(button_style)
-        self.night_btn.setStyleSheet(button_style)
-
-    def update_language(self):
-        """Update UI texts for environment panel when language changes."""
-        try:
-            from frontend.i18n import _
-
-            if hasattr(self, "title"):
-                self.title.setText(_("Region"))
-            # Region subtitle removed; nothing to update here
-            if hasattr(self, "temp_label"):
-                self.temp_label.setText(_("Temperatur:"))
-            if hasattr(self, "food_label_title"):
-                self.food_label_title.setText(_("Nahrung:"))
-            # Update dynamic numeric labels to use translated templates
-            try:
-                if hasattr(self, "temp_slider") and hasattr(self, "temp_value_label"):
-                    # Recompute temp display based on current slider value
-                    min_temp = self.temp_slider.minimum()
-                    max_temp = self.temp_slider.maximum()
-                    cur = self.temp_slider.value()
-                    self.temp_value_label.setText(
-                        _("Temp: {value} C° ({min} bis {max})").format(
-                            value=cur, min=min_temp, max=max_temp
-                        )
-                    )
-            except Exception:
-                pass
-            try:
-                if hasattr(self, "food_places_label") and hasattr(
-                    self, "food_places_slider"
-                ):
-                    v = self.food_places_slider.value()
-                    self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
-            except Exception:
-                pass
-            try:
-                if hasattr(self, "food_amount_label") and hasattr(
-                    self, "food_amount_slider"
-                ):
-                    v = self.food_amount_slider.value()
-                    self.food_amount_label.setText(_("Nahrungsmenge: {v}").format(v=v))
-            except Exception:
-                pass
-            if hasattr(self, "day_night_label"):
-                self.day_night_label.setText(_("Tag - Nacht:"))
-            # Update the individual day/night buttons if they exist
-            try:
-                if hasattr(self, "day_btn"):
-                    self.day_btn.setText(_("Tag"))
-                if hasattr(self, "night_btn"):
-                    self.night_btn.setText(_("Nacht"))
-            except Exception:
-                pass
-            # Update day/night buttons in EnvironmentPanel if present
-            try:
-                if hasattr(self, "environment_panel"):
-                    if hasattr(self.environment_panel, "day_btn"):
-                        self.environment_panel.day_btn.setText(_("Tag"))
-                    if hasattr(self.environment_panel, "night_btn"):
-                        self.environment_panel.night_btn.setText(_("Nacht"))
-            except Exception:
-                pass
-            # Disaster severity UI removed (no-op)
-        except Exception:
-            pass
+# Import single-class modules
+from .species_panel import SpeciesPanel
+from .environment_panel import EnvironmentPanel
+from .stats_dialog import StatsDialog
+from .log_dialog import LogDialog
+from .log_highlighter import LogHighlighter
+from .custom_image_button import CustomImageButton
+from .custom_checkbox import CustomCheckbox
 
 
 class SimulationScreen(QWidget):
@@ -1319,8 +79,6 @@ class SimulationScreen(QWidget):
             from PyQt6.QtWidgets import QMessageBox
 
             try:
-                from frontend.i18n import _
-
                 QMessageBox.information(
                     self,
                     _("Keine Statistik"),
@@ -1408,6 +166,7 @@ class SimulationScreen(QWidget):
         top_bar.setSpacing(10)
 
         btn_back = QPushButton(_("← Back"))
+        self.btn_back = btn_back
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         btn_back.setFont(btn_back_font)
@@ -1418,6 +177,7 @@ class SimulationScreen(QWidget):
         top_bar.addStretch()
 
         btn_exit = QPushButton(_("Exit"))
+        self.btn_exit = btn_exit
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         btn_exit.setFont(btn_exit_font)
@@ -1749,6 +509,16 @@ class SimulationScreen(QWidget):
                 # Initialisiere Simulation
                 self.sim_model = SimulationModel()
                 populations = self.species_panel.get_enabled_species_populations()
+                # If the species panel returns no enabled species (empty dict),
+                # use a sensible default so the simulation doesn't stop immediately.
+                # This can happen when the species UI hasn't been populated.
+                if not populations:
+                    populations = {}
+                    for species_name, stats in (self.species_config or {}).items():
+                        # Default to a small starting clan size (3) if not specified
+                        populations[species_name] = max(
+                            1, int(stats.get("max_clan_members", 3) / 2)
+                        )
                 food_places = self.environment_panel.get_food_places()
                 food_amount = self.environment_panel.get_food_amount()
                 start_temp = self.environment_panel.get_temperature()
@@ -1992,6 +762,14 @@ class SimulationScreen(QWidget):
         """Step simulation und update display."""
         if self.sim_model and self.is_running:
             data = self.sim_model.step()
+            # If backend indicates finished (max runtime reached), stop simulation
+            try:
+                if data.get("finished"):
+                    # Let stop_simulation handle showing final stats
+                    self.stop_simulation()
+                    return
+            except Exception:
+                pass
             stats = data.get("stats", {})
             self.map_widget.draw_groups(
                 data["groups"],
@@ -2017,8 +795,6 @@ class SimulationScreen(QWidget):
             logs = data.get("logs", [])
             if logs:
                 try:
-                    from frontend.i18n import _
-
                     self.log_text = "\n".join([_(l) for l in logs])
                 except Exception:
                     self.log_text = "\n".join(logs)
@@ -2044,10 +820,8 @@ class SimulationScreen(QWidget):
                     else "#ffcc44" if current_temp > 25 else "#ffffff"
                 )
                 try:
-                    from frontend.i18n import _
-
                     self.live_temp_label.setText(
-                        _("🌡️ {val}°C").format(val=current_temp)
+                        _("Temp: {val}°C").format(val=current_temp)
                     )
                 except Exception:
                     self.live_temp_label.setText(f"🌡️ {current_temp}°C")
@@ -2058,12 +832,12 @@ class SimulationScreen(QWidget):
                 # Update live day/night display
                 is_day = stats.get("is_day", True)
                 if is_day:
-                    self.live_day_night_label.setText(_("☀️ Tag"))
+                    self.live_day_night_label.setText("Tag")
                     self.live_day_night_label.setStyleSheet(
                         "color: #ffcc44; padding: 0 10px;"
                     )
                 else:
-                    self.live_day_night_label.setText(_("🌙 Nacht"))
+                    self.live_day_night_label.setText("Nacht")
                     self.live_day_night_label.setStyleSheet(
                         "color: #8888ff; padding: 0 10px;"
                     )
@@ -2071,8 +845,10 @@ class SimulationScreen(QWidget):
                 # Disaster visuals removed
 
             # --- Stop simulation if all arach are dead ---
-            # Check if all populations are zero
-            if all(count == 0 for count in stats.get("species_counts", {}).values()):
+            # Check if all populations are zero. Only stop when we actually have
+            # species counts (avoid stopping immediately when counts dict is empty).
+            species_counts = stats.get("species_counts", {})
+            if species_counts and all(count == 0 for count in species_counts.values()):
                 self.stop_simulation()
 
     # Timer-based simulation management (replaces threaded worker)
@@ -2084,7 +860,8 @@ class SimulationScreen(QWidget):
         """
         if not self.sim_model:
             return
-        if getattr(self, "update_timer", None) and self.update_timer.isActive():
+        timer = getattr(self, "update_timer", None)
+        if timer is not None and timer.isActive():
             return
         self.update_timer = QTimer(self)
         # Base interval: 100ms per UI update; backend steps per tick scale with speed
@@ -2095,8 +872,9 @@ class SimulationScreen(QWidget):
     def stop_simulation_timer(self):
         """Stop the QTimer if running."""
         try:
-            if getattr(self, "update_timer", None) and self.update_timer.isActive():
-                self.update_timer.stop()
+            timer = getattr(self, "update_timer", None)
+            if timer is not None and timer.isActive():
+                timer.stop()
         except Exception:
             pass
         self.update_timer = None
@@ -2109,8 +887,16 @@ class SimulationScreen(QWidget):
             self.log_dialog = LogDialog(self.log_text, self)
             self.log_dialog.show()
         else:
-            self.log_dialog.raise_()
-            self.log_dialog.activateWindow()
+            dlg = getattr(self, "log_dialog", None)
+            if dlg is not None:
+                try:
+                    dlg.raise_()
+                except Exception:
+                    pass
+                try:
+                    dlg.activateWindow()
+                except Exception:
+                    pass
 
     def on_stats(self):
         """Show previous simulation statistics if available."""
@@ -2228,8 +1014,6 @@ class SimulationScreen(QWidget):
     def update_language(self):
         """Refresh UI texts when the global language changes."""
         try:
-            from frontend.i18n import _
-
             # Main right-side tabs and controls
             if hasattr(self, "btn_region_tab"):
                 self.btn_region_tab.setText(_("Region"))
@@ -2313,7 +1097,12 @@ class SimulationScreen(QWidget):
             color = colors.get(species_name, "#ffffff")
             if species_name not in self._live_lines:
                 # create a new line and add to cache
-                (line,) = self.live_graph_ax.plot(time_points, history, label=species_name.replace("_", " "), color=color)
+                (line,) = self.live_graph_ax.plot(
+                    time_points,
+                    history,
+                    label=species_name.replace("_", " "),
+                    color=color,
+                )
                 self._live_lines[species_name] = line
             else:
                 line = self._live_lines[species_name]
