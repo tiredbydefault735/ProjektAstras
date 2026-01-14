@@ -259,9 +259,9 @@ class StartScreen(QWidget):
         set_opacity(self.btn_flag_en, current == "en")
         set_opacity(self.btn_flag_de, current == "de")
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, a0):
         """Handle resize to scale background properly and reposition elements."""
-        super().resizeEvent(event)
+        super().resizeEvent(a0)
 
         # Calculate center position
         width = self.width()
@@ -273,15 +273,25 @@ class StartScreen(QWidget):
 
         # Center logo horizontally
         logo_x = (width - 250) // 2
-        self.logo_label.move(logo_x, start_y)
+        logo = getattr(self, "logo_label", None)
+        if logo is not None:
+            try:
+                logo.move(logo_x, start_y)
+            except Exception:
+                pass
 
         # Position container below logo with minimal spacing
         container_x = (width - 480) // 2
         container_y = start_y + 250 + 5  # logo height + minimal spacing
-        self.center_container.move(container_x, container_y)
+        center = getattr(self, "center_container", None)
+        if center is not None:
+            try:
+                center.move(container_x, container_y)
+            except Exception:
+                pass
 
         # Resize background to match widget size
-        self._resize_background(event)
+        self._resize_background(a0)
 
         # Position language flags at bottom-right corner (20px padding)
         try:
@@ -298,35 +308,67 @@ class StartScreen(QWidget):
                 - (self.btn_flag_de.height() if hasattr(self, "btn_flag_de") else 0)
             )
             # Place right-most (de) then en to its left
-            if hasattr(self, "btn_flag_de"):
-                self.btn_flag_de.move(fx, fy)
-                self.btn_flag_de.raise_()
-                fx -= self.btn_flag_en.width() + spacing
-            if hasattr(self, "btn_flag_en"):
-                self.btn_flag_en.move(fx, fy)
-                self.btn_flag_en.raise_()
+            btn_de = getattr(self, "btn_flag_de", None)
+            btn_en = getattr(self, "btn_flag_en", None)
+            if btn_de is not None:
+                try:
+                    btn_de.move(fx, fy)
+                except Exception:
+                    pass
+                try:
+                    btn_de.raise_()
+                except Exception:
+                    pass
+                fx -= (btn_en.width() if btn_en is not None else 0) + spacing
+            if btn_en is not None:
+                try:
+                    btn_en.move(fx, fy)
+                except Exception:
+                    pass
+                try:
+                    btn_en.raise_()
+                except Exception:
+                    pass
         except Exception:
             pass
 
         # Ensure flags are above the background/movie as well
         try:
-            if hasattr(self, "btn_flag_de"):
-                self.btn_flag_de.raise_()
-            if hasattr(self, "btn_flag_en"):
-                self.btn_flag_en.raise_()
+            btn_de = getattr(self, "btn_flag_de", None)
+            btn_en = getattr(self, "btn_flag_en", None)
+            if btn_de is not None:
+                try:
+                    btn_de.raise_()
+                except Exception:
+                    pass
+            if btn_en is not None:
+                try:
+                    btn_en.raise_()
+                except Exception:
+                    pass
         except Exception:
             pass
 
-    def _resize_background(self, event):
+    def _resize_background(self, a0):
         """Handle resize to scale background properly."""
         # Resize background to match widget size
-        size = event.size()
+        size = a0.size()
         self.bg_label.setGeometry(0, 0, size.width(), size.height())
 
         # Ensure proper z-order: background -> logo/container
         self.bg_label.lower()
-        self.logo_label.raise_()
-        self.center_container.raise_()
+        logo = getattr(self, "logo_label", None)
+        center = getattr(self, "center_container", None)
+        if logo is not None:
+            try:
+                logo.raise_()
+            except Exception:
+                pass
+        if center is not None:
+            try:
+                center.raise_()
+            except Exception:
+                pass
 
         # Scale movie to cover the area while maintaining aspect ratio
         if hasattr(self, "movie"):

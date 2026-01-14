@@ -32,6 +32,7 @@ class SimulationModel:
         start_temperature=None,
         start_is_day=True,
         region_name=None,
+        max_simulation_seconds=300,
     ):
         """Initialisiere Simulation."""
 
@@ -101,6 +102,19 @@ class SimulationModel:
 
         # Speichere Config für Interaktionen
         self.species_config = species_config
+        # Preserve population overrides so runtime logic can check which species are active
+        self.population_overrides = (
+            population_overrides.copy()
+            if isinstance(population_overrides, dict)
+            else {}
+        )
+
+        # Max runtime enforcement (seconds) and internal step mapping (1 step = 0.1s)
+        self.max_simulation_seconds = max_simulation_seconds
+        try:
+            self.max_simulation_steps = int(max_simulation_seconds * 10)
+        except Exception:
+            self.max_simulation_steps = 3000
 
         # Initialize per-species multipliers now that species_config exists
         self.loner_speed_multipliers = {
@@ -192,10 +206,22 @@ class SimulationModel:
             self.stats["deaths"]["starvation"][species_name] = 0
             self.stats["deaths"]["temperature"][species_name] = 0
 
+        # Initialize population history with an initial snapshot so graphs
+        # and final stats have at least one data point even for short runs.
+        for species_name in self.species_config.keys():
+            self.stats["population_history"].setdefault(species_name, [])
+            self.stats["population_history"][species_name].append(
+                self.stats["species_counts"].get(species_name, 0)
+            )
+
         # Expose back-reference so SpeciesGroup processes can access sim_model
         # (used inside SpeciesGroup.live to read day/night and per-species multipliers)
         try:
-            self.env.sim_model = self
+            # `simpy.Environment` stubs don't define arbitrary attrs; cast to Any
+            # so the type checker (Pylance) doesn't flag the dynamic attribute.
+            from typing import Any, cast
+
+            cast(Any, self.env).sim_model = self
         except Exception:
             pass
 
@@ -307,6 +333,12 @@ class SimulationModel:
         # --- Random loner spawn logic ---
         # 1% chance per step per species to spawn a loner (adjust as needed)
         for species_name, stats in self.species_config.items():
+            # skip spawning for species that are disabled via population_overrides
+            try:
+                if self.population_overrides.get(species_name, 0) == 0:
+                    continue
+            except Exception:
+                pass
             if random.random() < 0.01:
                 color_map = {
                     "Icefang": (0.8, 0.9, 1, 1),
@@ -336,6 +368,189 @@ class SimulationModel:
         target = self.env.now + 1
         self.env.run(until=target)
         self.time = int(self.env.now)
+
+        # --- Food regeneration and simple hunting/feeding logic ---
+        try:
+            # Regenerate food sources slowly
+            for fs in getattr(self, "food_sources", []):
+                try:
+                    fs.regenerate()
+                except Exception:
+                    pass
+
+            # Simple feeding/hunting: clans and loners try food first, then
+            # if they can cannibalize and no food is available, they attack
+            # nearby other arach (within a radius).
+            # Parameters
+            food_search_radius = 150
+            kill_radius = 120
+
+            # Helper: find nearest food source with amount>0
+            def nearest_food(x, y):
+                best = None
+                best_d = None
+                for fs in getattr(self, "food_sources", []):
+                    if getattr(fs, "amount", 0) <= 0:
+                        continue
+                    dx = fs.x - x
+                    dy = fs.y - y
+                    d = (dx * dx + dy * dy) ** 0.5
+                    if best is None or d < best_d:
+                        best = fs
+                        best_d = d
+                return best, best_d
+
+            # Clans seek food or hunt
+            for g in list(self.groups):
+                for clan in list(g.clans):
+                    try:
+                        if clan.hunger_timer >= 200 or getattr(
+                            clan, "seeking_food", False
+                        ):
+                            # try food
+                            fs, d = nearest_food(clan.x, clan.y)
+                            if (
+                                fs is not None
+                                and d is not None
+                                and d <= food_search_radius
+                            ):
+                                consumed = fs.consume(
+                                    clan.food_intake * max(1, clan.population)
+                                )
+                                if consumed > 0:
+                                    clan.hunger_timer = 0
+                                    clan.seeking_food = False
+                                    continue
+
+                            # try hunting other clans/loners if allowed
+                            if clan.can_cannibalize:
+                                # look for nearest loner first
+                                target_loner = None
+                                best_dl = None
+                                for loner in list(self.loners):
+                                    if loner.species == clan.species:
+                                        continue
+                                    dx = loner.x - clan.x
+                                    dy = loner.y - clan.y
+                                    d = (dx * dx + dy * dy) ** 0.5
+                                    if best_dl is None or d < best_dl:
+                                        best_dl = d
+                                        target_loner = loner
+                                if target_loner is not None and best_dl <= kill_radius:
+                                    try:
+                                        if target_loner in self.loners:
+                                            self.loners.remove(target_loner)
+                                        clan.hunger_timer = 0
+                                        self.add_log(
+                                            f"🍖 {clan.species} Clan hat einen {target_loner.species} Einzelgänger gefressen!"
+                                        )
+                                        self.stats["deaths"]["combat"][
+                                            target_loner.species
+                                        ] = (
+                                            self.stats["deaths"]["combat"].get(
+                                                target_loner.species, 0
+                                            )
+                                            + 1
+                                        )
+                                        continue
+                                    except Exception:
+                                        pass
+
+                                # nearest clan from other groups
+                                target_clan = None
+                                best_dc = None
+                                for g2 in list(self.groups):
+                                    if g2 is g:
+                                        continue
+                                    for c2 in list(g2.clans):
+                                        if (
+                                            c2.population <= 0
+                                            or c2.species == clan.species
+                                        ):
+                                            continue
+                                        dx = c2.x - clan.x
+                                        dy = c2.y - clan.y
+                                        d = (dx * dx + dy * dy) ** 0.5
+                                        if best_dc is None or d < best_dc:
+                                            best_dc = d
+                                            target_clan = c2
+                                if target_clan is not None and best_dc <= kill_radius:
+                                    try:
+                                        # kill one member
+                                        if target_clan.population > 0:
+                                            target_clan.population -= 1
+                                            clan.hunger_timer = 0
+                                            self.add_log(
+                                                f"🗡️ {clan.species} Clan attackiert {target_clan.species} Clan!"
+                                            )
+                                            self.stats["deaths"]["combat"][
+                                                target_clan.species
+                                            ] = (
+                                                self.stats["deaths"]["combat"].get(
+                                                    target_clan.species, 0
+                                                )
+                                                + 1
+                                            )
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+
+            # Loners seek food or hunt
+            for loner in list(self.loners):
+                try:
+                    if loner.hunger_timer >= 200:
+                        fs, d = nearest_food(loner.x, loner.y)
+                        if fs is not None and d is not None and d <= food_search_radius:
+                            consumed = fs.consume(loner.food_intake)
+                            if consumed > 0:
+                                loner.hunger_timer = 0
+                                continue
+
+                        if loner.can_cannibalize:
+                            # hunt nearest loner of other species
+                            target = None
+                            best_d = None
+                            for other in list(self.loners):
+                                if other is loner or other.species == loner.species:
+                                    continue
+                                dx = other.x - loner.x
+                                dy = other.y - loner.y
+                                d = (dx * dx + dy * dy) ** 0.5
+                                if best_d is None or d < best_d:
+                                    best_d = d
+                                    target = other
+                            if target is not None and best_d <= kill_radius:
+                                try:
+                                    if target in self.loners:
+                                        self.loners.remove(target)
+                                    loner.hunger_timer = 0
+                                    self.add_log(
+                                        f"🍗 {loner.species} Einzelgänger hat einen {target.species} gefressen!"
+                                    )
+                                    self.stats["deaths"]["combat"][target.species] = (
+                                        self.stats["deaths"]["combat"].get(
+                                            target.species, 0
+                                        )
+                                        + 1
+                                    )
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Enforce maximum simulation runtime (convert to steps; 1 step = 0.1s)
+        finished = False
+        try:
+            if (
+                hasattr(self, "max_simulation_steps")
+                and self.time >= self.max_simulation_steps
+            ):
+                finished = True
+        except Exception:
+            finished = False
 
         # Track population history every 10 steps
         if self.time % 10 == 0:
@@ -487,6 +702,7 @@ class SimulationModel:
             "is_day": getattr(self, "is_day", True),
             "transition_progress": transition_progress,
             "stats": self.stats.copy(),
+            "finished": finished,
         }
 
     def get_final_stats(self):
