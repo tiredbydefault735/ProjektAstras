@@ -1,0 +1,57 @@
+{
+    "PROJEKT ASTRAS": "PROJEKT ASTRAS",
+    "Simulation v1.0": "Simulation v1.0",
+    "Start Simulation": "Start Simulation",
+    "Settings": "Settings",
+    "Exit": "Exit",
+
+    "Simulation Logs": "Simulation Logs",
+    "Schließen": "Close",
+
+    "Apply": "Apply",
+    "Cancel": "Cancel",
+    "Color Theme:": "Color Theme:",
+    "Graph nicht verf�gbar\n(matplotlib ben�tigt)": "Graph not available\n(matplotlib required)",
+
+    "Simulations-Statistiken (5 Minuten)": "Simulation Statistics (5 minutes)",
+    "Todesfälle (Kampf):": "Deaths (Combat):",
+    "Todesfälle (Verhungert):": "Deaths (Starvation):",
+    "Todesfälle (Temperatur):": "Deaths (Temperature):",
+    "Maximale Clans:": "Max Clans:",
+    "Futterplätze:": "Food places:",
+
+    "Graph nicht verfügbar\n(matplotlib benötigt)": "Graph not available\n(matplotlib required)",
+
+    "Spezies": "Species",
+    "Subspezies:": "Subspecies:",
+    "Loner Speed:": "Loner Speed:",
+    "Clan Speed:": "Clan Speed:",
+    "Mitglieder:": "Members:",
+
+    "Region": "Region",
+    "Region:": "Region:",
+    "Temperatur:": "Temperature:",
+    "Temp: 20 C°": "Temp: 20 C°",
+    "Temp: {value} C° ({min} bis {max})": "Temp: {value} C° ({min} to {max})",
+    "🌡️ {val}°C": "🌡️ {val}°C",
+    "Nahrung:": "Food:",
+    "Nahrungsplätze: 5": "Food places: 5",
+    "Nahrungsplätze: {v}": "Food places: {v}",
+    "Nahrungsmenge: 50": "Food amount: 50",
+    "Nahrungsmenge: {v}": "Food amount: {v}",
+
+    "Tag - Nacht:": "Day - Night:",
+    "Tag": "Day",
+    "Nacht": "Night",
+
+
+    "← Back": "← Back",
+
+    "Stats": "Stats",
+    "Log": "Log",
+    "Reset/Stop": "Reset/Stop",
+
+    "☀️ Tag": "☀️ Day",
+    "🌙 Nacht": "🌙 Night",
+    
+}

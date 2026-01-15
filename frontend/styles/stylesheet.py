@@ -3,8 +3,6 @@ Dynamic stylesheet generator using color presets.
 Supports easy theme switching without code changes.
 """
 
-from .color_presets import DEFAULT_PRESET, ColorPreset
-
 
 def get_stylesheet(preset=None):
     """
@@ -16,10 +14,32 @@ def get_stylesheet(preset=None):
     Returns:
         CSS stylesheet string.
     """
-    if preset is None:
-        preset = DEFAULT_PRESET
+    # Default color set (used when no preset object is provided)
+    default_colors = {
+        "bg_primary": "#2a2a2a",
+        "bg_secondary": "#2a2a2a",
+        "bg_tertiary": "#333333",
+        "text_primary": "#ffffff",
+        "text_secondary": "#cccccc",
+        "text_tertiary": "#999999",
+        "accent_primary": "#cc0000",
+        "accent_light": "#ff3333",
+        "accent_dark": "#990000",
+        "border_light": "#666666",
+        "border_dark": "#444444",
+        "button_bg": "#333333",
+        "button_hover": "#444444",
+        "button_pressed": "#222222",
+        "map_bg": "#ffffff",
+        "map_border": "#000000",
+        "log_text": "#33ff33",
+    }
 
-    c = preset.colors  # Shorthand for colors
+    if preset is None:
+        c = default_colors
+    else:
+        # Support either an object with .colors or a plain dict
+        c = getattr(preset, "colors", preset)
 
     return f"""
     /* Global styles */
