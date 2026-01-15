@@ -46,6 +46,30 @@ class SimulationMapWidget(QGraphicsView):
         # Optimierte Darstellung
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+        # Cache for icon lookup to handle case differences across filesystems
+        self._spores_icon_path = None
+
+    def _find_spores_icon(self):
+        """Return the path to the spores icon (case-insensitive search)."""
+        if self._spores_icon_path:
+            return self._spores_icon_path
+        ui_dir = os.path.join("static", "ui")
+        try:
+            for fname in os.listdir(ui_dir):
+                if fname.lower() == "spores.png":
+                    candidate = os.path.join(ui_dir, fname)
+                    if os.path.exists(candidate):
+                        self._spores_icon_path = candidate
+                        return candidate
+        except Exception:
+            pass
+        # Fallback to the canonical lowercase name (works on case-insensitive FS)
+        candidate = os.path.join("static", "ui", "spores.png")
+        if os.path.exists(candidate):
+            self._spores_icon_path = candidate
+            return candidate
+        return None
+
     def set_region(self, region_name):
         """Set the current region and update background image."""
         self.current_region = region_name
@@ -97,6 +121,7 @@ class SimulationMapWidget(QGraphicsView):
         loners_data=None,
         food_sources_data=None,
         transition_progress=1.0,
+        cell_size=40,
     ):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
 
@@ -152,29 +177,6 @@ class SimulationMapWidget(QGraphicsView):
                 )
                 food_circle.setZValue(0)  # Hinter allem
 
-        # Zeichne Loners (größere Kreise mit Rand)
-        if loners_data:
-            for loner in loners_data:
-                x = loner["x"] * scale_x
-                y = loner["y"] * scale_y
-
-                color = loner["color"]
-                rgb_color = QColor(
-                    int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255
-                )
-                border_color = QColor(50, 50, 50, 255)
-
-                # Kreis (6px Radius)
-                circle = self.scene.addEllipse(
-                    x - 6,
-                    y - 6,
-                    12,
-                    12,
-                    pen=QPen(border_color, 2),
-                    brush=QBrush(rgb_color),
-                )
-                circle.setZValue(2)
-
         # Zeichne Clans (Quadrate mit Population-Text)
         for group in groups_data:
             if not group or "clans" not in group:
@@ -199,18 +201,42 @@ class SimulationMapWidget(QGraphicsView):
                     int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 200
                 )
 
-                # Quadrat
-                rect = self.scene.addRect(
-                    x - size / 2,
-                    y - size / 2,
-                    size,
-                    size,
-                    pen=QPen(border_color, 2),
-                    brush=QBrush(rgb_color),
-                )
-                rect.setZValue(0)
+                # If this group is Spores and an icon exists, draw the spores image scaled to clan size
+                drawn_with_icon = False
+                try:
+                    if group.get("name", "") == "Spores":
+                        icon_path = self._find_spores_icon()
+                        if icon_path and os.path.exists(icon_path):
+                            pm = QPixmap(icon_path)
+                            if not pm.isNull():
+                                scaled = pm.scaled(
+                                    int(size),
+                                    int(size),
+                                    Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation,
+                                )
+                                pix = self.scene.addPixmap(scaled)
+                                pix.setOffset(
+                                    x - scaled.width() / 2, y - scaled.height() / 2
+                                )
+                                pix.setZValue(0)
+                                drawn_with_icon = True
+                except Exception:
+                    drawn_with_icon = False
 
-                # Population als Text
+                if not drawn_with_icon:
+                    # Quadrat
+                    rect = self.scene.addRect(
+                        x - size / 2,
+                        y - size / 2,
+                        size,
+                        size,
+                        pen=QPen(border_color, 2),
+                        brush=QBrush(rgb_color),
+                    )
+                    rect.setZValue(0)
+
+                # Population als Text (overlay)
                 text = QGraphicsTextItem(str(pop))
                 text.setDefaultTextColor(QColor(0, 0, 0, 255))
                 font = QFont("Minecraft", 13, QFont.Weight.Bold)
@@ -223,6 +249,76 @@ class SimulationMapWidget(QGraphicsView):
                 text.setPos(x - text_width / 2, y - text_height / 2)
                 text.setZValue(1)
                 self.scene.addItem(text)
+
+                # record display size for species so loners can be sized relative to clan
+                try:
+                    if not hasattr(self, "_species_clan_size"):
+                        self._species_clan_size = {}
+                    species_name = group.get("name", "")
+                    prev = self._species_clan_size.get(species_name, 0)
+                    self._species_clan_size[species_name] = max(prev, size)
+                except Exception:
+                    pass
+
+        # Zeichne Loners (kleinere Kreise oder icons) AFTER clans so we can size them relative to clans
+        if loners_data:
+            for loner in loners_data:
+                x = loner["x"] * scale_x
+                y = loner["y"] * scale_y
+
+                species = loner.get("species", "")
+                color = loner["color"]
+                rgb_color = QColor(
+                    int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255
+                )
+
+                # Default loner visual size (12x12)
+                display_size = 12
+                try:
+                    if (
+                        hasattr(self, "_species_clan_size")
+                        and species in self._species_clan_size
+                    ):
+                        clan_size = self._species_clan_size.get(species, 12)
+                        # Loners are 10% of clan size
+                        display_size = max(4, int(clan_size * 0.4))
+                except Exception:
+                    pass
+
+                # If spores species and icon exists, draw icon scaled to display_size
+                drawn_icon = False
+                try:
+                    if species == "Spores":
+                        icon_path = self._find_spores_icon()
+                        if icon_path and os.path.exists(icon_path):
+                            pm = QPixmap(icon_path)
+                            if not pm.isNull():
+                                scaled = pm.scaled(
+                                    int(display_size),
+                                    int(display_size),
+                                    Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation,
+                                )
+                                pix = self.scene.addPixmap(scaled)
+                                pix.setOffset(
+                                    x - scaled.width() / 2, y - scaled.height() / 2
+                                )
+                                pix.setZValue(2)
+                                drawn_icon = True
+                except Exception:
+                    drawn_icon = False
+
+                if not drawn_icon:
+                    border_color = QColor(50, 50, 50, 255)
+                    circle = self.scene.addEllipse(
+                        x - display_size / 2,
+                        y - display_size / 2,
+                        display_size,
+                        display_size,
+                        pen=QPen(border_color, 2),
+                        brush=QBrush(rgb_color),
+                    )
+                    circle.setZValue(2)
 
         # Fließender Dunkelheitseffekt basierend auf Tageszeit
         # transition_progress: 0.0 = Nacht, 1.0 = Tag
