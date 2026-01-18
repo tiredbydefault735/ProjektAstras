@@ -309,9 +309,9 @@ class StatsDialog(QDialog):
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", "Population", color="#ffffff", size="10pt")
+            pw.setLabel("left", _("Population"), color="#ffffff", size="10pt")
             # remove explicit seconds unit to reduce clutter
-            pw.setLabel("bottom", "Zeit", color="#ffffff", size="10pt")
+            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="10pt")
 
             # Disable user interaction; do NOT lock aspect ratio so the plot
             # can expand vertically to use available space.
@@ -1739,23 +1739,23 @@ class SimulationScreen(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
 
-        btn_back = QPushButton(_("← Back"))
+        self.btn_back = QPushButton(_("← Back"))
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_back.setFont(btn_back_font)
-        btn_back.setFixedWidth(100)
-        btn_back.clicked.connect(self.on_back)
-        top_bar.addWidget(btn_back)
+        self.btn_back.setFont(btn_back_font)
+        self.btn_back.setFixedWidth(100)
+        self.btn_back.clicked.connect(self.on_back)
+        top_bar.addWidget(self.btn_back)
 
         top_bar.addStretch()
 
-        btn_exit = QPushButton(_("Exit"))
+        self.btn_exit = QPushButton(_("Exit"))
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_exit.setFont(btn_exit_font)
-        btn_exit.setFixedWidth(100)
-        btn_exit.clicked.connect(self.on_exit)
-        top_bar.addWidget(btn_exit)
+        self.btn_exit.setFont(btn_exit_font)
+        self.btn_exit.setFixedWidth(100)
+        self.btn_exit.clicked.connect(self.on_exit)
+        top_bar.addWidget(self.btn_exit)
 
         main_layout.addLayout(top_bar)
 
@@ -2355,8 +2355,8 @@ class SimulationScreen(QWidget):
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", "Population", color="#ffffff", size="9pt")
-            pw.setLabel("bottom", "Time (s)", color="#ffffff", size="9pt")
+            pw.setLabel("left", _("Population"), color="#ffffff", size="9pt")
+            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="9pt")
 
             # Lock aspect ratio to square and disable interactions
             try:
