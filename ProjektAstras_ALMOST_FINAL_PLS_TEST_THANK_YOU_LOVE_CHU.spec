@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProjektAstras',
+    name='ProjektAstras_ALMOST_FINAL_PLS_TEST_THANK_YOU_LOVE_CHU',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

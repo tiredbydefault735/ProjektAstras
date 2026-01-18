@@ -24,12 +24,27 @@ class FoodSource:
         return consumed
 
     def regenerate(self):
-        """Regeneriere Nahrung über Zeit (alle 50 Steps = 5 Sekunden)."""
-        self.regeneration_timer += 1
-        if self.regeneration_timer >= 50:
-            self.regeneration_timer = 0
-            if self.amount < self.max_amount:
-                self.amount = min(self.amount + 5, self.max_amount)
+        """Stochastic, small food regeneration events.
+
+        Instead of infrequent large bursts, regenerate small amounts at a
+        low per-step probability so the distribution is more comparable to
+        clan growth and loner spawns (smaller magnitudes, similar sparsity).
+        """
+        # If already full, nothing to do
+        if self.amount >= self.max_amount:
+            return 0
+
+        # Per-step chance to regenerate a small amount (2% default)
+        regen_prob = 0.02
+        if random.random() < regen_prob:
+            # Small regen amounts biased towards 1 and 2
+            regen_choices = [1, 1, 1, 2, 2, 3]
+            regen = random.choice(regen_choices)
+            regen = max(1, regen)
+            self.amount = min(self.amount + regen, self.max_amount)
+            return regen
+
+        return 0
 
     def is_depleted(self):
         """Ist die Nahrung aufgebraucht?"""
@@ -132,17 +147,22 @@ class Clan:
 
     def take_damage(self, damage, sim_model=None):
         """Nimmt Schaden und reduziert Population wenn nötig."""
-        remaining_damage = damage
+        # Accumulate damage over time so multiple small hits can kill members.
+        if not hasattr(self, "_accum_damage"):
+            self._accum_damage = 0
+
+        self._accum_damage += damage
         deaths = 0
-        while remaining_damage > 0 and self.population > 0:
-            if remaining_damage >= self.hp_per_member:
-                # Töte ein Mitglied
-                self.population -= 1
-                deaths += 1
-                remaining_damage -= self.hp_per_member
-            else:
-                # Teilschaden (wird ignoriert, nur volle Member sterben)
-                remaining_damage = 0
+
+        if self.hp_per_member > 0:
+            deaths = int(self._accum_damage // self.hp_per_member)
+            if deaths > 0:
+                # remove deaths but not below zero
+                removed = min(self.population, deaths)
+                self.population -= removed
+                deaths = removed
+                # subtract accounted damage
+                self._accum_damage -= removed * self.hp_per_member
 
         # Track combat deaths
         if deaths > 0 and sim_model:
@@ -389,6 +409,12 @@ class SimulationModel:
         self.time = 0
         self.groups = []
         self.loners = []
+        # Recent random draws for visualization (kept as short lists)
+        self.rnd_history = {
+            "regen": [],  # food regeneration amounts
+            "clan_growth": [],  # growth increments from friendly encounters
+            "loner_spawn": [],  # spawn counts per spawn event
+        }
 
         # Ensure map dimensions are always set before use
         self.map_width = 1200
@@ -457,7 +483,12 @@ class SimulationModel:
         for species_name, stats in species_config.items():
             start_pop = population_overrides.get(species_name, 0)
             color = color_map.get(species_name, (0.5, 0.5, 0.5, 1))
-            hp = stats.get("hp", 25)  # Default 25 HP
+            # Cap hp per member to avoid extreme per-member HP values from data
+            raw_hp = stats.get("hp", 25)
+            if species_name == "Icefang":
+                hp = min(raw_hp, 40)  # Icefang are tough but not invulnerable
+            else:
+                hp = min(raw_hp, 70)
             food_intake = stats.get("food_intake", 5)  # Default 5
             # Spores und Corrupted können kannibalisieren
             can_cannibalize = species_name in ["Spores", "The_Corrupted"]
@@ -602,9 +633,28 @@ class SimulationModel:
     def step(self):
 
         # --- Random loner spawn logic ---
-        # 1% chance per step per species to spawn a loner (adjust as needed)
+        # --- Random loner spawn logic ---
+        # Verwende Gleichverteilung für Spawn-Anzahl und -Positionen.
+        # Pro Spezies: mit 1% Wahrscheinlichkeit spawnt eine zufällige, uniform verteilte Anzahl (1-2) Loners.
         for species_name, stats in self.species_config.items():
-            if random.random() < 0.01:
+            # Skip spawning for species that are currently extinct (no clans and no loners)
+            current_count = 0
+            for g in self.groups:
+                if g.name == species_name:
+                    current_count += sum(c.population for c in g.clans)
+            current_count += sum(1 for l in self.loners if l.species == species_name)
+            if current_count == 0:
+                continue
+
+            # Reduce overall spawn frequency to give species a chance to die out
+            spawn_threshold = 0.005
+            # Icefang spawn even more rarely
+            if species_name == "Icefang":
+                spawn_threshold = 0.001
+            spawn_chance = random.uniform(0.0, 1.0)
+            if spawn_chance < spawn_threshold:
+                # Spawn a single loner to keep overall pressure low
+                spawn_count = 1
                 color_map = {
                     "Icefang": (0.8, 0.9, 1, 1),
                     "Crushed_Critters": (0.6, 0.4, 0.2, 1),
@@ -615,20 +665,40 @@ class SimulationModel:
                 hp = stats.get("hp", 25)
                 food_intake = stats.get("food_intake", 5)
                 can_cannibalize = species_name in ["Spores", "The_Corrupted"]
-                x = random.uniform(50, self.map_width - 50)
-                y = random.uniform(50, self.map_height - 50)
-                loner = Loner(
-                    species_name, x, y, color, hp, food_intake, 0, can_cannibalize
-                )
-                self.loners.append(loner)
+                for _ in range(spawn_count):
+                    # Position ist gleichverteilt im inneren Bereich der Map
+                    x = random.uniform(50, self.map_width - 50)
+                    y = random.uniform(50, self.map_height - 50)
+                    loner = Loner(
+                        species_name, x, y, color, hp, food_intake, 0, can_cannibalize
+                    )
+                    self.loners.append(loner)
+                # record spawn event
+                if hasattr(self, "rnd_history"):
+                    self.rnd_history.setdefault("loner_spawn", []).append(spawn_count)
+                    if len(self.rnd_history["loner_spawn"]) > 200:
+                        self.rnd_history["loner_spawn"] = self.rnd_history[
+                            "loner_spawn"
+                        ][-200:]
+                # UI log
                 self.add_log(
-                    f"🔹 Ein neuer Einzelgänger der Spezies {species_name} ist erschienen!"
+                    f"🔹 {spawn_count} neuer Einzelgänger der Spezies {species_name} ist erschienen!"
                 )
+                # Terminal debug log for quick diagnostics
+                try:
+                    tnow = getattr(self, "time", getattr(self.env, "now", 0))
+                    print(
+                        f"[t={tnow}] DEBUG: Spawn event: {spawn_count} {species_name} at approx positions around ({int(x)},{int(y)})"
+                    )
+                except Exception:
+                    pass
         """Simulationsschritt."""
         # SimPy step
         target = self.env.now + 1
         self.env.run(until=target)
         self.time = int(self.env.now)
+        # Container for conversions (clan -> loner) collected during this step
+        self._pending_conversions = []
 
         # Track population history every 10 steps
         if self.time % 10 == 0:
@@ -714,7 +784,12 @@ class SimulationModel:
 
         # Nahrungsregeneration
         for food_source in self.food_sources:
-            food_source.regenerate()
+            regen = food_source.regenerate()
+            if regen and hasattr(self, "rnd_history"):
+                self.rnd_history.setdefault("regen", []).append(regen)
+                # keep history short
+                if len(self.rnd_history["regen"]) > 200:
+                    self.rnd_history["regen"] = self.rnd_history["regen"][-200:]
 
         # Update Loners und prüfe auf Hungertod und Temperatur-Schaden
         loners_to_remove = []
@@ -818,6 +893,12 @@ class SimulationModel:
                             self.stats["deaths"]["temperature"].get(group.name, 0)
                             + deaths
                         )
+                        # If a clan shrank to 1 member, schedule conversion to a loner
+                        if clan.population == 1:
+                            try:
+                                self._pending_conversions.append((group, clan))
+                            except Exception:
+                                pass
 
         # Rebuild spatial grid and perform proximity-based processing
         self._build_spatial_grid()
@@ -867,6 +948,9 @@ class SimulationModel:
             "is_day": self.is_day,
             "transition_progress": self._calculate_transition_progress(),
             "stats": self.stats.copy(),
+            "rnd_samples": {
+                k: list(v) for k, v in getattr(self, "rnd_history", {}).items()
+            },
         }
 
     def _process_food_seeking(self):
@@ -920,8 +1004,40 @@ class SimulationModel:
                             f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{int(clan.hp_per_member - old_hp)} HP)"
                         )
 
-                        # Kein automatisches Wachstum beim Essen mehr
-                        # Clans wachsen nur durch Einzelgänger-Anschluss
+                        # Optional: probabilistisches Wachstum nach Essen
+                        # Wachstum folgt einer Normalverteilung (mu=1, sigma=0.8)
+                        # und tritt nur mit einer moderaten Chance auf.
+                        try:
+                            # default growth chance after eating (reduced)
+                            growth_chance = 0.08
+                            # reduce growth for Icefang to avoid runaway population
+                            if group.name == "Icefang":
+                                growth_chance = 0.02
+                            if (
+                                random.random() < growth_chance
+                                and clan.population < clan.max_members
+                            ):
+                                mu = 1.0
+                                sigma = 0.8
+                                increase = int(round(random.gauss(mu, sigma)))
+                                increase = max(1, increase)
+                                space = clan.max_members - clan.population
+                                actual = min(increase, max(0, space))
+                                if actual > 0:
+                                    clan.population += actual
+                                    self.add_log(
+                                        f"🌱 {group.name} Clan #{clan.clan_id} wächst nach Essen (+{actual} Mitglieder)"
+                                    )
+                                    if hasattr(self, "rnd_history"):
+                                        self.rnd_history.setdefault(
+                                            "clan_growth", []
+                                        ).append(actual)
+                                        if len(self.rnd_history["clan_growth"]) > 200:
+                                            self.rnd_history["clan_growth"] = (
+                                                self.rnd_history["clan_growth"][-200:]
+                                            )
+                        except Exception:
+                            pass
 
         # Loners suchen und essen Nahrung
         for loner in self.loners:
@@ -968,7 +1084,7 @@ class SimulationModel:
 
     def _process_interactions(self):
         """Prozessiere alle Interaktionen zwischen Clans und Loners."""
-        ATTACK_DAMAGE = 2  # Fester Attack-Wert (reduziert für längeres Überleben)
+        ATTACK_DAMAGE = 6  # Fester Attack-Wert (higher to overcome high HP per member)
         INTERACTION_RANGE = 100  # Reichweite für Interaktionen
         HUNT_RANGE = 400  # Reichweite für aktive Jagd (erhöht)
         HUNT_LOG_COOLDOWN = 100  # Nur alle 100 Steps loggen
@@ -980,11 +1096,19 @@ class SimulationModel:
         # Clan vs Clan Interaktionen
         for i, group1 in enumerate(self.groups):
             for j, group2 in enumerate(self.groups):
-                if i >= j:
-                    continue  # Vermeide doppelte Checks
+                # Include same-group checks (i == j) so same-species interactions
+                # like 'Freundlich' can occur. Skip only strictly earlier indices
+                # to avoid duplicate pair processing.
+                if i > j:
+                    continue
 
                 for clan1 in group1.clans:
                     for clan2 in group2.clans:
+                        # When comparing clans within the same group, avoid
+                        # self-comparison and duplicate symmetric pairs by
+                        # only processing when clan1.clan_id < clan2.clan_id.
+                        if group1 is group2 and clan1.clan_id >= clan2.clan_id:
+                            continue
                         dist_sq = clan1.distance_to_clan(clan2)
 
                         # Hole Interaktionstyp aus Matrix
@@ -1018,7 +1142,13 @@ class SimulationModel:
                                 interaction = "Aggressiv"
 
                         # Clans derselben Spezies stoßen sich ab (Territorialverhalten)
-                        if group1.name == group2.name and dist_sq < (150 * 150):
+                        # Exception: wenn die Interaktion explizit 'Freundlich' ist,
+                        # lassen wir Clans nahe zusammenkommen (ermöglicht Wachstum).
+                        if (
+                            group1.name == group2.name
+                            and dist_sq < (150 * 150)
+                            and interaction != "Freundlich"
+                        ):
                             # Bewege sich vom anderen Clan weg
                             dx = clan1.x - clan2.x
                             dy = clan1.y - clan2.y
@@ -1054,9 +1184,19 @@ class SimulationModel:
                         if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
                             if interaction == "Aggressiv":
                                 # Clan1 greift Clan2 an - Bei Nacht reduzierte Kampfchance
-                                attack_chance = (
-                                    0.3 if self.is_day else 0.15
-                                )  # 30% Tag, 15% Nacht
+                                attack_chance = 0.3 if self.is_day else 0.15
+                                # If the target is Icefang and attacker is a natural predator,
+                                # increase the chance so predators can contest large Icefang clans.
+                                predators = [
+                                    "Spores",
+                                    "The_Corrupted",
+                                    "Crushed_Critters",
+                                ]
+                                if (
+                                    group2.name == "Icefang"
+                                    and group1.name in predators
+                                ):
+                                    attack_chance = 0.6 if self.is_day else 0.35
                                 if random.random() < attack_chance:
                                     old_pop = clan2.population
                                     alive = clan2.take_damage(ATTACK_DAMAGE, self)
@@ -1081,15 +1221,90 @@ class SimulationModel:
                                             self.add_log(
                                                 f"💀 {group2.name} Clan #{clan2.clan_id} vernichtet!"
                                             )
+                                        else:
+                                            # If the attacked clan is still alive but shrank to 1 member,
+                                            # schedule conversion to a loner (processed after interactions)
+                                            if clan2.population == 1:
+                                                try:
+                                                    self._pending_conversions.append(
+                                                        (group2, clan2)
+                                                    )
+                                                except Exception:
+                                                    pass
 
                             elif interaction == "Freundlich":
-                                # Freundliche Begegnung - Population Bonus (selten)
-                                if random.random() < 0.02:
-                                    if clan1.population < clan1.max_members:
-                                        clan1.population += 1
-                                        self.add_log(
-                                            f"🤝 {group1.name} & {group2.name}: Freundliche Begegnung (+1 Mitglied)"
-                                        )
+                                # 'Freundlich' behavior differs based on species:
+                                # - If same species: allow the friendly-growth path (rare).
+                                # - If different species: do NOT merge or grow; instead
+                                #   clans may 'stick' together (move closer) about 50% of the time.
+                                if group1.name == group2.name:
+                                    # Friendly growth only for same-species encounters
+                                    # Reduce base friendly-growth to make results less deterministic
+                                    growth_chance = 0.03
+                                    # Reduce Icefang self-growth further to limit dominance
+                                    if group1.name == "Icefang":
+                                        growth_chance = 0.005
+                                    if random.random() < growth_chance:
+                                        if clan1.population < clan1.max_members:
+                                            # Ziehe inkrementell Mitglieder aus einer Normalverteilung
+                                            mu = 1.0
+                                            sigma = 0.8
+                                            increase = int(
+                                                round(random.gauss(mu, sigma))
+                                            )
+                                            increase = max(1, increase)
+                                            # Nicht über max_members hinauswachsen
+                                            space = clan1.max_members - clan1.population
+                                            actual = min(increase, max(0, space))
+                                            if actual > 0:
+                                                clan1.population += actual
+                                                self.add_log(
+                                                    f"🤝 {group1.name} & {group2.name}: Freundliche Begegnung (+{actual} Mitglied(er)) at positions ({int(clan1.x)},{int(clan1.y)}) & ({int(clan2.x)},{int(clan2.y)})"
+                                                )
+                                                # terminal debug print
+                                                try:
+                                                    tnow = getattr(
+                                                        self,
+                                                        "time",
+                                                        getattr(self.env, "now", 0),
+                                                    )
+                                                    print(
+                                                        f"[t={tnow}] DEBUG: Friendly growth: +{actual} {group1.name} (clan#{clan1.clan_id}) near clan#{clan2.clan_id})"
+                                                    )
+                                                except Exception:
+                                                    pass
+                                                if hasattr(self, "rnd_history"):
+                                                    self.rnd_history.setdefault(
+                                                        "clan_growth", []
+                                                    ).append(actual)
+                                                    if (
+                                                        len(
+                                                            self.rnd_history[
+                                                                "clan_growth"
+                                                            ]
+                                                        )
+                                                        > 200
+                                                    ):
+                                                        self.rnd_history[
+                                                            "clan_growth"
+                                                        ] = self.rnd_history[
+                                                            "clan_growth"
+                                                        ][
+                                                            -200:
+                                                        ]
+                                else:
+                                    # Different-species 'friendly' — do not merge. 50% chance
+                                    # to gently stick (move toward each other), otherwise ignore.
+                                    try:
+                                        if random.random() < 0.5:
+                                            clan1.move_towards(
+                                                clan2.x, clan2.y, strength=0.2
+                                            )
+                                            clan2.move_towards(
+                                                clan1.x, clan1.y, strength=0.2
+                                            )
+                                    except Exception:
+                                        pass
 
                             elif interaction == "Ängstlich":
                                 # Fliehe vom Ziel weg
@@ -1196,6 +1411,37 @@ class SimulationModel:
         # Clan-Bildung: 2+ Einzelgänger derselben Spezies können sich zusammenschließen
         self._process_loner_clan_formation()
 
+        # Process any scheduled clan -> loner conversions collected during this step
+        try:
+            if hasattr(self, "_pending_conversions") and self._pending_conversions:
+                for group, clan in list(self._pending_conversions):
+                    try:
+                        if clan in group.clans and clan.population == 1:
+                            # Create a loner from the last remaining clan member
+                            loner = Loner(
+                                clan.species,
+                                clan.x,
+                                clan.y,
+                                clan.color,
+                                clan.hp_per_member,
+                                clan.food_intake,
+                                0,
+                                clan.can_cannibalize,
+                            )
+                            self.loners.append(loner)
+                            try:
+                                group.clans.remove(clan)
+                            except Exception:
+                                pass
+                            self.add_log(
+                                f"⚠️ Clan #{clan.clan_id} von {group.name} reduzierte sich auf 1 und wurde zu Einzelgänger konvertiert."
+                            )
+                    except Exception:
+                        pass
+                self._pending_conversions = []
+        except Exception:
+            pass
+
     def _process_loner_clan_formation(self):
         """Einzelgänger können sich zu einem neuen Clan zusammenschließen."""
         FORMATION_RANGE = 50  # Wie nah Loners sein müssen
@@ -1285,6 +1531,9 @@ class SimulationModel:
             "max_clans": self.stats["max_clans"],
             "food_places": self.stats["food_places"],
             "population_history": self.stats["population_history"],
+            "rnd_samples": {
+                k: list(v) for k, v in getattr(self, "rnd_history", {}).items()
+            },
         }
 
     def set_temperature(self, temp):

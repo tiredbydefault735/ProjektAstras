@@ -48,6 +48,8 @@ class SimulationMapWidget(QGraphicsView):
 
         # Cache for icon lookup to handle case differences across filesystems
         self._spores_icon_path = None
+        self._crushed_icon_path = None
+        self._icefang_icon_path = None
 
     def _find_spores_icon(self):
         """Return the path to the spores icon (case-insensitive search)."""
@@ -67,6 +69,46 @@ class SimulationMapWidget(QGraphicsView):
         candidate = os.path.join("static", "ui", "spores.png")
         if os.path.exists(candidate):
             self._spores_icon_path = candidate
+            return candidate
+        return None
+
+    def _find_crushed_icon(self):
+        """Return the path to the crushed_critters icon (case-insensitive search)."""
+        if getattr(self, "_crushed_icon_path", None):
+            return self._crushed_icon_path
+        ui_dir = os.path.join("static", "ui")
+        try:
+            for fname in os.listdir(ui_dir):
+                if fname.lower() == "crushed_critters.png":
+                    candidate = os.path.join(ui_dir, fname)
+                    if os.path.exists(candidate):
+                        self._crushed_icon_path = candidate
+                        return candidate
+        except Exception:
+            pass
+        candidate = os.path.join("static", "ui", "crushed_critters.png")
+        if os.path.exists(candidate):
+            self._crushed_icon_path = candidate
+            return candidate
+        return None
+
+    def _find_icefang_icon(self):
+        """Return the path to the icefang icon (case-insensitive search)."""
+        if getattr(self, "_icefang_icon_path", None):
+            return self._icefang_icon_path
+        ui_dir = os.path.join("static", "ui")
+        try:
+            for fname in os.listdir(ui_dir):
+                if fname.lower() == "icefang.png":
+                    candidate = os.path.join(ui_dir, fname)
+                    if os.path.exists(candidate):
+                        self._icefang_icon_path = candidate
+                        return candidate
+        except Exception:
+            pass
+        candidate = os.path.join("static", "ui", "icefang.png")
+        if os.path.exists(candidate):
+            self._icefang_icon_path = candidate
             return candidate
         return None
 
@@ -187,8 +229,14 @@ class SimulationMapWidget(QGraphicsView):
                 y = clan["y"] * scale_y
                 pop = clan["population"]
 
-                # Größe basierend auf Population (40-120px - GRÖSSER für mehr Platznutzung)
-                size = max(40, min(120, pop * 5))
+                # Größe basierend auf Population (slightly larger scale)
+                # Increase base scaling so clans are more visible on the map
+                size = max(48, min(180, pop * 6))
+                # Small visibility boost (10%) with safe rounding
+                try:
+                    size = max(48, min(180, int(round(size * 1.10))))
+                except Exception:
+                    size = int(size * 1.10)
 
                 color = clan["color"]
                 rgb_color = QColor(
@@ -201,26 +249,34 @@ class SimulationMapWidget(QGraphicsView):
                     int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 200
                 )
 
-                # If this group is Spores and an icon exists, draw the spores image scaled to clan size
+                # Try to draw a species icon (Spores, Crushed_Critters, Icefang) if available
                 drawn_with_icon = False
                 try:
-                    if group.get("name", "") == "Spores":
+                    species_name = group.get("name", "")
+                    if species_name == "Spores":
                         icon_path = self._find_spores_icon()
-                        if icon_path and os.path.exists(icon_path):
-                            pm = QPixmap(icon_path)
-                            if not pm.isNull():
-                                scaled = pm.scaled(
-                                    int(size),
-                                    int(size),
-                                    Qt.AspectRatioMode.KeepAspectRatio,
-                                    Qt.TransformationMode.SmoothTransformation,
-                                )
-                                pix = self.scene.addPixmap(scaled)
-                                pix.setOffset(
-                                    x - scaled.width() / 2, y - scaled.height() / 2
-                                )
-                                pix.setZValue(0)
-                                drawn_with_icon = True
+                    elif species_name == "Crushed_Critters":
+                        icon_path = self._find_crushed_icon()
+                    elif species_name == "Icefang":
+                        icon_path = self._find_icefang_icon()
+                    else:
+                        icon_path = None
+
+                    if icon_path and os.path.exists(icon_path):
+                        pm = QPixmap(icon_path)
+                        if not pm.isNull():
+                            scaled = pm.scaled(
+                                int(size),
+                                int(size),
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            pix = self.scene.addPixmap(scaled)
+                            pix.setOffset(
+                                x - scaled.width() / 2, y - scaled.height() / 2
+                            )
+                            pix.setZValue(0)
+                            drawn_with_icon = True
                 except Exception:
                     drawn_with_icon = False
 
@@ -272,7 +328,7 @@ class SimulationMapWidget(QGraphicsView):
                     int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255
                 )
 
-                # Default loner visual size (12x12)
+                # Default loner visual size
                 display_size = 12
                 try:
                     if (
@@ -280,31 +336,41 @@ class SimulationMapWidget(QGraphicsView):
                         and species in self._species_clan_size
                     ):
                         clan_size = self._species_clan_size.get(species, 12)
-                        # Loners are 10% of clan size
-                        display_size = max(4, int(clan_size * 0.4))
+                        # Loners should be about 50% of clan display size
+                        display_size = max(6, int(clan_size * 0.5))
                 except Exception:
                     pass
 
-                # If spores species and icon exists, draw icon scaled to display_size
+                # Cap loner size so individuals never grow excessively large
+                display_size = max(6, min(display_size, 60))
+
+                # Try to draw an icon for Spores/Crushed_Critters/Icefang loners
                 drawn_icon = False
                 try:
                     if species == "Spores":
                         icon_path = self._find_spores_icon()
-                        if icon_path and os.path.exists(icon_path):
-                            pm = QPixmap(icon_path)
-                            if not pm.isNull():
-                                scaled = pm.scaled(
-                                    int(display_size),
-                                    int(display_size),
-                                    Qt.AspectRatioMode.KeepAspectRatio,
-                                    Qt.TransformationMode.SmoothTransformation,
-                                )
-                                pix = self.scene.addPixmap(scaled)
-                                pix.setOffset(
-                                    x - scaled.width() / 2, y - scaled.height() / 2
-                                )
-                                pix.setZValue(2)
-                                drawn_icon = True
+                    elif species == "Crushed_Critters":
+                        icon_path = self._find_crushed_icon()
+                    elif species == "Icefang":
+                        icon_path = self._find_icefang_icon()
+                    else:
+                        icon_path = None
+
+                    if icon_path and os.path.exists(icon_path):
+                        pm = QPixmap(icon_path)
+                        if not pm.isNull():
+                            scaled = pm.scaled(
+                                int(display_size),
+                                int(display_size),
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            pix = self.scene.addPixmap(scaled)
+                            pix.setOffset(
+                                x - scaled.width() / 2, y - scaled.height() / 2
+                            )
+                            pix.setZValue(2)
+                            drawn_icon = True
                 except Exception:
                     drawn_icon = False
 
