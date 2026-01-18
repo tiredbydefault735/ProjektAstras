@@ -258,6 +258,8 @@ class StatsDialog(QDialog):
             pass
         content_layout.addWidget(stats_text, 1)
 
+        # (no separate Y-label column; use axis labels on the plot)
+
         # Right side: Population graph (use PyQtGraph for real-time performance)
         try:
             import pyqtgraph as pg
@@ -265,9 +267,20 @@ class StatsDialog(QDialog):
             pg.setConfigOptions(antialias=True)
 
             pw = pg.PlotWidget(background="#1a1a1a")
-            # Make final-stats graph shorter and more compact
-            pw.setMinimumHeight(120)
-            pw.setMaximumHeight(260)
+            # Give final-stats graph more vertical room so curves aren't squished
+            pw.setMinimumHeight(300)
+            try:
+                pw.setMaximumHeight(16777215)
+            except Exception:
+                pass
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+
+                pw.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
+            except Exception:
+                pass
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
@@ -275,10 +288,14 @@ class StatsDialog(QDialog):
             # remove explicit seconds unit to reduce clutter
             pw.setLabel("bottom", "Zeit", color="#ffffff", size="10pt")
 
-            # Enforce square aspect and disable user interaction
+            # Disable user interaction; do NOT lock aspect ratio so the plot
+            # can expand vertically to use available space.
             try:
                 vb = pw.getPlotItem().getViewBox()
-                vb.setAspectLocked(True, ratio=1)
+                try:
+                    vb.setAspectLocked(False)
+                except Exception:
+                    pass
                 vb.setMouseEnabled(False, False)
                 try:
                     vb.setMenuEnabled(False)
@@ -318,59 +335,104 @@ class StatsDialog(QDialog):
 
             # Set Y-axis ticks for final stats: integers when max<10, else steps of 5
             try:
+                # Axis styling and adaptive tick selection to avoid label crowding
                 left_axis = pw.getAxis("left")
+                bottom_axis = pw.getAxis("bottom")
+                try:
+                    left_axis.setStyle(tickFont=QFont("Minecraft", 10))
+                    bottom_axis.setStyle(tickFont=QFont("Minecraft", 10))
+                except Exception:
+                    pass
+                try:
+                    left_axis.setWidth(80)
+                except Exception:
+                    pass
+                try:
+                    bottom_axis.setHeight(30)
+                except Exception:
+                    pass
+
                 overall_max = 0
+                max_len = 0
                 for history in population_history.values():
                     if history:
                         try:
                             overall_max = max(overall_max, int(round(max(history))))
                         except Exception:
                             overall_max = max(overall_max, int(max(history)))
+                        try:
+                            max_len = max(max_len, len(history))
+                        except Exception:
+                            pass
 
-                # Add small headroom above the maximum so curves don't touch the top.
-                # Use 10% padding (minimum +1 unit) and round up to integer for axis range.
+                # Y axis: add small headroom and choose step to keep ~6 ticks
                 padded = max(1.0, float(overall_max) * 1.10)
                 y_max = int(math.ceil(padded))
-                if y_max < 10:
-                    # show integer ticks from 0..y_max
-                    ticks = [(i, str(i)) for i in range(0, y_max + 1, 1)]
-                else:
-                    # Use 2-unit ticks for larger ranges; ensure the final tick includes y_max
-                    step = 2
-                    ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
-                    if ticks and ticks[-1][0] != y_max:
-                        ticks.append((y_max, str(y_max)))
+                try:
+                    import math as _math
 
-                left_axis.setTicks([ticks])
-                # Set Y-range to the actual max population so the curve fills the box
+                    # Choose a "nice" step so we have at most ~6 ticks
+                    nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+                    y_step = None
+                    for s in nice:
+                        if float(y_max) / float(s) <= 6:
+                            y_step = s
+                            break
+                    if y_step is None:
+                        # fallback to ceil division
+                        y_step = max(1, int(_math.ceil(float(y_max) / 6.0)))
+
+                    # Ensure visible spacing: prefer steps of 10 or more when range is larger
+                    try:
+                        if y_max >= 20 and y_step < 10:
+                            y_step = 10
+                    except Exception:
+                        pass
+                except Exception:
+                    y_step = 1 if y_max < 10 else 2
+                y_ticks = [(i, str(i)) for i in range(0, y_max + 1, y_step)]
+                if y_ticks and y_ticks[-1][0] != y_max:
+                    y_ticks.append((y_max, str(y_max)))
+                # Show numeric Y-axis labels with the chosen ticks
+                try:
+                    left_axis.setTicks([y_ticks])
+                except Exception:
+                    pass
                 try:
                     vb = pw.getPlotItem().getViewBox()
-                    # Add a small fractional padding so the curves never touch the top
-                    vb.setYRange(0, y_max, padding=0.08)
+                    vb.setYRange(0, y_max, padding=0.20)
                 except Exception:
                     pass
 
-                # Set bottom axis ticks to every 5 seconds (labels at 0,5,10,...)
-                try:
-                    # estimate total duration from sampled points (sampled uses ds)
-                    if "ds" in locals() and ds:
-                        total_seconds = len(sampled) * ds
-                    else:
-                        total_seconds = (
-                            len(time_points) if "time_points" in locals() else 0
-                        )
-
+                # Bottom axis: compute total duration from population_history and ds
+                ds = 5
+                total_seconds = max_len * ds if max_len else 0
+                # Choose step to avoid overcrowding (seconds or minutes)
+                if total_seconds <= 60:
                     step = 5
-                    # generate ticks at 0,5,10,... up to total_seconds
-                    bottom_ticks = [
-                        (i, str(i)) for i in range(0, int(total_seconds) + 1, step)
-                    ]
-                    if not bottom_ticks:
-                        bottom_ticks = [(0, "0")]
-                    bottom_axis = pw.getAxis("bottom")
+                elif total_seconds <= 180:
+                    step = 30
+                elif total_seconds <= 600:
+                    step = 60
+                else:
+                    step = 60
+
+                bottom_ticks = []
+                for i in range(0, int(total_seconds) + 1, step):
+                    if step >= 60:
+                        # show minutes for coarse steps
+                        label = f"{int(i // 60)}m"
+                    else:
+                        label = str(i)
+                    bottom_ticks.append((i, label))
+                if not bottom_ticks:
+                    bottom_ticks = [(0, "0")]
+                try:
                     bottom_axis.setTicks([bottom_ticks])
                 except Exception:
                     pass
+
+                # no separate Y label widget to populate
             except Exception:
                 pass
 
@@ -2090,13 +2152,21 @@ class SimulationScreen(QWidget):
             except Exception:
                 pass
 
-            # Keep live plot at a fixed height to avoid layout jumps
+            # Allow live plot to grow taller (fixes vertically squished graphs)
             try:
                 from PyQt6.QtWidgets import QSizePolicy
 
-                pw.setMinimumHeight(200)
-                pw.setMaximumHeight(220)
-                pw.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                # Give a reasonable minimum height but allow expansion so the
+                # plot can use more vertical space instead of being compressed.
+                pw.setMinimumHeight(320)
+                try:
+                    # Remove any strict maximum so layouts may expand vertically
+                    pw.setMaximumHeight(16777215)
+                except Exception:
+                    pass
+                pw.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
             except Exception:
                 pass
 
@@ -2115,15 +2185,16 @@ class SimulationScreen(QWidget):
 
                 left_axis = pw.getAxis("left")
                 bottom_axis = pw.getAxis("bottom")
-                left_axis.setStyle(tickFont=QFont("Minecraft", 8))
-                bottom_axis.setStyle(tickFont=QFont("Minecraft", 8))
-                # Reserve fixed axis sizes so changing labels/ticks don't resize plot area
+                left_axis.setStyle(tickFont=QFont("Minecraft", 9))
+                bottom_axis.setStyle(tickFont=QFont("Minecraft", 9))
+                # Reserve larger axis sizes so labels have room and the plot
+                # area can expand vertically instead of compressing ticks.
                 try:
-                    left_axis.setWidth(48)
+                    left_axis.setWidth(110)
                 except Exception:
                     pass
                 try:
-                    bottom_axis.setHeight(22)
+                    bottom_axis.setHeight(30)
                 except Exception:
                     pass
             except Exception:
@@ -2446,14 +2517,18 @@ class SimulationScreen(QWidget):
                             overall_max = max(overall_max, int(max(h)))
 
                 if overall_max != getattr(self, "_live_last_overall_max", None):
-                    y_max = max(1, overall_max)
-                    if y_max < 10:
-                        ticks = [(i, str(i)) for i in range(0, y_max + 1, 1)]
-                    else:
-                        step = 2
-                        ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
-                        if ticks and ticks[-1][0] != y_max:
-                            ticks.append((y_max, str(y_max)))
+                    # Add 5 population units of headroom above current max
+                    y_max = max(1, overall_max + 5)
+                    # Limit number of Y ticks to avoid vertical crowding
+                    try:
+                        import math
+
+                        step = max(1, int(math.ceil(y_max / 6.0)))
+                    except Exception:
+                        step = 1 if y_max < 10 else 2
+                    ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
+                    if ticks and ticks[-1][0] != y_max:
+                        ticks.append((y_max, str(y_max)))
                     try:
                         left_axis.setTicks([ticks])
                     except Exception:
@@ -2475,8 +2550,25 @@ class SimulationScreen(QWidget):
                     if h:
                         latest = max(latest, len(h) - 1)
                 if latest != getattr(self, "_live_last_latest_time", None):
-                    step = 5
-                    ticks = [(i, str(i)) for i in range(0, latest + 1, step)]
+                    # Choose tick spacing based on overall time length so labels
+                    # are not overcrowded. Use minutes for long runs.
+                    if latest <= 20:
+                        step = 1
+                    elif latest <= 60:
+                        step = 5
+                    elif latest <= 180:
+                        step = 30
+                    else:
+                        step = 60
+
+                    ticks = []
+                    for i in range(0, latest + 1, step):
+                        if latest >= 60:
+                            # show minutes only for long timelines
+                            label = f"{int(i // 60)}m"
+                        else:
+                            label = str(i)
+                        ticks.append((i, label))
                     if not ticks:
                         ticks = [(0, "0")]
                     try:

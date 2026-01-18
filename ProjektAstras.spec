@@ -5,7 +5,7 @@ a = Analysis(
     ['frontend\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('static', 'static'), ('fonts', 'fonts'), ('icons', 'icons'), ('i18n', 'i18n'), ('locale', 'locale'), ('data', 'data')],
+    datas=[('static', 'static'), ('i18n', 'i18n')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
