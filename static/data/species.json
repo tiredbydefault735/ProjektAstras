@@ -4,12 +4,12 @@
         "max_survival_temp": 10,
         "max_clan_members": 10,
         "home_region": "Snowy_Abyss",
-        "hp": 100,
+        "hp": 50,
         "interactions": {
             "Icefang": "Freundlich",
             "Crushed_Critters": "Neutral",
-            "Spores": "Aggressiv",
-            "The_Corrupted": "Aggressiv"
+            "Spores": "Ängstlich",
+            "The_Corrupted": "Ängstlich"
         },
         "food_intake": 4
     },

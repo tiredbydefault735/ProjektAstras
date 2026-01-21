@@ -15,6 +15,7 @@ from PyQt6.QtGui import QIcon, QFontDatabase
 
 from screens.start_screen import StartScreen
 from screens.simulation_screen import SimulationScreen
+from screens.species_info_screen import SpeciesInfoScreen
 from styles.stylesheet import get_stylesheet
 from frontend.i18n import _
 
@@ -41,8 +42,13 @@ class ArachfaraApp(QMainWindow):
         self.setCentralWidget(self.stacked)
 
         # Create screens with optional color preset. Settings screen removed.
-        self.start_screen = StartScreen(self.go_to_simulation, None, self.color_preset)
+        self.start_screen = StartScreen(
+            self.go_to_simulation, self.go_to_species_info, self.color_preset
+        )
         self.simulation_screen = SimulationScreen(self.go_to_start, self.color_preset)
+        self.species_info_screen = SpeciesInfoScreen(
+            self.go_to_start, self.color_preset
+        )
 
         # Register screens with i18n so they're guaranteed to be notified
         try:
@@ -52,12 +58,15 @@ class ArachfaraApp(QMainWindow):
                 register_language_listener(self.start_screen.update_language)
             if hasattr(self.simulation_screen, "update_language"):
                 register_language_listener(self.simulation_screen.update_language)
+            if hasattr(self.species_info_screen, "update_language"):
+                register_language_listener(self.species_info_screen.update_language)
         except Exception:
             pass
 
         # Add screens to stacked widget
         self.stacked.addWidget(self.start_screen)
         self.stacked.addWidget(self.simulation_screen)
+        self.stacked.addWidget(self.species_info_screen)
 
         # Start with start screen
         self.stacked.setCurrentWidget(self.start_screen)
@@ -88,6 +97,10 @@ class ArachfaraApp(QMainWindow):
     def go_to_simulation(self):
         """Switch to simulation screen."""
         self.stacked.setCurrentWidget(self.simulation_screen)
+
+    def go_to_species_info(self):
+        """Switch to species info page."""
+        self.stacked.setCurrentWidget(self.species_info_screen)
 
     def open_settings(self):
         """Settings screen removed; noop callback."""

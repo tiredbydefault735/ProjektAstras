@@ -173,13 +173,13 @@ class StartScreen(QWidget):
         self.btn_start.clicked.connect(self._on_start_clicked)
         button_layout.addWidget(self.btn_start)
 
-        self.btn_settings = QPushButton(_("Settings"))
+        self.btn_settings = QPushButton(_("Species Information"))
         btn_settings_font = QFont("Minecraft", 11)
         btn_settings_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_settings.setFont(btn_settings_font)
         self.btn_settings.setFixedHeight(40)
         self.btn_settings.setStyleSheet(button_style)
-        self.btn_settings.clicked.connect(self.on_settings)
+        self.btn_settings.clicked.connect(self.on_species_info)
         button_layout.addWidget(self.btn_settings)
 
         self.btn_exit = QPushButton(_("Exit"))
@@ -211,7 +211,7 @@ class StartScreen(QWidget):
             if hasattr(self, "btn_start"):
                 self.btn_start.setText(_("Start Simulation"))
             if hasattr(self, "btn_settings"):
-                self.btn_settings.setText(_("Settings"))
+                self.btn_settings.setText(_("Species Information"))
             if hasattr(self, "btn_exit"):
                 self.btn_exit.setText(_("Exit"))
         except Exception:
@@ -235,6 +235,47 @@ class StartScreen(QWidget):
             "</div>"
         )
 
+    def on_species_info(self):
+        """Navigate to the Species Info screen; fall back to dialog if no callback."""
+        # Prefer the stacked widget navigation callback if provided
+        if hasattr(self, "go_to_settings") and callable(self.go_to_settings):
+            try:
+                self.go_to_settings()
+                return
+            except Exception:
+                pass
+
+        # Fallback: show a simple dialog with the infographic
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Species Information")
+        layout = QVBoxLayout(dlg)
+
+        img_path = get_static_path("ui/icefang_info.png")
+        info_label = QLabel()
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if img_path.exists():
+            pm = QPixmap(str(img_path))
+            # scale image to reasonable size within dialog
+            try:
+                scaled = pm.scaledToWidth(
+                    700, Qt.TransformationMode.SmoothTransformation
+                )
+                info_label.setPixmap(scaled)
+            except Exception:
+                info_label.setPixmap(pm)
+        else:
+            info_label.setText("No infographic available")
+
+        layout.addWidget(info_label)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        layout.addWidget(close_btn)
+
+        dlg.exec()
+
     def change_language(self, code):
         try:
             set_language(code)
@@ -242,7 +283,7 @@ class StartScreen(QWidget):
             pass
         # Update UI labels
         self.btn_start.setText(_("Start Simulation"))
-        self.btn_settings.setText(_("Settings"))
+        self.btn_settings.setText(_("Species Information"))
         self.btn_exit.setText(_("Exit"))
         # Update header
         header = self.findChild(QLabel, "start_header")

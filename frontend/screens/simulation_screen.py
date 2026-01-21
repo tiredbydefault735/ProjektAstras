@@ -182,20 +182,7 @@ class StatsDialog(QDialog):
 
     def __init__(self, stats, parent=None):
         super().__init__(parent)
-        try:
-            from frontend.i18n import _
-
-            self.setWindowTitle(_("Simulations-Statistiken"))
-        except Exception:
-            self.setWindowTitle("Simulations-Statistiken")
-        # keep stats so we can refresh text when language changes
-        self._stats = stats
-        self.setModal(True)
-        self.resize(900, 500)
-
-        # Set dark theme
-        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
-
+        # initialize layout and widgets for stats dialog
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
@@ -246,6 +233,44 @@ class StatsDialog(QDialog):
         text += f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
         text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
 
+        # store stats reference and text widget for language refresh and summaries
+        try:
+            self._stats = stats
+        except Exception:
+            self._stats = {}
+
+        # Add a short summary of randomizer samples (helps debugging missing events)
+        try:
+            rnd = stats.get("rnd_samples", {}) or {}
+            regen_count = len(rnd.get("regen", []))
+            clan_count = len(rnd.get("clan_growth", []))
+            loner_count = len(rnd.get("loner_spawn", []))
+            try:
+                regen_sum = sum(int(v) for v in rnd.get("regen", []) if v is not None)
+            except Exception:
+                regen_sum = 0
+            try:
+                clan_sum = sum(
+                    int(v) for v in rnd.get("clan_growth", []) if v is not None
+                )
+            except Exception:
+                clan_sum = 0
+            try:
+                loner_sum = sum(
+                    int(v) for v in rnd.get("loner_spawn", []) if v is not None
+                )
+            except Exception:
+                loner_sum = 0
+
+            text += (
+                f"<br><b>{_('Randomizer (Samples):')}</b><br>"
+                f"• {_('Regeneration')}: {regen_count} ({regen_sum})<br>"
+                f"• {_('Clanwachstum')}: {clan_count} ({clan_sum})<br>"
+                f"• {_('Einzelgänger Spawn')}: {loner_count} ({loner_sum})<br>"
+            )
+        except Exception:
+            pass
+
         stats_text.setText(text)
         # store for language refresh
         self._stats_text = stats_text
@@ -258,6 +283,8 @@ class StatsDialog(QDialog):
             pass
         content_layout.addWidget(stats_text, 1)
 
+        # (no separate Y-label column; use axis labels on the plot)
+
         # Right side: Population graph (use PyQtGraph for real-time performance)
         try:
             import pyqtgraph as pg
@@ -265,20 +292,35 @@ class StatsDialog(QDialog):
             pg.setConfigOptions(antialias=True)
 
             pw = pg.PlotWidget(background="#1a1a1a")
-            # Make final-stats graph shorter and more compact
-            pw.setMinimumHeight(120)
-            pw.setMaximumHeight(260)
+            # Give final-stats graph more vertical room so curves aren't squished
+            pw.setMinimumHeight(300)
+            try:
+                pw.setMaximumHeight(16777215)
+            except Exception:
+                pass
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+
+                pw.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
+            except Exception:
+                pass
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", "Population", color="#ffffff", size="10pt")
+            pw.setLabel("left", _("Population"), color="#ffffff", size="10pt")
             # remove explicit seconds unit to reduce clutter
-            pw.setLabel("bottom", "Zeit", color="#ffffff", size="10pt")
+            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="10pt")
 
-            # Enforce square aspect and disable user interaction
+            # Disable user interaction; do NOT lock aspect ratio so the plot
+            # can expand vertically to use available space.
             try:
                 vb = pw.getPlotItem().getViewBox()
-                vb.setAspectLocked(True, ratio=1)
+                try:
+                    vb.setAspectLocked(False)
+                except Exception:
+                    pass
                 vb.setMouseEnabled(False, False)
                 try:
                     vb.setMenuEnabled(False)
@@ -318,63 +360,269 @@ class StatsDialog(QDialog):
 
             # Set Y-axis ticks for final stats: integers when max<10, else steps of 5
             try:
+                # Axis styling and adaptive tick selection to avoid label crowding
                 left_axis = pw.getAxis("left")
+                bottom_axis = pw.getAxis("bottom")
+                try:
+                    left_axis.setStyle(tickFont=QFont("Minecraft", 10))
+                    bottom_axis.setStyle(tickFont=QFont("Minecraft", 10))
+                except Exception:
+                    pass
+                try:
+                    # Reduce reserved left axis width so the Y-label sits closer to axis
+                    left_axis.setWidth(60)
+                except Exception:
+                    pass
+                try:
+                    bottom_axis.setHeight(30)
+                except Exception:
+                    pass
+
                 overall_max = 0
+                max_len = 0
                 for history in population_history.values():
                     if history:
                         try:
                             overall_max = max(overall_max, int(round(max(history))))
                         except Exception:
                             overall_max = max(overall_max, int(max(history)))
+                        try:
+                            max_len = max(max_len, len(history))
+                        except Exception:
+                            pass
 
-                # Add small headroom above the maximum so curves don't touch the top.
-                # Use 10% padding (minimum +1 unit) and round up to integer for axis range.
+                # Y axis: add small headroom and choose step to keep ~6 ticks
                 padded = max(1.0, float(overall_max) * 1.10)
                 y_max = int(math.ceil(padded))
-                if y_max < 10:
-                    # show integer ticks from 0..y_max
-                    ticks = [(i, str(i)) for i in range(0, y_max + 1, 1)]
-                else:
-                    # Use 2-unit ticks for larger ranges; ensure the final tick includes y_max
-                    step = 2
-                    ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
-                    if ticks and ticks[-1][0] != y_max:
-                        ticks.append((y_max, str(y_max)))
+                try:
+                    import math as _math
 
-                left_axis.setTicks([ticks])
-                # Set Y-range to the actual max population so the curve fills the box
+                    # Choose a "nice" step so we have at most ~6 ticks
+                    nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+                    y_step = None
+                    for s in nice:
+                        if float(y_max) / float(s) <= 6:
+                            y_step = s
+                            break
+                    if y_step is None:
+                        # fallback to ceil division
+                        y_step = max(1, int(_math.ceil(float(y_max) / 6.0)))
+
+                    # Ensure visible spacing: prefer steps of 10 or more when range is larger
+                    try:
+                        if y_max >= 20 and y_step < 10:
+                            y_step = 10
+                    except Exception:
+                        pass
+                except Exception:
+                    y_step = 1 if y_max < 10 else 2
+                y_ticks = [(i, str(i)) for i in range(0, y_max + 1, y_step)]
+                if y_ticks and y_ticks[-1][0] != y_max:
+                    y_ticks.append((y_max, str(y_max)))
+                # Show numeric Y-axis labels with the chosen ticks
+                try:
+                    left_axis.setTicks([y_ticks])
+                except Exception:
+                    pass
                 try:
                     vb = pw.getPlotItem().getViewBox()
-                    # Add a small fractional padding so the curves never touch the top
-                    vb.setYRange(0, y_max, padding=0.08)
+                    vb.setYRange(0, y_max, padding=0.20)
                 except Exception:
                     pass
 
-                # Set bottom axis ticks to every 5 seconds (labels at 0,5,10,...)
-                try:
-                    # estimate total duration from sampled points (sampled uses ds)
-                    if "ds" in locals() and ds:
-                        total_seconds = len(sampled) * ds
-                    else:
-                        total_seconds = (
-                            len(time_points) if "time_points" in locals() else 0
-                        )
-
+                # Bottom axis: compute total duration from population_history and ds
+                ds = 5
+                total_seconds = max_len * ds if max_len else 0
+                # Choose step to avoid overcrowding (seconds or minutes)
+                if total_seconds <= 60:
                     step = 5
-                    # generate ticks at 0,5,10,... up to total_seconds
-                    bottom_ticks = [
-                        (i, str(i)) for i in range(0, int(total_seconds) + 1, step)
-                    ]
-                    if not bottom_ticks:
-                        bottom_ticks = [(0, "0")]
-                    bottom_axis = pw.getAxis("bottom")
+                elif total_seconds <= 180:
+                    step = 30
+                elif total_seconds <= 600:
+                    step = 60
+                else:
+                    step = 60
+
+                bottom_ticks = []
+                for i in range(0, int(total_seconds) + 1, step):
+                    if step >= 60:
+                        # show minutes for coarse steps
+                        label = f"{int(i // 60)}m"
+                    else:
+                        label = str(i)
+                    bottom_ticks.append((i, label))
+                if not bottom_ticks:
+                    bottom_ticks = [(0, "0")]
+                try:
                     bottom_axis.setTicks([bottom_ticks])
                 except Exception:
                     pass
+
+                # no separate Y label widget to populate
             except Exception:
                 pass
 
-            content_layout.addWidget(pw, 2)
+            # Create a stacked area so we can switch between final population
+            # stats and Randomizers visualization using toggle buttons below.
+            try:
+                from PyQt6.QtWidgets import QStackedWidget, QWidget
+
+                right_stack = QStackedWidget()
+
+                # Page 0: final population plot
+                page_stats = QWidget()
+                p_stats_layout = QVBoxLayout(page_stats)
+                p_stats_layout.setContentsMargins(0, 0, 0, 0)
+                p_stats_layout.addWidget(pw)
+
+                # Page 1: Randomizers graph (uses rnd_samples from stats)
+                page_rand = QWidget()
+                p_rand_layout = QVBoxLayout(page_rand)
+                p_rand_layout.setContentsMargins(0, 0, 0, 0)
+
+                try:
+                    import pyqtgraph as pg
+
+                    rpw = pg.PlotWidget(background="#151515")
+                    rpw.getPlotItem().showGrid(x=True, y=True, alpha=0.15)
+                    rpw.setMinimumHeight(300)
+                    rpw.setLabel("left", "Value", color="#ffffff", size="9pt")
+                    rpw.setLabel("bottom", "Samples", color="#ffffff", size="9pt")
+                    try:
+                        rpw.addLegend(offset=(8, 8))
+                    except Exception:
+                        pass
+
+                    # Plot rnd_samples as histograms for better distribution view
+                    rnd = stats.get("rnd_samples", {}) or {}
+                    colors = {
+                        "regen": (102, 204, 102),
+                        "clan_growth": (102, 170, 255),
+                        "loner_spawn": (255, 204, 102),
+                    }
+                    display_names = {
+                        "regen": "Nahrung (Regeneration)",
+                        "clan_growth": "Clanwachstum",
+                        "loner_spawn": "Einzelgänger Spawn",
+                    }
+
+                    # Collect histograms per series
+                    has_any = False
+                    max_bin = 0
+                    hist_data = {}
+                    for key, vals in rnd.items():
+                        try:
+                            nums = [int(v) for v in vals if v is not None]
+                        except Exception:
+                            nums = []
+                        if not nums:
+                            hist_data[key] = ([], [], None)
+                            continue
+                        has_any = True
+                        if key == "regen":
+                            # Aggregate regen into bins: 0-1, 2-4, 5-9, 10+
+                            ranges = [(0, 1), (2, 4), (5, 9), (10, 10**9)]
+                            counts = [0] * len(ranges)
+                            for n in nums:
+                                for i, (a, b) in enumerate(ranges):
+                                    if a <= n <= b:
+                                        counts[i] += 1
+                                        break
+                            bins = list(range(len(ranges)))
+                            # labels for bottom axis
+                            labels = ["0-1", "2-4", "5-9", "10+"]
+                            hist_data[key] = (bins, counts, labels)
+                            max_bin = max(max_bin, len(bins) - 1)
+                        else:
+                            mx = max(nums)
+                            max_bin = max(max_bin, mx)
+                            # build simple count histogram bins 0..mx
+                            counts = [0] * (mx + 1)
+                            for n in nums:
+                                counts[n] += 1
+                            bins = list(range(0, mx + 1))
+                            hist_data[key] = (bins, counts, None)
+
+                    if not has_any:
+                        # nothing to show
+                        placeholder = QLabel(_("Keine Randomizer-Daten verfügbar"))
+                        placeholder.setStyleSheet("color: #999999;")
+                        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        p_rand_layout.addWidget(placeholder)
+                    else:
+                        # Create grouped bar chart: shift bars slightly per series
+                        try:
+                            from pyqtgraph import BarGraphItem
+
+                            group_keys = [
+                                k
+                                for k in ("regen", "clan_growth", "loner_spawn")
+                                if k in hist_data
+                            ]
+                            # width per bar
+                            bw = 0.2
+                            offsets = {
+                                "regen": -bw,
+                                "clan_growth": 0.0,
+                                "loner_spawn": bw,
+                            }
+                            for key in group_keys:
+                                bins, counts = hist_data.get(key, ([], []))
+                                if not bins:
+                                    continue
+                                x = [b + offsets.get(key, 0) for b in bins]
+                                bg = BarGraphItem(
+                                    x=x,
+                                    height=counts,
+                                    width=bw,
+                                    brush=pg.mkBrush(colors.get(key, (200, 200, 200))),
+                                )
+                                rpw.addItem(bg)
+                                try:
+                                    # add legend symbol
+                                    rpw.plot(
+                                        [],
+                                        [],
+                                        pen=pg.mkPen((0, 0, 0, 0)),
+                                        name=display_names.get(key, key),
+                                    )
+                                except Exception:
+                                    pass
+                        except Exception:
+                            # fallback to time-series if BarGraphItem not available
+                            for key, vals in rnd.items():
+                                try:
+                                    x = list(range(len(vals)))
+                                    y = [float(v) for v in vals]
+                                    pen = pg.mkPen(
+                                        colors.get(key, (200, 200, 200)), width=2
+                                    )
+                                    rpw.plot(
+                                        x, y, pen=pen, name=display_names.get(key, key)
+                                    )
+                                except Exception:
+                                    pass
+
+                    p_rand_layout.addWidget(rpw)
+                except Exception:
+                    # If pyqtgraph missing, show a placeholder
+                    placeholder = QLabel(
+                        _("Randomizers graph nicht verfügbar (pyqtgraph benötigt)")
+                    )
+                    placeholder.setStyleSheet("color: #999999;")
+                    placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    p_rand_layout.addWidget(placeholder)
+
+                right_stack.addWidget(page_stats)
+                right_stack.addWidget(page_rand)
+
+                # expose stack to dialog for button callbacks
+                self._right_stack = right_stack
+
+                content_layout.addWidget(right_stack, 2)
+            except Exception:
+                # fallback: add the population plot directly
+                content_layout.addWidget(pw, 2)
         except Exception:
             no_graph_label = QLabel(_("Graph nicht verfügbar\n(pyqtgraph benötigt)"))
             no_graph_label.setStyleSheet("color: #999999;")
@@ -382,6 +630,24 @@ class StatsDialog(QDialog):
             content_layout.addWidget(no_graph_label, 2)
 
         main_layout.addLayout(content_layout)
+
+        # Toggle buttons to switch between Stats and Randomizers graph
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self.btn_view_stats = QPushButton(_("Stats"))
+        self.btn_view_stats.setCheckable(True)
+        self.btn_view_stats.setChecked(True)
+        self.btn_view_stats.clicked.connect(lambda: self._switch_stats_page(0))
+        btn_row.addWidget(self.btn_view_stats)
+
+        self.btn_view_random = QPushButton(_("Randomizers"))
+        self.btn_view_random.setCheckable(True)
+        self.btn_view_random.setChecked(False)
+        self.btn_view_random.clicked.connect(lambda: self._switch_stats_page(1))
+        btn_row.addWidget(self.btn_view_random)
+
+        btn_row.addStretch()
+        main_layout.addLayout(btn_row)
 
         # Close button
         close_btn = QPushButton(_("Schließen"))
@@ -445,6 +711,17 @@ class StatsDialog(QDialog):
             except Exception:
                 pass
 
+        except Exception:
+            pass
+
+    def _switch_stats_page(self, idx: int):
+        """Switch the right-side stacked widget between Stats and Randomizers."""
+        try:
+            if hasattr(self, "_right_stack") and self._right_stack is not None:
+                self._right_stack.setCurrentIndex(int(idx))
+            # update button checked states
+            self.btn_view_stats.setChecked(idx == 0)
+            self.btn_view_random.setChecked(idx == 1)
         except Exception:
             pass
 
@@ -902,11 +1179,7 @@ class EnvironmentPanel(QWidget):
         self.food_places_slider.setMinimum(1)
         self.food_places_slider.setMaximum(10)
         self.food_places_slider.setValue(5)
-        self.food_places_slider.valueChanged.connect(
-            lambda v: self.food_places_label.setText(
-                _("Nahrungsplätze: {v}").format(v=v)
-            )
-        )
+        self.food_places_slider.valueChanged.connect(self.on_food_places_changed)
         layout.addWidget(self.food_places_slider)
 
         # Nahrungsmenge pro Platz
@@ -1111,6 +1384,37 @@ class EnvironmentPanel(QWidget):
     def set_species_panel(self, species_panel):
         """Set reference to species panel after it's created."""
         self.species_panel = species_panel
+
+    def on_food_places_changed(self, v):
+        """Handler for food places slider: update label and preview food on map."""
+        try:
+            # update label
+            self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
+        except Exception:
+            try:
+                self.food_places_label.setText(f"Nahrungsplätze: {v}")
+            except Exception:
+                pass
+
+        # preview on map if available
+        try:
+            amount = (
+                self.food_amount_slider.value()
+                if hasattr(self, "food_amount_slider")
+                else 0
+            )
+            max_amount = (
+                self.food_amount_slider.maximum()
+                if hasattr(self, "food_amount_slider")
+                else 100
+            )
+            if hasattr(self, "map_widget") and self.map_widget is not None:
+                try:
+                    self.map_widget.preview_food_sources(v, amount, max_amount)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def increase_food(self):
         """Increase food level."""
@@ -1462,23 +1766,23 @@ class SimulationScreen(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
 
-        btn_back = QPushButton(_("← Back"))
+        self.btn_back = QPushButton(_("← Back"))
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_back.setFont(btn_back_font)
-        btn_back.setFixedWidth(100)
-        btn_back.clicked.connect(self.on_back)
-        top_bar.addWidget(btn_back)
+        self.btn_back.setFont(btn_back_font)
+        self.btn_back.setFixedWidth(100)
+        self.btn_back.clicked.connect(self.on_back)
+        top_bar.addWidget(self.btn_back)
 
         top_bar.addStretch()
 
-        btn_exit = QPushButton(_("Exit"))
+        self.btn_exit = QPushButton(_("Exit"))
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        btn_exit.setFont(btn_exit_font)
-        btn_exit.setFixedWidth(100)
-        btn_exit.clicked.connect(self.on_exit)
-        top_bar.addWidget(btn_exit)
+        self.btn_exit.setFont(btn_exit_font)
+        self.btn_exit.setFixedWidth(100)
+        self.btn_exit.clicked.connect(self.on_exit)
+        top_bar.addWidget(self.btn_exit)
 
         main_layout.addLayout(top_bar)
 
@@ -1563,6 +1867,38 @@ class SimulationScreen(QWidget):
 
         right_layout.addWidget(self.panel_stack)
 
+        # Render default food preview after a short delay so the map viewport
+        # has a valid size; show the default number of food places as full.
+        try:
+            if (
+                hasattr(self, "environment_panel")
+                and self.environment_panel is not None
+            ):
+
+                def _preview_startup():
+                    try:
+                        num = self.environment_panel.food_places_slider.value()
+                        max_amt = (
+                            self.environment_panel.food_amount_slider.maximum()
+                            if hasattr(self.environment_panel, "food_amount_slider")
+                            else 100
+                        )
+                        try:
+                            self.map_widget.preview_food_sources(num, max_amt, max_amt)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                try:
+                    from PyQt6.QtCore import QTimer
+
+                    QTimer.singleShot(120, _preview_startup)
+                except Exception:
+                    _preview_startup()
+        except Exception:
+            pass
+
         # Store log text in variable instead of label (use module-level `_`)
         try:
             self.log_text = _("Simulation bereit.")
@@ -1570,7 +1906,7 @@ class SimulationScreen(QWidget):
             self.log_text = "Simulation bereit."
 
         # Control section at bottom of right column
-        right_layout.addSpacing(20)
+        right_layout.addSpacing(40)
 
         # Stats and Log buttons (only shown before simulation starts)
         self.stats_log_widget = QWidget()
@@ -1965,6 +2301,11 @@ class SimulationScreen(QWidget):
                 self.population_data = {
                     k: list(v) for k, v in population_history.items()
                 }
+            # Capture recent random draw samples from backend for distribution graph
+            try:
+                self.rnd_samples = data.get("rnd_samples", {})
+            except Exception:
+                self.rnd_samples = {}
             # Keep the latest instantaneous species counts for smoother live plotting
             try:
                 self._latest_species_counts = stats.get("species_counts", {})
@@ -2073,8 +2414,8 @@ class SimulationScreen(QWidget):
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", "Population", color="#ffffff", size="9pt")
-            pw.setLabel("bottom", "Time (s)", color="#ffffff", size="9pt")
+            pw.setLabel("left", _("Population"), color="#ffffff", size="9pt")
+            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="9pt")
 
             # Lock aspect ratio to square and disable interactions
             try:
@@ -2090,13 +2431,22 @@ class SimulationScreen(QWidget):
             except Exception:
                 pass
 
-            # Keep live plot at a fixed height to avoid layout jumps
+            # Allow live plot to grow taller (fixes vertically squished graphs)
             try:
                 from PyQt6.QtWidgets import QSizePolicy
 
-                pw.setMinimumHeight(200)
-                pw.setMaximumHeight(220)
-                pw.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                # Give a reasonable minimum height but allow expansion so the
+                # plot can use more vertical space instead of being compressed.
+                # Make live graph slightly smaller to give room for distribution graph
+                pw.setMinimumHeight(240)
+                try:
+                    # Remove any strict maximum so layouts may expand vertically
+                    pw.setMaximumHeight(16777215)
+                except Exception:
+                    pass
+                pw.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
             except Exception:
                 pass
 
@@ -2115,15 +2465,17 @@ class SimulationScreen(QWidget):
 
                 left_axis = pw.getAxis("left")
                 bottom_axis = pw.getAxis("bottom")
-                left_axis.setStyle(tickFont=QFont("Minecraft", 8))
-                bottom_axis.setStyle(tickFont=QFont("Minecraft", 8))
-                # Reserve fixed axis sizes so changing labels/ticks don't resize plot area
+                left_axis.setStyle(tickFont=QFont("Minecraft", 9))
+                bottom_axis.setStyle(tickFont=QFont("Minecraft", 9))
+                # Reserve larger axis sizes so labels have room and the plot
+                # area can expand vertically instead of compressing ticks.
                 try:
-                    left_axis.setWidth(48)
+                    # Reduce reserved left axis width for the live graph
+                    left_axis.setWidth(60)
                 except Exception:
                     pass
                 try:
-                    bottom_axis.setHeight(22)
+                    bottom_axis.setHeight(30)
                 except Exception:
                     pass
             except Exception:
@@ -2446,14 +2798,18 @@ class SimulationScreen(QWidget):
                             overall_max = max(overall_max, int(max(h)))
 
                 if overall_max != getattr(self, "_live_last_overall_max", None):
-                    y_max = max(1, overall_max)
-                    if y_max < 10:
-                        ticks = [(i, str(i)) for i in range(0, y_max + 1, 1)]
-                    else:
-                        step = 2
-                        ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
-                        if ticks and ticks[-1][0] != y_max:
-                            ticks.append((y_max, str(y_max)))
+                    # Add 5 population units of headroom above current max
+                    y_max = max(1, overall_max + 5)
+                    # Limit number of Y ticks to avoid vertical crowding
+                    try:
+                        import math
+
+                        step = max(1, int(math.ceil(y_max / 6.0)))
+                    except Exception:
+                        step = 1 if y_max < 10 else 2
+                    ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
+                    if ticks and ticks[-1][0] != y_max:
+                        ticks.append((y_max, str(y_max)))
                     try:
                         left_axis.setTicks([ticks])
                     except Exception:
@@ -2475,8 +2831,25 @@ class SimulationScreen(QWidget):
                     if h:
                         latest = max(latest, len(h) - 1)
                 if latest != getattr(self, "_live_last_latest_time", None):
-                    step = 5
-                    ticks = [(i, str(i)) for i in range(0, latest + 1, step)]
+                    # Choose tick spacing based on overall time length so labels
+                    # are not overcrowded. Use minutes for long runs.
+                    if latest <= 20:
+                        step = 1
+                    elif latest <= 60:
+                        step = 5
+                    elif latest <= 180:
+                        step = 30
+                    else:
+                        step = 60
+
+                    ticks = []
+                    for i in range(0, latest + 1, step):
+                        if latest >= 60:
+                            # show minutes only for long timelines
+                            label = f"{int(i // 60)}m"
+                        else:
+                            label = str(i)
+                        ticks.append((i, label))
                     if not ticks:
                         ticks = [(0, "0")]
                     try:
@@ -2499,6 +2872,76 @@ class SimulationScreen(QWidget):
             log_lines = self.log_text.split("\n")[-15:]
             # Use plain text; LogHighlighter handles coloring
             self.log_display.setPlainText("\n".join(log_lines))
+
+        # Update distribution graph (recent random draws)
+        try:
+            if (
+                hasattr(self, "dist_graph_widget")
+                and self.dist_graph_widget is not None
+            ):
+                samples = getattr(self, "rnd_samples", {}) or {}
+                colors = {
+                    "regen": "#66cc66",
+                    "clan_growth": "#66aaff",
+                    "loner_spawn": "#ffcc66",
+                }
+
+                # Ensure curves dict exists
+                if not hasattr(self, "dist_curves"):
+                    self.dist_curves = {}
+
+                for key in ["regen", "clan_growth", "loner_spawn"]:
+                    vals = samples.get(key, [])
+                    if not vals:
+                        # clear existing curve if any
+                        if key in self.dist_curves:
+                            try:
+                                self.dist_curves[key].setData([], [])
+                            except Exception:
+                                pass
+                        continue
+
+                    x = list(range(len(vals)))
+                    y = [float(v) for v in vals]
+                    color = colors.get(key, "#ffffff")
+                    display_names = {
+                        "regen": "Nahrung (Regeneration)",
+                        "clan_growth": "Clanwachstum",
+                        "loner_spawn": "Einzelgänger Spawn",
+                    }
+                    if key not in self.dist_curves:
+                        try:
+                            pen = pg.mkPen(color=color, width=2)
+                            name = display_names.get(key, key)
+                            curve = self.dist_graph_widget.plot(
+                                x, y, pen=pen, name=name
+                            )
+                            try:
+                                curve.setClipToView(True)
+                            except Exception:
+                                pass
+                            self.dist_curves[key] = curve
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            self.dist_curves[key].setData(x, y)
+                        except Exception:
+                            pass
+
+                # Adjust view range to latest samples
+                try:
+                    vb = self.dist_graph_widget.getPlotItem().getViewBox()
+                    latest = 0
+                    for v in samples.values():
+                        if v:
+                            latest = max(latest, len(v) - 1)
+                    start = max(0, latest - 300)
+                    vb.setXRange(start, latest, padding=0)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def on_back(self):
         """Go back to start screen."""

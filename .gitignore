@@ -3,3 +3,7 @@
 .clip
 **/pyc
 **build
+dist/
+build/
+main.onefile-build/
+*.exe
