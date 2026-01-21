@@ -308,8 +308,16 @@ class SpeciesGroup:
                 self.env.sim_model, "is_day", True
             )
 
+            # Use global clan speed multiplier from SimulationModel when available
+            try:
+                clan_speed_mult = getattr(
+                    self.env, "sim_model", None
+                ).clan_speed_multiplier
+            except Exception:
+                clan_speed_mult = 1.0
+
             for clan in list(self.clans):
-                clan.update(self.map_width, self.map_height, is_day, 1.0)
+                clan.update(self.map_width, self.map_height, is_day, clan_speed_mult)
 
                 # Hunger death
                 if clan.hunger_timer >= 300:
@@ -405,6 +413,11 @@ class SimulationModel:
 
         # Re-initialize SimPy environment for each setup
         self.env = simpy.Environment()
+        # allow group processes to reference back to this SimulationModel
+        try:
+            self.env.sim_model = self
+        except Exception:
+            pass
         # Ensure time exists before any logging
         self.time = 0
         self.groups = []
@@ -676,10 +689,10 @@ class SimulationModel:
                 # record spawn event
                 if hasattr(self, "rnd_history"):
                     self.rnd_history.setdefault("loner_spawn", []).append(spawn_count)
-                    if len(self.rnd_history["loner_spawn"]) > 200:
+                    if len(self.rnd_history["loner_spawn"]) > 500:
                         self.rnd_history["loner_spawn"] = self.rnd_history[
                             "loner_spawn"
-                        ][-200:]
+                        ][-500:]
                 # UI log
                 self.add_log(
                     f"🔹 {spawn_count} neuer Einzelgänger der Spezies {species_name} ist erschienen!"
@@ -788,8 +801,8 @@ class SimulationModel:
             if regen and hasattr(self, "rnd_history"):
                 self.rnd_history.setdefault("regen", []).append(regen)
                 # keep history short
-                if len(self.rnd_history["regen"]) > 200:
-                    self.rnd_history["regen"] = self.rnd_history["regen"][-200:]
+                if len(self.rnd_history["regen"]) > 500:
+                    self.rnd_history["regen"] = self.rnd_history["regen"][-500:]
 
         # Update Loners und prüfe auf Hungertod und Temperatur-Schaden
         loners_to_remove = []
@@ -1032,9 +1045,9 @@ class SimulationModel:
                                         self.rnd_history.setdefault(
                                             "clan_growth", []
                                         ).append(actual)
-                                        if len(self.rnd_history["clan_growth"]) > 200:
+                                        if len(self.rnd_history["clan_growth"]) > 500:
                                             self.rnd_history["clan_growth"] = (
-                                                self.rnd_history["clan_growth"][-200:]
+                                                self.rnd_history["clan_growth"][-500:]
                                             )
                         except Exception:
                             pass
@@ -1290,7 +1303,7 @@ class SimulationModel:
                                                         ] = self.rnd_history[
                                                             "clan_growth"
                                                         ][
-                                                            -200:
+                                                            -500:
                                                         ]
                                 else:
                                     # Different-species 'friendly' — do not merge. 50% chance

@@ -1179,11 +1179,7 @@ class EnvironmentPanel(QWidget):
         self.food_places_slider.setMinimum(1)
         self.food_places_slider.setMaximum(10)
         self.food_places_slider.setValue(5)
-        self.food_places_slider.valueChanged.connect(
-            lambda v: self.food_places_label.setText(
-                _("Nahrungsplätze: {v}").format(v=v)
-            )
-        )
+        self.food_places_slider.valueChanged.connect(self.on_food_places_changed)
         layout.addWidget(self.food_places_slider)
 
         # Nahrungsmenge pro Platz
@@ -1388,6 +1384,37 @@ class EnvironmentPanel(QWidget):
     def set_species_panel(self, species_panel):
         """Set reference to species panel after it's created."""
         self.species_panel = species_panel
+
+    def on_food_places_changed(self, v):
+        """Handler for food places slider: update label and preview food on map."""
+        try:
+            # update label
+            self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
+        except Exception:
+            try:
+                self.food_places_label.setText(f"Nahrungsplätze: {v}")
+            except Exception:
+                pass
+
+        # preview on map if available
+        try:
+            amount = (
+                self.food_amount_slider.value()
+                if hasattr(self, "food_amount_slider")
+                else 0
+            )
+            max_amount = (
+                self.food_amount_slider.maximum()
+                if hasattr(self, "food_amount_slider")
+                else 100
+            )
+            if hasattr(self, "map_widget") and self.map_widget is not None:
+                try:
+                    self.map_widget.preview_food_sources(v, amount, max_amount)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def increase_food(self):
         """Increase food level."""
@@ -1840,6 +1867,38 @@ class SimulationScreen(QWidget):
 
         right_layout.addWidget(self.panel_stack)
 
+        # Render default food preview after a short delay so the map viewport
+        # has a valid size; show the default number of food places as full.
+        try:
+            if (
+                hasattr(self, "environment_panel")
+                and self.environment_panel is not None
+            ):
+
+                def _preview_startup():
+                    try:
+                        num = self.environment_panel.food_places_slider.value()
+                        max_amt = (
+                            self.environment_panel.food_amount_slider.maximum()
+                            if hasattr(self.environment_panel, "food_amount_slider")
+                            else 100
+                        )
+                        try:
+                            self.map_widget.preview_food_sources(num, max_amt, max_amt)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                try:
+                    from PyQt6.QtCore import QTimer
+
+                    QTimer.singleShot(120, _preview_startup)
+                except Exception:
+                    _preview_startup()
+        except Exception:
+            pass
+
         # Store log text in variable instead of label (use module-level `_`)
         try:
             self.log_text = _("Simulation bereit.")
@@ -1847,7 +1906,7 @@ class SimulationScreen(QWidget):
             self.log_text = "Simulation bereit."
 
         # Control section at bottom of right column
-        right_layout.addSpacing(20)
+        right_layout.addSpacing(40)
 
         # Stats and Log buttons (only shown before simulation starts)
         self.stats_log_widget = QWidget()
@@ -2877,7 +2936,7 @@ class SimulationScreen(QWidget):
                     for v in samples.values():
                         if v:
                             latest = max(latest, len(v) - 1)
-                    start = max(0, latest - 60)
+                    start = max(0, latest - 300)
                     vb.setXRange(start, latest, padding=0)
                 except Exception:
                     pass

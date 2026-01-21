@@ -8,8 +8,8 @@
         "interactions": {
             "Icefang": "Freundlich",
             "Crushed_Critters": "Neutral",
-            "Spores": "Aggressiv",
-            "The_Corrupted": "Aggressiv"
+            "Spores": "Ängstlich",
+            "The_Corrupted": "Ängstlich"
         },
         "food_intake": 4
     },

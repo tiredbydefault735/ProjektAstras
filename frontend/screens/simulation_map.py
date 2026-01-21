@@ -4,10 +4,15 @@ SimulationMapWidget - Neu: Direktes Rendering für glitch-freie Darstellung
 
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsTextItem
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPixmap
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 
 import os
+from pathlib import Path
+
+from utils import get_static_path
+import math
+import random
 
 
 class SimulationMapWidget(QGraphicsView):
@@ -24,16 +29,20 @@ class SimulationMapWidget(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
+        # Align scene to top-left to avoid centered offsets when the view
+        # or scene are resized or not yet laid out.
+        try:
+            self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        except Exception:
+            pass
+
         # Region image mapping
+        # Use get_static_path so resources work when frozen with PyInstaller
         self.region_images = {
-            "Snowy Abyss": os.path.join("static", "textures", "snowy_abyss.png"),
-            "Wasteland": os.path.join("static", "textures", "wasteland.png"),
-            "Evergreen Forest": os.path.join(
-                "static", "textures", "evergreen_forest.png"
-            ),
-            "Corrupted Caves": os.path.join(
-                "static", "textures", "corrupted_caves.png"
-            ),
+            "Snowy Abyss": get_static_path("textures/snowy_abyss.png"),
+            "Wasteland": get_static_path("textures/wasteland.png"),
+            "Evergreen Forest": get_static_path("textures/evergreen_forest.png"),
+            "Corrupted Caves": get_static_path("textures/corrupted_caves.png"),
         }
         self.bg_pixmap = None
 
@@ -50,24 +59,24 @@ class SimulationMapWidget(QGraphicsView):
         self._spores_icon_path = None
         self._crushed_icon_path = None
         self._icefang_icon_path = None
+        self._corrupted_icon_path = None
 
     def _find_spores_icon(self):
         """Return the path to the spores icon (case-insensitive search)."""
         if self._spores_icon_path:
             return self._spores_icon_path
-        ui_dir = os.path.join("static", "ui")
+        ui_dir = get_static_path("ui")
         try:
-            for fname in os.listdir(ui_dir):
-                if fname.lower() == "spores.png":
-                    candidate = os.path.join(ui_dir, fname)
-                    if os.path.exists(candidate):
-                        self._spores_icon_path = candidate
-                        return candidate
+            for p in Path(ui_dir).iterdir():
+                if p.name.lower() == "spores.png":
+                    if p.exists():
+                        self._spores_icon_path = p
+                        return p
         except Exception:
             pass
-        # Fallback to the canonical lowercase name (works on case-insensitive FS)
-        candidate = os.path.join("static", "ui", "spores.png")
-        if os.path.exists(candidate):
+        # Fallback to the canonical lowercase name
+        candidate = get_static_path("ui/spores.png")
+        if candidate.exists():
             self._spores_icon_path = candidate
             return candidate
         return None
@@ -76,18 +85,17 @@ class SimulationMapWidget(QGraphicsView):
         """Return the path to the crushed_critters icon (case-insensitive search)."""
         if getattr(self, "_crushed_icon_path", None):
             return self._crushed_icon_path
-        ui_dir = os.path.join("static", "ui")
+        ui_dir = get_static_path("ui")
         try:
-            for fname in os.listdir(ui_dir):
-                if fname.lower() == "crushed_critters.png":
-                    candidate = os.path.join(ui_dir, fname)
-                    if os.path.exists(candidate):
-                        self._crushed_icon_path = candidate
-                        return candidate
+            for p in Path(ui_dir).iterdir():
+                if p.name.lower() == "crushed_critters.png":
+                    if p.exists():
+                        self._crushed_icon_path = p
+                        return p
         except Exception:
             pass
-        candidate = os.path.join("static", "ui", "crushed_critters.png")
-        if os.path.exists(candidate):
+        candidate = get_static_path("ui/crushed_critters.png")
+        if candidate.exists():
             self._crushed_icon_path = candidate
             return candidate
         return None
@@ -96,19 +104,37 @@ class SimulationMapWidget(QGraphicsView):
         """Return the path to the icefang icon (case-insensitive search)."""
         if getattr(self, "_icefang_icon_path", None):
             return self._icefang_icon_path
-        ui_dir = os.path.join("static", "ui")
+        ui_dir = get_static_path("ui")
         try:
-            for fname in os.listdir(ui_dir):
-                if fname.lower() == "icefang.png":
-                    candidate = os.path.join(ui_dir, fname)
-                    if os.path.exists(candidate):
-                        self._icefang_icon_path = candidate
-                        return candidate
+            for p in Path(ui_dir).iterdir():
+                if p.name.lower() == "icefang.png":
+                    if p.exists():
+                        self._icefang_icon_path = p
+                        return p
         except Exception:
             pass
-        candidate = os.path.join("static", "ui", "icefang.png")
-        if os.path.exists(candidate):
+        candidate = get_static_path("ui/icefang.png")
+        if candidate.exists():
             self._icefang_icon_path = candidate
+            return candidate
+        return None
+
+    def _find_corrupted_icon(self):
+        """Return the path to the corrupted icon (case-insensitive search)."""
+        if getattr(self, "_corrupted_icon_path", None):
+            return self._corrupted_icon_path
+        ui_dir = get_static_path("ui")
+        try:
+            for p in Path(ui_dir).iterdir():
+                if p.name.lower() == "corrupted.png":
+                    if p.exists():
+                        self._corrupted_icon_path = p
+                        return p
+        except Exception:
+            pass
+        candidate = get_static_path("ui/corrupted.png")
+        if candidate.exists():
+            self._corrupted_icon_path = candidate
             return candidate
         return None
 
@@ -116,8 +142,8 @@ class SimulationMapWidget(QGraphicsView):
         """Set the current region and update background image."""
         self.current_region = region_name
         image_path = self.region_images.get(region_name)
-        if image_path and os.path.exists(image_path):
-            self.bg_pixmap = QPixmap(image_path)
+        if image_path and Path(image_path).exists():
+            self.bg_pixmap = QPixmap(str(image_path))
         else:
             self.bg_pixmap = None
         self.update_background()
@@ -143,8 +169,15 @@ class SimulationMapWidget(QGraphicsView):
             from PyQt6.QtWidgets import QGraphicsPixmapItem
 
             self._bg_item = QGraphicsPixmapItem(scaled)
+            # Ensure background sits at scene origin and scene rect matches
+            # the viewport so items use (0,0) origin consistently.
             self._bg_item.setZValue(-100)
+            self._bg_item.setPos(0, 0)
             self.scene.addItem(self._bg_item)
+            try:
+                self.scene.setSceneRect(0, 0, width, height)
+            except Exception:
+                pass
         else:
             self._bg_item = None
             # Optionally fill with white rect if no image
@@ -156,6 +189,10 @@ class SimulationMapWidget(QGraphicsView):
             rect.setZValue(-100)
             self.scene.addItem(rect)
             self._bg_item = rect
+            try:
+                self.scene.setSceneRect(0, 0, width, height)
+            except Exception:
+                pass
 
     def draw_groups(
         self,
@@ -187,18 +224,50 @@ class SimulationMapWidget(QGraphicsView):
         scale_x = width / 1200.0
         scale_y = height / 600.0
 
-        # Zeichne Nahrungsplätze (grüne Kreise)
+        # Zeichne Nahrungsplätze: prefer image icons if available, fallback to
+        # colored circles when images are missing.
         if food_sources_data:
             for food in food_sources_data:
                 x = food["x"] * scale_x
                 y = food["y"] * scale_y
-                amount = food["amount"]
-                max_amount = food["max_amount"]
+                amount = food.get("amount", 0)
+                max_amount = food.get("max_amount", 1) or 1
 
-                # Größe basierend auf Nahrungsmenge (10-30px)
-                size = 10 + (amount / max_amount) * 20 if max_amount > 0 else 10
+                # Fixed visual size for food icons: do not shrink when amount is low.
+                # Use a sensible base size; rendering scales it up later for visibility.
+                size = 24
 
-                # Farbe: Grün wenn voll, gelb wenn wenig
+                # choose image based on fullness: full, half, empty
+                try:
+                    if amount <= 0:
+                        img_candidate = get_static_path("ui/food_empty.png")
+                    elif amount > max_amount * 0.5:
+                        img_candidate = get_static_path("ui/food_full.png")
+                    else:
+                        img_candidate = get_static_path("ui/food_half.png")
+
+                    if img_candidate and Path(img_candidate).exists():
+                        pm = QPixmap(str(img_candidate))
+                        if not pm.isNull():
+                            # scale food icons larger for visibility (2.5x)
+                            scaled_size = max(1, int(size * 2.5))
+                            scaled = pm.scaled(
+                                scaled_size,
+                                scaled_size,
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            pix = self.scene.addPixmap(scaled)
+                            pix.setOffset(
+                                x - scaled.width() / 2, y - scaled.height() / 2
+                            )
+                            pix.setZValue(0)
+                            continue
+                except Exception:
+                    # fall through to circle drawing
+                    pass
+
+                # Fallback: Farbe: Grün wenn voll, gelb wenn wenig, braun wenn leer
                 if amount > max_amount * 0.5:
                     food_color = QColor(34, 139, 34, 180)  # Grün
                 elif amount > 0:
@@ -208,12 +277,13 @@ class SimulationMapWidget(QGraphicsView):
 
                 border_color = QColor(0, 100, 0, 255)
 
-                # Kreis für Nahrung
+                # Kreis für Nahrung (scale up by 2.5)
+                draw_size = max(1, int(size * 2.5))
                 food_circle = self.scene.addEllipse(
-                    x - size / 2,
-                    y - size / 2,
-                    size,
-                    size,
+                    x - draw_size / 2,
+                    y - draw_size / 2,
+                    draw_size,
+                    draw_size,
                     pen=QPen(border_color, 2),
                     brush=QBrush(food_color),
                 )
@@ -229,14 +299,18 @@ class SimulationMapWidget(QGraphicsView):
                 y = clan["y"] * scale_y
                 pop = clan["population"]
 
-                # Größe basierend auf Population (slightly larger scale)
-                # Increase base scaling so clans are more visible on the map
-                size = max(48, min(180, pop * 6))
-                # Small visibility boost (10%) with safe rounding
+                # Visual size: make clan size reflect the clan's population
+                # (member count) but keep it capped to avoid extreme sizes.
+                # This keeps visual meaning while preventing layout breakage.
                 try:
-                    size = max(48, min(180, int(round(size * 1.10))))
+                    # base size plus per-member increment
+                    base = 40
+                    per_member = 4
+                    size = int(base + max(0, int(pop)) * per_member)
+                    # enforce sensible min/max
+                    size = max(48, min(180, size))
                 except Exception:
-                    size = int(size * 1.10)
+                    size = 80
 
                 color = clan["color"]
                 rgb_color = QColor(
@@ -259,11 +333,13 @@ class SimulationMapWidget(QGraphicsView):
                         icon_path = self._find_crushed_icon()
                     elif species_name == "Icefang":
                         icon_path = self._find_icefang_icon()
+                    elif species_name == "The_Corrupted":
+                        icon_path = self._find_corrupted_icon()
                     else:
                         icon_path = None
 
-                    if icon_path and os.path.exists(icon_path):
-                        pm = QPixmap(icon_path)
+                    if icon_path and Path(icon_path).exists():
+                        pm = QPixmap(str(icon_path))
                         if not pm.isNull():
                             scaled = pm.scaled(
                                 int(size),
@@ -311,6 +387,8 @@ class SimulationMapWidget(QGraphicsView):
                     if not hasattr(self, "_species_clan_size"):
                         self._species_clan_size = {}
                     species_name = group.get("name", "")
+                    # Store the (maximum) display size seen for this species
+                    # so loners can be sized relative to the largest clan.
                     prev = self._species_clan_size.get(species_name, 0)
                     self._species_clan_size[species_name] = max(prev, size)
                 except Exception:
@@ -353,11 +431,13 @@ class SimulationMapWidget(QGraphicsView):
                         icon_path = self._find_crushed_icon()
                     elif species == "Icefang":
                         icon_path = self._find_icefang_icon()
+                    elif species == "The_Corrupted":
+                        icon_path = self._find_corrupted_icon()
                     else:
                         icon_path = None
 
-                    if icon_path and os.path.exists(icon_path):
-                        pm = QPixmap(icon_path)
+                    if icon_path and Path(icon_path).exists():
+                        pm = QPixmap(str(icon_path))
                         if not pm.isNull():
                             scaled = pm.scaled(
                                 int(display_size),
@@ -406,3 +486,76 @@ class SimulationMapWidget(QGraphicsView):
     def clear_map(self):
         """Lösche Map."""
         self.scene.clear()
+
+    def preview_food_sources(
+        self, num, amount, max_amount=100, transition_progress=1.0
+    ):
+        """Render a preview of `num` food sources on the map using logical
+        coordinates. This places icons in a simple grid so users can see where
+        food will appear before the simulation starts.
+        """
+        try:
+            # If viewport not yet laid out, retry shortly to avoid misplacement
+            width = self.viewport().width()
+            height = self.viewport().height()
+            if width <= 0 or height <= 0:
+                QTimer.singleShot(
+                    80,
+                    lambda: self.preview_food_sources(
+                        num, amount, max_amount, transition_progress
+                    ),
+                )
+                return
+
+            if not num or num <= 0:
+                # clear only non-background items
+                self.draw_groups([], [], [], transition_progress)
+                return
+
+            food_sources = []
+            cols = int(math.ceil(math.sqrt(num)))
+            rows = int(math.ceil(num / cols))
+            # logical map size is 1200x600
+            spacing_x = 1200.0 / (cols + 1)
+            spacing_y = 600.0 / (rows + 1)
+            placed = []
+            for i in range(num):
+                col = i % cols
+                row = i // cols
+                # center of cell
+                cx = (col + 1) * spacing_x
+                cy = (row + 1) * spacing_y
+
+                # jitter up to ~40% of cell spacing to avoid overlap and grid look
+                max_jx = spacing_x * 0.4
+                max_jy = spacing_y * 0.4
+                attempt = 0
+                while True:
+                    jx = random.uniform(-max_jx, max_jx)
+                    jy = random.uniform(-max_jy, max_jy)
+                    x = cx + jx
+                    y = cy + jy
+
+                    # clamp into logical map bounds with small margin
+                    x = min(max(x, 16), 1200 - 16)
+                    y = min(max(y, 16), 600 - 16)
+
+                    # simple overlap avoidance: ensure not too close to existing
+                    ok = True
+                    for px, py in placed:
+                        if (px - x) ** 2 + (py - y) ** 2 < (48**2):
+                            ok = False
+                            break
+                    attempt += 1
+                    if ok or attempt > 8:
+                        placed.append((x, y))
+                        break
+
+                food_sources.append(
+                    {"x": x, "y": y, "amount": amount, "max_amount": max_amount}
+                )
+
+            # Draw preview (no clans/loners)
+            self.draw_groups([], [], food_sources, transition_progress)
+        except Exception:
+            pass
