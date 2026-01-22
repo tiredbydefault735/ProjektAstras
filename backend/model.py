@@ -378,10 +378,27 @@ class SpeciesGroup:
                 if hasattr(self.env, "sim_model"):
                     try:
                         self.env.sim_model.add_log(
-                            f"✂️ {self.name} Clan #{clan.clan_id} teilt sich! → Clan #{new_clan.clan_id} (je {clan.population} Mitglieder)"
+                            (
+                                "✂️ {species} Clan #{old_id} teilt sich! → Clan #{new_id} (je {members} Mitglieder)",
+                                {
+                                    "species": self.name,
+                                    "old_id": clan.clan_id,
+                                    "new_id": new_clan.clan_id,
+                                    "members": clan.population,
+                                },
+                            )
                         )
                         self.env.sim_model.add_log(
-                            f"🎉 Neue Population: Clan #{clan.clan_id} ({clan.population}) + Clan #{new_clan.clan_id} ({pop_half}) = {clan.population + pop_half} Mitglieder"
+                            (
+                                "🎉 Neue Population: Clan #{old_id} ({old_members}) + Clan #{new_id} ({new_members}) = {total} Mitglieder",
+                                {
+                                    "old_id": clan.clan_id,
+                                    "old_members": clan.population,
+                                    "new_id": new_clan.clan_id,
+                                    "new_members": pop_half,
+                                    "total": clan.population + pop_half,
+                                },
+                            )
                         )
                     except Exception:
                         pass
@@ -621,7 +638,14 @@ class SimulationModel:
 
         total_pop = sum(sum(c.population for c in g.clans) for g in self.groups)
         self.add_log(
-            f"Start: {len(self.groups)} Spezies, {total_pop} Mitglieder, {len(self.loners)} Einzelgänger"
+            (
+                "Start: {species_count} Spezies, {total_pop} Mitglieder, {loner_count} Einzelgänger",
+                {
+                    "species_count": len(self.groups),
+                    "total_pop": total_pop,
+                    "loner_count": len(self.loners),
+                },
+            )
         )
 
         # Initialize statistics
@@ -760,7 +784,10 @@ class SimulationModel:
                         ][-500:]
                 # UI log
                 self.add_log(
-                    f"🔹 {spawn_count} neuer Einzelgänger der Spezies {species_name} ist erschienen!"
+                    (
+                        "🔹 {count} neuer Einzelgänger der Spezies {species} ist erschienen!",
+                        {"count": spawn_count, "species": species_name},
+                    )
                 )
                 # Terminal debug log for quick diagnostics
                 try:
@@ -807,9 +834,9 @@ class SimulationModel:
             self.transition_to_day = not self.is_day
 
             if self.transition_to_day:
-                self.add_log(f"🌅 Sonnenaufgang...")
+                self.add_log(("🌅 Sonnenaufgang...", {}))
             else:
-                self.add_log(f"🌆 Sonnenuntergang...")
+                self.add_log(("🌆 Sonnenuntergang...", {}))
 
         # Übergangs-Logik
         if self.in_transition:
@@ -830,9 +857,9 @@ class SimulationModel:
                 self.day_night_temp_offset = target_offset  # Setze finalen Offset
 
                 if self.is_day:
-                    self.add_log(f"☀️ Es ist jetzt Tag!")
+                    self.add_log(("☀️ Es ist jetzt Tag!", {}))
                 else:
-                    self.add_log(f"🌙 Es ist jetzt Nacht!")
+                    self.add_log(("🌙 Es ist jetzt Nacht!", {}))
 
             # Berechne aktuelle Temperatur: Basis + Tag/Nacht Offset
             self.current_temperature = (
@@ -858,7 +885,9 @@ class SimulationModel:
             )
             self.current_temperature = max(-80, min(50, self.current_temperature))
             self.stats["temperature"] = round(self.current_temperature, 1)
-            self.add_log(f"🌡️ Temperatur: {round(self.current_temperature, 1)}°C")
+            self.add_log(
+                ("🌡️ Temperatur: {val}°C", {"val": round(self.current_temperature, 1)})
+            )
 
         # Nahrungsregeneration
         for food_source in self.food_sources:
@@ -903,7 +932,13 @@ class SimulationModel:
                 if loner.hp <= 0:
                     loners_to_remove.append(loner)
                     self.add_log(
-                        f"❄️ {loner.species} Einzelgänger stirbt an Temperatur ({round(self.current_temperature, 1)}°C)!"
+                        (
+                            "❄️ {species} Einzelgänger stirbt an Temperatur ({val}°C)!",
+                            {
+                                "species": loner.species,
+                                "val": round(self.current_temperature, 1),
+                            },
+                        )
                     )
                     self.stats["deaths"]["temperature"][loner.species] = (
                         self.stats["deaths"]["temperature"].get(loner.species, 0) + 1
@@ -912,7 +947,9 @@ class SimulationModel:
             # Hungertod: Nach 300 Steps (30 Sekunden)
             if loner.hunger_timer >= 300:
                 loners_to_remove.append(loner)
-                self.add_log(f"☠️ {loner.species} Einzelgänger verhungert!")
+                self.add_log(
+                    ("☠️ {species} Einzelgänger verhungert!", {"species": loner.species})
+                )
                 self.stats["deaths"]["starvation"][loner.species] = (
                     self.stats["deaths"]["starvation"].get(loner.species, 0) + 1
                 )
@@ -1079,7 +1116,15 @@ class SimulationModel:
                             max_hp,
                         )
                         self.add_log(
-                            f"🍽️ {group.name} Clan #{clan.clan_id} isst {consumed} Food (+{int(clan.hp_per_member - old_hp)} HP)"
+                            (
+                                "🍽️ {species} Clan #{clan_id} isst {consumed} Food (+{hp_gain} HP)",
+                                {
+                                    "species": group.name,
+                                    "clan_id": clan.clan_id,
+                                    "consumed": consumed,
+                                    "hp_gain": int(clan.hp_per_member - old_hp),
+                                },
+                            )
                         )
 
                         # Optional: probabilistisches Wachstum nach Essen
@@ -1104,7 +1149,14 @@ class SimulationModel:
                                 if actual > 0:
                                     clan.population += actual
                                     self.add_log(
-                                        f"🌱 {group.name} Clan #{clan.clan_id} wächst nach Essen (+{actual} Mitglieder)"
+                                        (
+                                            "🌱 {species} Clan #{clan_id} wächst nach Essen (+{increase} Mitglieder)",
+                                            {
+                                                "species": group.name,
+                                                "clan_id": clan.clan_id,
+                                                "increase": actual,
+                                            },
+                                        )
                                     )
                                     if hasattr(self, "rnd_history"):
                                         self.rnd_history.setdefault(
@@ -1157,7 +1209,14 @@ class SimulationModel:
                     old_hp = loner.hp
                     loner.hp = min(loner.hp + (consumed * 5), loner.max_hp)
                     self.add_log(
-                        f"🍽️ {loner.species} Einzelgänger isst {consumed} Food (+{int(loner.hp - old_hp)} HP)"
+                        (
+                            "🍽️ {species} Einzelgänger isst {consumed} Food (+{hp_gain} HP)",
+                            {
+                                "species": loner.species,
+                                "consumed": consumed,
+                                "hp_gain": int(loner.hp - old_hp),
+                            },
+                        )
                     )
 
     def _process_interactions(self):
@@ -1255,7 +1314,16 @@ class SimulationModel:
                                 self.hunt_log_timer[hunt_key] = self.time
                                 # compute readable distance for log
                                 self.add_log(
-                                    f"🎯 {group1.name} Clan #{clan1.clan_id} jagt {group2.name} Clan #{clan2.clan_id}! (Distanz: {int(math.sqrt(dist_sq))}px)"
+                                    (
+                                        "🎯 {attacker} Clan #{att_id} jagt {target} Clan #{tgt_id}! (Distanz: {dist}px)",
+                                        {
+                                            "attacker": group1.name,
+                                            "att_id": clan1.clan_id,
+                                            "target": group2.name,
+                                            "tgt_id": clan2.clan_id,
+                                            "dist": int(math.sqrt(dist_sq)),
+                                        },
+                                    )
                                 )
 
                         # Angriff nur in Nahkampfreichweite
@@ -1281,7 +1349,16 @@ class SimulationModel:
                                     if old_pop > clan2.population:
                                         killed = old_pop - clan2.population
                                         self.add_log(
-                                            f"⚔️ {group1.name} Clan #{clan1.clan_id} → {group2.name} Clan #{clan2.clan_id} (-{killed} Mitglied)"
+                                            (
+                                                "⚔️ {attacker} Clan #{att_id} → {target} Clan #{tgt_id} (-{killed} Mitglied)",
+                                                {
+                                                    "attacker": group1.name,
+                                                    "att_id": clan1.clan_id,
+                                                    "target": group2.name,
+                                                    "tgt_id": clan2.clan_id,
+                                                    "killed": killed,
+                                                },
+                                            )
                                         )
 
                                         # Kannibalismus: Spores und Corrupted bekommen 2 Food pro Kill
@@ -1292,12 +1369,26 @@ class SimulationModel:
                                                 clan1.hunger_timer - (food_gained * 10),
                                             )
                                             self.add_log(
-                                                f"🍖 {group1.name} Clan #{clan1.clan_id} frisst {killed} Arach(s) (+{food_gained} Food)"
+                                                (
+                                                    "🍖 {species} Clan #{clan_id} frisst {killed} Arach(s) (+{food} Food)",
+                                                    {
+                                                        "species": group1.name,
+                                                        "clan_id": clan1.clan_id,
+                                                        "killed": killed,
+                                                        "food": food_gained,
+                                                    },
+                                                )
                                             )
 
                                         if not alive:
                                             self.add_log(
-                                                f"💀 {group2.name} Clan #{clan2.clan_id} vernichtet!"
+                                                (
+                                                    "💀 {species} Clan #{clan_id} vernichtet!",
+                                                    {
+                                                        "species": group2.name,
+                                                        "clan_id": clan2.clan_id,
+                                                    },
+                                                )
                                             )
                                         else:
                                             # If the attacked clan is still alive but shrank to 1 member,
@@ -1337,7 +1428,18 @@ class SimulationModel:
                                             if actual > 0:
                                                 clan1.population += actual
                                                 self.add_log(
-                                                    f"🤝 {group1.name} & {group2.name}: Freundliche Begegnung (+{actual} Mitglied(er)) at positions ({int(clan1.x)},{int(clan1.y)}) & ({int(clan2.x)},{int(clan2.y)})"
+                                                    (
+                                                        "🤝 {a} & {b}: Freundliche Begegnung (+{inc} Mitglied(er)) at positions ({x1},{y1}) & ({x2},{y2})",
+                                                        {
+                                                            "a": group1.name,
+                                                            "b": group2.name,
+                                                            "inc": actual,
+                                                            "x1": int(clan1.x),
+                                                            "y1": int(clan1.y),
+                                                            "x2": int(clan2.x),
+                                                            "y2": int(clan2.y),
+                                                        },
+                                                    )
                                                 )
                                                 # terminal debug print
                                                 try:
@@ -1423,7 +1525,15 @@ class SimulationModel:
                         ):
                             self.hunt_log_timer[hunt_key] = self.time
                             self.add_log(
-                                f"🎯 {group.name} Clan #{clan.clan_id} jagt {loner.species} Einzelgänger! (Distanz: {int(math.sqrt(dist_sq))}px)"
+                                (
+                                    "🎯 {attacker} Clan #{att_id} jagt {loner_species} Einzelgänger! (Distanz: {dist}px)",
+                                    {
+                                        "attacker": group.name,
+                                        "att_id": clan.clan_id,
+                                        "loner_species": loner.species,
+                                        "dist": int(math.sqrt(dist_sq)),
+                                    },
+                                )
                             )
 
                     if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
@@ -1437,7 +1547,14 @@ class SimulationModel:
                                 if loner.hp <= 0:
                                     loners_to_remove.append(loner)
                                     self.add_log(
-                                        f"⚔️ {group.name} Clan #{clan.clan_id} tötet {loner.species} Einzelgänger"
+                                        (
+                                            "⚔️ {attacker} Clan #{att_id} tötet {loner_species} Einzelgänger",
+                                            {
+                                                "attacker": group.name,
+                                                "att_id": clan.clan_id,
+                                                "loner_species": loner.species,
+                                            },
+                                        )
                                     )
                                     self.stats["deaths"]["combat"][loner.species] = (
                                         self.stats["deaths"]["combat"].get(
@@ -1452,7 +1569,14 @@ class SimulationModel:
                                             0, clan.hunger_timer - 20
                                         )  # 2 Food = 20 Steps
                                         self.add_log(
-                                            f"🍖 {group.name} Clan #{clan.clan_id} frisst {loner.species} (+2 Food)"
+                                            (
+                                                "🍖 {species} Clan #{clan_id} frisst {loner_species} (+2 Food)",
+                                                {
+                                                    "species": group.name,
+                                                    "clan_id": clan.clan_id,
+                                                    "loner_species": loner.species,
+                                                },
+                                            )
                                         )
 
                         elif interaction == "Freundlich":
@@ -1474,7 +1598,17 @@ class SimulationModel:
                                     else "freundlich"
                                 )
                                 self.add_log(
-                                    f"👥 {loner.species} Einzelgänger ({reason}) tritt {group.name} Clan #{clan.clan_id} bei ({clan.population - 1} → {clan.population})"
+                                    (
+                                        "👥 {species} Einzelgänger ({reason}) tritt {group} Clan #{clan_id} bei ({old} → {new})",
+                                        {
+                                            "species": loner.species,
+                                            "reason": reason,
+                                            "group": group.name,
+                                            "clan_id": clan.clan_id,
+                                            "old": clan.population - 1,
+                                            "new": clan.population,
+                                        },
+                                    )
                                 )
 
                                 # Prüfe ob Clan jetzt splitten sollte
@@ -1512,7 +1646,10 @@ class SimulationModel:
                             except Exception:
                                 pass
                             self.add_log(
-                                f"⚠️ Clan #{clan.clan_id} von {group.name} reduzierte sich auf 1 und wurde zu Einzelgänger konvertiert."
+                                (
+                                    "⚠️ Clan #{clan_id} von {group} reduzierte sich auf 1 und wurde zu Einzelgänger konvertiert.",
+                                    {"clan_id": clan.clan_id, "group": group.name},
+                                )
                             )
                     except Exception:
                         pass
@@ -1593,7 +1730,14 @@ class SimulationModel:
                         checked_loners.append(loner)
 
                     self.add_log(
-                        f"🤝 {len(nearby_loners)} {species_name} Einzelgänger schließen sich zu Clan #{new_clan.clan_id} zusammen!"
+                        (
+                            "🤝 {count} {species} Einzelgänger schließen sich zu Clan #{clan_id} zusammen!",
+                            {
+                                "count": len(nearby_loners),
+                                "species": species_name,
+                                "clan_id": new_clan.clan_id,
+                            },
+                        )
                     )
                     break  # Nur ein Clan pro Durchlauf pro Spezies
 

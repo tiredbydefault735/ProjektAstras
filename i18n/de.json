@@ -87,4 +87,6 @@
     "🤝 {count} {species} Einzelgänger schließen sich zu Clan #{clan_id} zusammen!": "🤝 {count} {species} Einzelgänger schließen sich zu Clan #{clan_id} zusammen!"
     ,
     "⏹️ Simulation endet nach {secs} Sekunden.": "⏹️ Simulation endet nach {secs} Sekunden."
+    ,
+    "⏹️ Simulation beendet — alle Spezies ausgestorben.": "⏹️ Simulation beendet — alle Spezies ausgestorben."
 }

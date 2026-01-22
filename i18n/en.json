@@ -90,4 +90,6 @@
     "⚠️ Clan #{clan_id} von {group} reduzierte sich auf 1 und wurde zu Einzelgänger konvertiert.": "⚠️ Clan #{clan_id} of {group} reduced to 1 and was converted to a loner.",
     "🤝 {count} {species} Einzelgänger schließen sich zu Clan #{clan_id} zusammen!": "🤝 {count} {species} loners form Clan #{clan_id}!",
     "⏹️ Simulation endet nach {secs} Sekunden.": "⏹️ Simulation ends after {secs} seconds."
+    ,
+    "⏹️ Simulation beendet — alle Spezies ausgestorben.": "⏹️ Simulation ended — all species extinct."
 }

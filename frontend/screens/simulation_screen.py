@@ -2405,15 +2405,40 @@ class SimulationScreen(QWidget):
 
             # Hard stop at max_simulation_time (5 minutes = 300s)
             if self.simulation_time >= self.max_simulation_time:
-                self.add_log(
-                    (
-                        "⏹️ Simulation endet nach {secs} Sekunden.",
-                        {"secs": self.max_simulation_time},
+                try:
+                    entry = {
+                        "msgid": "⏹️ Simulation endet nach {secs} Sekunden.",
+                        "params": {"secs": self.max_simulation_time},
+                    }
+                    self.add_log(self._format_log_entry(entry))
+                except Exception:
+                    self.add_log(
+                        f"⏹️ Simulation endet nach {self.max_simulation_time} Sekunden."
                     )
-                )
 
                 self.stop_simulation()
                 self.stop_simulation()
+
+            # Stop if all species extinct (no population left)
+            try:
+                species_counts = stats.get("species_counts", {})
+                total_pop = sum(species_counts.values()) if species_counts else 0
+                if total_pop == 0:
+                    # Log extinction and stop
+                    try:
+                        entry = {
+                            "msgid": "⏹️ Simulation beendet — alle Spezies ausgestorben.",
+                            "params": {},
+                        }
+                        self.add_log(self._format_log_entry(entry))
+                    except Exception:
+                        self.add_log(
+                            "⏹️ Simulation beendet — alle Spezies ausgestorben."
+                        )
+                    self.stop_simulation()
+                    return
+            except Exception:
+                pass
 
             # --- Live graph and log update ---
             # Always use backend's population_history for up-to-date graph
