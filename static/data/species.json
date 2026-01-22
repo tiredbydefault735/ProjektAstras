@@ -6,7 +6,7 @@
         "home_region": "Snowy_Abyss",
         "hp": 50,
         "interactions": {
-            "Icefang": "Freundlich",
+            "Icefang": "Neutral",
             "Crushed_Critters": "Neutral",
             "Spores": "Ängstlich",
             "The_Corrupted": "Ängstlich"
@@ -20,10 +20,10 @@
         "home_region": "Wasteland",
         "hp": 100,
         "interactions": {
-            "Icefang": "Vorsichtig",
+            "Icefang": "Ängstlich",
             "Crushed_Critters": "Unfreundlich",
             "Spores": "Aggressiv",
-            "The_Corrupted": "Aggressiv"
+            "The_Corrupted": "Ängstlich"
         }, 
         "food_intake": 3
     },
@@ -34,7 +34,7 @@
         "home_region": "Evergreen_Forest",
         "hp": 120,
         "interactions": {
-            "Icefang": "Ängstlich",
+            "Icefang": "Aggressiv",
             "Crushed_Critters": "Aggressiv",
             "Spores": "Unfreundlich",
             "The_Corrupted": "Zusammenschluss für Jagd"

@@ -210,9 +210,79 @@ class StatsDialog(QDialog):
         stats_text.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Build stats string (each section added once, loops separate)
-        text = "<b>" + _("Spezies im Spiel:") + "</b><br>"
-        for species, count in stats.get("species_counts", {}).items():
-            text += f"• {species}: {count}<br>"
+        # Show final and peak populations so the text matches the plotted history
+        text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
+        species_counts = stats.get("species_counts", {}) or {}
+        population_history = stats.get("population_history", {}) or {}
+        all_species = set(list(species_counts.keys()) + list(population_history.keys()))
+        for species in sorted(all_species):
+            final_count = int(species_counts.get(species, 0))
+            hist = population_history.get(species, []) or []
+            try:
+                peak = int(max(hist)) if hist else final_count
+            except Exception:
+                try:
+                    peak = (
+                        int(max([int(round(float(v))) for v in hist]))
+                        if hist
+                        else final_count
+                    )
+                except Exception:
+                    peak = final_count
+            text += f"• {species}: {final_count} / {peak}<br>"
+
+        # Totals: current total population and aggregated death counts
+        try:
+            total_current = (
+                sum(int(v) for v in species_counts.values()) if species_counts else 0
+            )
+        except Exception:
+            total_current = 0
+        deaths = stats.get("deaths", {}) or {}
+        try:
+            total_combat = sum(int(v) for v in deaths.get("combat", {}).values())
+        except Exception:
+            total_combat = 0
+        try:
+            total_starvation = sum(
+                int(v) for v in deaths.get("starvation", {}).values()
+            )
+        except Exception:
+            total_starvation = 0
+        try:
+            total_temperature = sum(
+                int(v) for v in deaths.get("temperature", {}).values()
+            )
+        except Exception:
+            total_temperature = 0
+
+        text += f"<br><b>{_('Insgesamt im Spiel:')}</b> {total_current}<br>"
+        text += f"<br><b>{_('Todesfälle gesamt:')}</b><br>"
+        text += f"• {_('Kampf')}: {total_combat}<br>"
+        text += f"• {_('Verhungert')}: {total_starvation}<br>"
+        text += f"• {_('Temperatur')}: {total_temperature}<br>"
+
+        # Peak populations per species (explicit)
+        try:
+            text += f"<br><b>{_('Peak Populationen pro Spezies:')}</b><br>"
+            for species in sorted(all_species):
+                hist = population_history.get(species, []) or []
+                try:
+                    peak_val = (
+                        int(max(hist)) if hist else int(species_counts.get(species, 0))
+                    )
+                except Exception:
+                    try:
+                        peak_val = (
+                            int(max([int(round(float(v))) for v in hist]))
+                            if hist
+                            else int(species_counts.get(species, 0))
+                        )
+                    except Exception:
+                        peak_val = int(species_counts.get(species, 0))
+                text += f"• {species}: {peak_val}<br>"
+        except Exception:
+            pass
 
         # Combat deaths
         text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
@@ -531,6 +601,10 @@ class StatsDialog(QDialog):
                             bins = list(range(len(ranges)))
                             # labels for bottom axis
                             labels = ["0-1", "2-4", "5-9", "10+"]
+                            # normalize to percentages so axis isn't dominated by outliers
+                            total = sum(counts)
+                            if total > 0:
+                                counts = [c / total * 100.0 for c in counts]
                             hist_data[key] = (bins, counts, labels)
                             max_bin = max(max_bin, len(bins) - 1)
                         else:
@@ -541,6 +615,10 @@ class StatsDialog(QDialog):
                             for n in nums:
                                 counts[n] += 1
                             bins = list(range(0, mx + 1))
+                            # normalize to percentages so axis isn't dominated by outliers
+                            total = sum(counts)
+                            if total > 0:
+                                counts = [c / total * 100.0 for c in counts]
                             hist_data[key] = (bins, counts, None)
 
                     if not has_any:
@@ -594,6 +672,10 @@ class StatsDialog(QDialog):
                                 try:
                                     x = list(range(len(vals)))
                                     y = [float(v) for v in vals]
+                                    # normalize time-series to percentage of max to avoid extreme spikes
+                                    maxy = max(y) if y else 0.0
+                                    if maxy > 0:
+                                        y = [yi / maxy * 100.0 for yi in y]
                                     pen = pg.mkPen(
                                         colors.get(key, (200, 200, 200)), width=2
                                     )
@@ -1674,6 +1756,21 @@ class SimulationScreen(QWidget):
         """Show final statistics dialog and save stats for later viewing."""
         if self.sim_model:
             stats = self.sim_model.get_final_stats()
+            # If backend snapshot somehow contains all-zero counts, compute live counts as a fallback
+            try:
+                sc = stats.get("species_counts", {}) or {}
+                if sc and all(int(v) == 0 for v in sc.values()):
+                    live_counts = {}
+                    try:
+                        for g in self.sim_model.groups:
+                            live_counts[g.name] = sum(c.population for c in g.clans)
+                        for l in getattr(self.sim_model, "loners", []):
+                            live_counts[l.species] = live_counts.get(l.species, 0) + 1
+                    except Exception:
+                        live_counts = sc
+                    stats["species_counts"] = live_counts
+            except Exception:
+                pass
             self.last_stats = stats  # Save stats for later
             dialog = StatsDialog(stats, self)
             dialog.exec()
@@ -2290,8 +2387,13 @@ class SimulationScreen(QWidget):
             # Hard stop at max_simulation_time (5 minutes = 300s)
             if self.simulation_time >= self.max_simulation_time:
                 self.add_log(
-                    f"⏹️ Simulation endet nach {self.max_simulation_time} Sekunden."
+                    (
+                        "⏹️ Simulation endet nach {secs} Sekunden.",
+                        {"secs": self.max_simulation_time},
+                    )
                 )
+
+                self.stop_simulation()
                 self.stop_simulation()
 
             # --- Live graph and log update ---
@@ -2313,20 +2415,7 @@ class SimulationScreen(QWidget):
                 self._latest_species_counts = {}
             self.update_live_graph()
 
-            # Append any generated logs to central log buffer using add_log helper
-            # (some code paths expect add_log to exist)
-            try:
-                for line in logs:
-                    # keep existing translation behavior when possible
-                    try:
-                        from frontend.i18n import _
-
-                        self.add_log(_(line))
-                    except Exception:
-                        self.add_log(line)
-            except Exception:
-                # if logs isn't iterable or add_log missing, ignore
-                pass
+            # Backend logs are handled below; skip earlier append attempt.
 
             # Update log text from backend logs (try to translate each line)
             logs = data.get("logs", [])

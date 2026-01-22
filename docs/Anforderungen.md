@@ -3,7 +3,7 @@ Diese Anforderungen beschreiben, was die Software leisten muss, um die gestellte
 <br> **Zeitabhängige Simulation:** Die Kernfunktionalität der Anwendung muss eine Simulation sein, die sich über die Zeit entwickelt
 <br> **Zufallswerte:** Die Simulation muss mindestens drei Zufallswerte enthalten, die jeweils mit einer unterschiedlichen Verteilungsform umgesetzt werden, wie z.B. Normalverteilung, Gleichverteilung oder Exponentialverteilung.
 <br> **Eingabeparameter:** Es müssen mindestens sieben Eingabeparameter vom Nutzer anpassbar sein.
-<br> **Simulationsgeschwindigkeit:** Die Geschwindigkeit der Simulation muss in mindestens drei Stufen einstellbar sein.
+<br> **SimulationsTempo:** Die Tempo der Simulation muss in mindestens drei Stufen einstellbar sein.
 <br> **Visuelle Darstellung:** Die Simulationsergebnisse sollen visuell dargestellt und ausgewertet werden können.
 <br> **Animation:** Eine kleine, zur Simulation passende Animation, die diese widerspiegelt, ist erforderlich.
 <br> **Anwendungstyp:** Das Programm muss eine Windowsanwendung sein, die auf den Schulrechnern ausführbar ist und über eine einzige ausführbare Datei gestartet wird.

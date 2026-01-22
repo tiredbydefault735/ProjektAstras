@@ -406,21 +406,27 @@ class SimulationMapWidget(QGraphicsView):
                     int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255
                 )
 
-                # Default loner visual size
+                # Default loner visual size (fixed by default).
+                # Previously loner size was derived from the largest clan
+                # display size for the species (so it scaled with member counts).
+                # Keep a fixed default to avoid loners changing size with clan population.
                 display_size = 12
                 try:
-                    if (
-                        hasattr(self, "_species_clan_size")
-                        and species in self._species_clan_size
-                    ):
-                        clan_size = self._species_clan_size.get(species, 12)
-                        # Loners should be about 50% of clan display size
-                        display_size = max(6, int(clan_size * 0.5))
+                    # Optional: allow scaling with clan size when explicitly enabled
+                    # (set `_scale_loners_with_clans = True` on the view).
+                    if getattr(self, "_scale_loners_with_clans", False):
+                        if (
+                            hasattr(self, "_species_clan_size")
+                            and species in self._species_clan_size
+                        ):
+                            clan_size = self._species_clan_size.get(species, 12)
+                            # Loners should be about 50% of clan display size
+                            display_size = max(6, int(clan_size * 0.5))
                 except Exception:
                     pass
 
                 # Cap loner size so individuals never grow excessively large
-                display_size = max(6, min(display_size, 60))
+                display_size = max(45, min(display_size, 60))
 
                 # Try to draw an icon for Spores/Crushed_Critters/Icefang loners
                 drawn_icon = False
