@@ -389,13 +389,49 @@ class SpeciesGroup:
 
 class SimulationModel:
     def add_log(self, message):
-        """Log-Nachricht hinzufügen."""
-        log_entry = f"[t={getattr(self, 'time', 0)}] {message}"
+        """Log-Nachricht hinzufügen.
+
+        Accepts either:
+          - a plain string (legacy), or
+          - a tuple/list (msgid, params_dict) where msgid is a translation key
+            present in the JSON catalog and params_dict contains simple values
+            for formatting.
+
+        Stored log entries are structured dicts so the frontend can translate
+        and format them at display time using the JSON translations.
+        """
+        t = getattr(self, "time", 0)
+        # ensure logs container exists
         if not hasattr(self, "logs"):
             self.logs = []
         if not hasattr(self, "max_logs"):
             self.max_logs = 300
-        self.logs.append(log_entry)
+
+        entry = None
+        try:
+            # structured form: (msgid, params)
+            if isinstance(message, (list, tuple)) and len(message) >= 1:
+                msgid = message[0]
+                params = (
+                    message[1]
+                    if len(message) > 1 and isinstance(message[1], dict)
+                    else {}
+                )
+                entry = {"time": t, "msgid": str(msgid), "params": dict(params)}
+            elif isinstance(message, dict) and "msgid" in message:
+                entry = {
+                    "time": t,
+                    "msgid": str(message.get("msgid")),
+                    "params": dict(message.get("params", {})),
+                }
+            else:
+                # fallback: store raw string (legacy behavior)
+                entry = {"time": t, "raw": str(message)}
+        except Exception:
+            # absolute fallback
+            entry = {"time": t, "raw": str(message)}
+
+        self.logs.append(entry)
         if len(self.logs) > self.max_logs:
             self.logs = self.logs[-self.max_logs :]
 
@@ -408,6 +444,8 @@ class SimulationModel:
         start_temperature=None,
         start_is_day=True,
         region_name=None,
+        initial_food_positions=None,
+        rng_seed=None,
     ):
         """Initialisiere Simulation."""
 
@@ -474,6 +512,16 @@ class SimulationModel:
         self.in_transition = False
         self.transition_timer = 0
         self.transition_to_day = True  # Zielzustand des Übergangs
+
+        # Optionally seed the global RNG so initial placement is reproducible
+        # when a seed is provided by the UI. This ensures frontend preview
+        # and backend initialization can share the same placement when the
+        # same seed is used.
+        if rng_seed is not None:
+            try:
+                random.seed(rng_seed)
+            except Exception:
+                pass
 
         # Farben für Spezies
         color_map = {
@@ -545,11 +593,28 @@ class SimulationModel:
 
         # Erstelle Nahrungsplätze
         self.food_sources = []
-        for _ in range(food_places):
-            x = random.uniform(100, self.map_width - 100)
-            y = random.uniform(100, self.map_height - 100)
-            food_source = FoodSource(x, y, food_amount)
-            self.food_sources.append(food_source)
+        if initial_food_positions:
+            # Use provided positions (list of dicts with 'x' and 'y') to ensure
+            # preview matches backend initialization exactly.
+            for i in range(min(len(initial_food_positions), food_places)):
+                pos = initial_food_positions[i]
+                x = pos.get("x", random.uniform(100, self.map_width - 100))
+                y = pos.get("y", random.uniform(100, self.map_height - 100))
+                amt = pos.get("amount", food_amount)
+                fs = FoodSource(x, y, amt)
+                self.food_sources.append(fs)
+            # If fewer provided than requested, generate remaining randomly.
+            for _ in range(len(self.food_sources), food_places):
+                x = random.uniform(100, self.map_width - 100)
+                y = random.uniform(100, self.map_height - 100)
+                food_source = FoodSource(x, y, food_amount)
+                self.food_sources.append(food_source)
+        else:
+            for _ in range(food_places):
+                x = random.uniform(100, self.map_width - 100)
+                y = random.uniform(100, self.map_height - 100)
+                food_source = FoodSource(x, y, food_amount)
+                self.food_sources.append(food_source)
 
         # Referenz für Logging (removed for SimPy compatibility)
         # self.env.sim_model = self

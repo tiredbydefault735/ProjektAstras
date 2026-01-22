@@ -60,6 +60,8 @@ class SimulationMapWidget(QGraphicsView):
         self._crushed_icon_path = None
         self._icefang_icon_path = None
         self._corrupted_icon_path = None
+        # store last preview request so we can replay it after layout/resizes
+        self._last_preview = None
 
     def _find_spores_icon(self):
         """Return the path to the spores icon (case-insensitive search)."""
@@ -151,6 +153,9 @@ class SimulationMapWidget(QGraphicsView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_background()
+        # Replay any pending preview (use small delay to wait for layout)
+        if getattr(self, "_last_preview", None):
+            QTimer.singleShot(20, self._replay_preview)
 
     def update_background(self):
         # Remove any previous background pixmap item
@@ -494,21 +499,26 @@ class SimulationMapWidget(QGraphicsView):
         self.scene.clear()
 
     def preview_food_sources(
-        self, num, amount, max_amount=100, transition_progress=1.0
+        self, num, amount, max_amount=100, transition_progress=1.0, seed=None
     ):
         """Render a preview of `num` food sources on the map using logical
         coordinates. This places icons in a simple grid so users can see where
         food will appear before the simulation starts.
         """
         try:
-            # If viewport not yet laid out, retry shortly to avoid misplacement
+            # Store preview params so we can replay after resize/layout
+            self._last_preview = (num, amount, max_amount, transition_progress, seed)
+
+            # If viewport not yet laid out or still very small, retry shortly
+            # to avoid preview items clustering at the top-left due to
+            # incorrect scaling while the widget is still being laid out.
             width = self.viewport().width()
             height = self.viewport().height()
-            if width <= 0 or height <= 0:
+            if width <= 0 or height <= 0 or width < 200 or height < 120:
                 QTimer.singleShot(
                     80,
                     lambda: self.preview_food_sources(
-                        num, amount, max_amount, transition_progress
+                        num, amount, max_amount, transition_progress, seed
                     ),
                 )
                 return
@@ -525,6 +535,10 @@ class SimulationMapWidget(QGraphicsView):
             spacing_x = 1200.0 / (cols + 1)
             spacing_y = 600.0 / (rows + 1)
             placed = []
+            # Use deterministic RNG when seed is provided so preview matches
+            # backend initialization when the same seed is used.
+            rng = random if seed is None else random.Random(seed)
+
             for i in range(num):
                 col = i % cols
                 row = i // cols
@@ -537,8 +551,8 @@ class SimulationMapWidget(QGraphicsView):
                 max_jy = spacing_y * 0.4
                 attempt = 0
                 while True:
-                    jx = random.uniform(-max_jx, max_jx)
-                    jy = random.uniform(-max_jy, max_jy)
+                    jx = rng.uniform(-max_jx, max_jx)
+                    jy = rng.uniform(-max_jy, max_jy)
                     x = cx + jx
                     y = cy + jy
 
@@ -562,6 +576,27 @@ class SimulationMapWidget(QGraphicsView):
                 )
 
             # Draw preview (no clans/loners)
+            # store positions for potential reuse by the backend
+            try:
+                self._last_preview_positions = food_sources
+            except Exception:
+                self._last_preview_positions = None
+
             self.draw_groups([], [], food_sources, transition_progress)
+        except Exception:
+            pass
+
+    def _replay_preview(self):
+        """Replay last preview request (used after resize/layout)."""
+        try:
+            params = getattr(self, "_last_preview", None)
+            if not params:
+                return
+            num, amount, max_amount, transition_progress, seed = params
+            # clear stored preview so we don't loop
+            self._last_preview = None
+            self.preview_food_sources(
+                num, amount, max_amount, transition_progress, seed
+            )
         except Exception:
             pass

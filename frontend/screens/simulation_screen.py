@@ -1492,7 +1492,16 @@ class EnvironmentPanel(QWidget):
             )
             if hasattr(self, "map_widget") and self.map_widget is not None:
                 try:
-                    self.map_widget.preview_food_sources(v, amount, max_amount)
+                    # create a deterministic seed for preview so positions
+                    # remain consistent when the simulation starts
+                    self._pending_food_seed = hash((v, amount)) & 0xFFFFFFFF
+                    self.map_widget.preview_food_sources(
+                        v,
+                        amount,
+                        amount,
+                        transition_progress=1.0,
+                        seed=self._pending_food_seed,
+                    )
                 except Exception:
                     pass
         except Exception:
@@ -1975,13 +1984,19 @@ class SimulationScreen(QWidget):
                 def _preview_startup():
                     try:
                         num = self.environment_panel.food_places_slider.value()
-                        max_amt = (
-                            self.environment_panel.food_amount_slider.maximum()
+                        amt = (
+                            self.environment_panel.food_amount_slider.value()
                             if hasattr(self.environment_panel, "food_amount_slider")
                             else 100
                         )
                         try:
-                            self.map_widget.preview_food_sources(num, max_amt, max_amt)
+                            # set pending seed so startup preview can be reused
+                            self._pending_food_seed = hash((num, amt)) & 0xFFFFFFFF
+                            # pass same value for amount and max_amount so preview
+                            # matches backend initial max_amount behavior
+                            self.map_widget.preview_food_sources(
+                                num, amt, amt, seed=self._pending_food_seed
+                            )
                         except Exception:
                             pass
                     except Exception:
@@ -2242,9 +2257,13 @@ class SimulationScreen(QWidget):
                     populations,
                     food_places,
                     food_amount,
-                    start_temp,
-                    start_is_day,
-                    region_key,
+                    start_temperature=start_temp,
+                    start_is_day=start_is_day,
+                    region_name=region_key,
+                    initial_food_positions=getattr(
+                        self.map_widget, "_last_preview_positions", None
+                    ),
+                    rng_seed=getattr(self, "_pending_food_seed", None),
                 )
 
                 # Set region background (still use display name for UI)
@@ -2417,15 +2436,25 @@ class SimulationScreen(QWidget):
 
             # Backend logs are handled below; skip earlier append attempt.
 
-            # Update log text from backend logs (try to translate each line)
+            # Update log text from backend logs (support structured entries)
             logs = data.get("logs", [])
             if logs:
                 try:
-                    from frontend.i18n import _
-
-                    self.log_text = "\n".join([_(l) for l in logs])
+                    rendered = []
+                    for e in logs:
+                        try:
+                            rendered.append(self._format_log_entry(e))
+                        except Exception:
+                            try:
+                                rendered.append(str(e))
+                            except Exception:
+                                rendered.append("")
+                    self.log_text = "\n".join(rendered)
                 except Exception:
-                    self.log_text = "\n".join(logs)
+                    try:
+                        self.log_text = "\n".join(str(l) for l in logs)
+                    except Exception:
+                        self.log_text = ""
                 if self.log_dialog is not None and self.log_dialog.isVisible():
                     self.log_dialog.update_log(self.log_text)
 
@@ -2678,6 +2707,64 @@ class SimulationScreen(QWidget):
         except Exception:
             pass
 
+    def _format_log_entry(self, entry):
+        """Return a translated, formatted string for a stored log entry.
+
+        Supports structured entries saved by the backend ({time,msgid,params})
+        and legacy raw strings.
+        """
+        try:
+            from frontend.i18n import _
+
+            class SafeDict(dict):
+                def __missing__(self, key):
+                    return "{" + key + "}"
+
+            # structured entry
+            if isinstance(entry, dict):
+                t = entry.get("time")
+                if "msgid" in entry:
+                    msgid = entry.get("msgid", "")
+                    params = entry.get("params", {}) or {}
+                    try:
+                        text = _(msgid).format_map(SafeDict(params))
+                    except Exception:
+                        # formatting failed; fall back to concatenation
+                        try:
+                            text = _(msgid) + " " + str(params)
+                        except Exception:
+                            text = str(msgid)
+                else:
+                    # raw legacy string
+                    raw = entry.get("raw", "")
+                    try:
+                        text = _(raw)
+                    except Exception:
+                        text = raw
+                # prefix time if available
+                try:
+                    if t is not None:
+                        return f"[t={t}] {text}"
+                except Exception:
+                    pass
+                return text
+            else:
+                # plain string fallback
+                try:
+                    return _(str(entry))
+                except Exception:
+                    return str(entry)
+        except Exception:
+            # absolute fallback: plain representation
+            try:
+                if isinstance(entry, dict) and "raw" in entry:
+                    return str(entry["raw"])
+                if isinstance(entry, dict) and "msgid" in entry:
+                    return str(entry.get("msgid"))
+                return str(entry)
+            except Exception:
+                return ""
+
     def update_language(self):
         """Refresh UI texts when the global language changes."""
         try:
@@ -2723,6 +2810,39 @@ class SimulationScreen(QWidget):
                     self.environment_panel.update_language()
                 except Exception:
                     pass
+            # Re-render backend logs using current language catalog so
+            # previously emitted messages are translated on-the-fly.
+            try:
+                if hasattr(self, "sim_model") and self.sim_model is not None:
+                    logs = getattr(self.sim_model, "logs", []) or []
+                    try:
+                        rendered = []
+                        for entry in logs:
+                            try:
+                                rendered.append(self._format_log_entry(entry))
+                            except Exception:
+                                rendered.append(str(entry))
+                        self.log_text = "\n".join(rendered)
+                    except Exception:
+                        self.log_text = "\n".join(str(l) for l in logs)
+
+                    # update live log display (if present)
+                    try:
+                        parts = self.log_text.split("\n") if self.log_text else []
+                        if (
+                            hasattr(self, "log_display")
+                            and self.log_display is not None
+                        ):
+                            self.log_display.setPlainText("\n".join(parts[-15:]))
+                        if self.log_dialog is not None and self.log_dialog.isVisible():
+                            try:
+                                self.log_dialog.update_log(self.log_text)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         except Exception:
             pass
 
