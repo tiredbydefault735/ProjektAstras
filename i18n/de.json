@@ -12,6 +12,7 @@
     "Graph nicht verfügbar\n(matplotlib benötigt)": "Graph nicht verfügbar\n(matplotlib benötigt)",
     "Graph nicht verfügbar\\n(pyqtgraph benötigt)": "Graph nicht verfügbar\\n(pyqtgraph benötigt)",
     "Keine Randomizer-Daten verfügbar": "Keine Randomizer-Daten verfügbar",
+    "Keine Statistiken": "Es sind keine Statistiken der vorherigen Simulation verfügbar.",
     "Keine Statistik": "Keine Statistik",
     "Log": "Log",
     "Loner Speed:": "Loner Tempo:",

@@ -72,6 +72,10 @@ class Loner:
             hunger_timer  # Sekunden seit letzter Nahrung (1 Step = 0.1s)
         )
         self.can_cannibalize = can_cannibalize  # Kann andere Arachs essen
+        # Randomized combat strength (affects damage dealt/received)
+        self.combat_strength = random.uniform(0.85, 1.25)
+        # Randomized hunger threshold for loners (when they start seeking food)
+        self.hunger_threshold = random.randint(150, 260)
 
     def update(self, width, height, is_day=True, speed_multiplier=1.0):
         """Bewege Loner."""
@@ -140,6 +144,10 @@ class Clan:
         self.hunger_timer = hunger_timer  # Sekunden seit letzter Nahrung
         self.can_cannibalize = can_cannibalize
         self.seeking_food = False  # Aktive Nahrungssuche?
+        # Randomized combat strength (affects damage dealt/received)
+        self.combat_strength = random.uniform(0.85, 1.25)
+        # Randomized hunger threshold for clans (when they start seeking food)
+        self.hunger_threshold = random.randint(40, 90)
 
     def total_hp(self):
         """Gesamte HP des Clans."""
@@ -245,8 +253,8 @@ class Clan:
             self.vx = math.cos(angle) * speed
             self.vy = math.sin(angle) * speed
 
-        # If very hungry, seek food
-        if self.hunger_timer >= 50:
+        # If very hungry, seek food (use per-clan randomized threshold)
+        if self.hunger_timer >= getattr(self, "hunger_threshold", 50):
             self.seeking_food = True
 
 
@@ -551,15 +559,71 @@ class SimulationModel:
         # Speichere Config für Interaktionen
         self.species_config = species_config
 
+        # Region modifiers: per-region multipliers/deltas applied to species
+        # Example keys: 'Evergreen_Forest', 'Desert', 'Snowy_Abyss', 'Wasteland', 'Corrupted_Caves'
+        self.region_name = region_name or "Default"
+        region_modifiers = {
+            "Default": {},
+            "Snowy_Abyss": {
+                # Icefang native to Snowy Abyss
+                "Icefang": {
+                    "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
+                    "boost": {"hp_mult": 1.18, "combat_mult": 1.12, "hunger_delta": 8},
+                    "chance": 0.35,
+                }
+            },
+            "Evergreen_Forest": {
+                # Spores native to Evergreen Forest
+                "Spores": {
+                    "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
+                    "boost": {"hp_mult": 1.2, "combat_mult": 1.15, "hunger_delta": 8},
+                    "chance": 0.35,
+                }
+            },
+            "Wasteland": {
+                # Crushed_Critters native to Wasteland
+                "Crushed_Critters": {
+                    "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
+                    "boost": {"hp_mult": 1.18, "combat_mult": 1.1, "hunger_delta": 6},
+                    "chance": 0.35,
+                }
+            },
+            "Corrupted_Caves": {
+                # The_Corrupted native to Corrupted Caves
+                "The_Corrupted": {
+                    "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
+                    "boost": {"hp_mult": 1.22, "combat_mult": 1.18, "hunger_delta": 8},
+                    "chance": 0.35,
+                }
+            },
+        }
+        self._region_mods = region_modifiers.get(self.region_name, {})
+
         # Baue Interaktionsmatrix aus species.json
         self.interaction_matrix = {}
         for species_name, stats in species_config.items():
             if "interactions" in stats:
                 self.interaction_matrix[species_name] = stats["interactions"]
 
+        # Determine requested total population from UI overrides. If the total
+        # is small (<10) we start with only loners and avoid creating initial
+        # clans so the simulation begins as loner-only until population grows.
+        total_requested = (
+            sum(int(v) for v in population_overrides.values())
+            if population_overrides
+            else 0
+        )
+
         # Erstelle Gruppen
         for species_name, stats in species_config.items():
-            start_pop = population_overrides.get(species_name, 0)
+            # If total requested population is below threshold, create species
+            # group without initial clan (start_pop=0). Otherwise create the
+            # initial clan with the requested start population.
+            start_pop = (
+                population_overrides.get(species_name, 0)
+                if total_requested >= 10
+                else 0
+            )
             color = color_map.get(species_name, (0.5, 0.5, 0.5, 1))
             # Cap hp per member to avoid extreme per-member HP values from data
             raw_hp = stats.get("hp", 25)
@@ -583,12 +647,48 @@ class SimulationModel:
                 self.map_width,
                 self.map_height,
             )
+            # Apply region modifiers to newly created group's clans. Support
+            # the new probabilistic 'boost' model as well as legacy flat dicts.
+            mods = self._region_mods.get(species_name)
+            if mods:
+                # choose which modifier set to use: support new {'base','boost','chance'}
+                if "boost" in mods or "base" in mods:
+                    chance = float(mods.get("chance", 0.0))
+                    use_boost = random.random() < chance
+                    selected = mods.get("boost") if use_boost else mods.get("base", {})
+                else:
+                    # legacy format: mods is directly the flat dict
+                    selected = mods
+
+                for clan in group.clans:
+                    # adjust per-member HP
+                    if "hp_mult" in selected:
+                        clan.hp_per_member = int(
+                            max(1, clan.hp_per_member * selected["hp_mult"])
+                        )
+                    # adjust combat strength multiplier if present
+                    if "combat_mult" in selected:
+                        if hasattr(clan, "combat_strength"):
+                            clan.combat_strength *= selected["combat_mult"]
+                        else:
+                            clan.combat_strength = (
+                                random.uniform(0.85, 1.25) * selected["combat_mult"]
+                            )
+                    # adjust hunger threshold (higher = seek food later)
+                    if "hunger_delta" in selected:
+                        clan.hunger_threshold = (
+                            getattr(clan, "hunger_threshold", 50)
+                            + selected["hunger_delta"]
+                        )
             # Setze hunger_timer aller Clans auf 0
             for clan in group.clans:
                 clan.hunger_timer = 0
             self.groups.append(group)
 
-        # Erstelle Einzelgänger (2-5 pro Spezies) - NUR für aktivierte Spezies
+        # Erstelle Einzelgänger. If the user-requested total population is
+        # small (<10) spawn exactly that many loners per species and do not
+        # create clans on setup. Otherwise keep legacy behavior and spawn a
+        # few loners (2-5) in addition to any initial clans.
         for species_name, stats in species_config.items():
             # Überspringe deaktivierte Spezies (Population = 0)
             if population_overrides.get(species_name, 0) == 0:
@@ -598,7 +698,12 @@ class SimulationModel:
             hp = stats.get("hp", 25)
             food_intake = stats.get("food_intake", 5)
             can_cannibalize = species_name in ["Spores", "The_Corrupted"]
-            num_loners = random.randint(2, 5)
+
+            if total_requested < 10:
+                # spawn exactly the requested number of loners for this species
+                num_loners = int(population_overrides.get(species_name, 0))
+            else:
+                num_loners = random.randint(2, 5)
 
             for _ in range(num_loners):
                 x = random.uniform(50, self.map_width - 50)
@@ -606,6 +711,34 @@ class SimulationModel:
                 loner = Loner(
                     species_name, x, y, color, hp, food_intake, 0, can_cannibalize
                 )
+                # Apply region modifiers to loner if present (probabilistic boost supported)
+                mods = self._region_mods.get(species_name)
+                if mods:
+                    if "boost" in mods or "base" in mods:
+                        chance = float(mods.get("chance", 0.0))
+                        use_boost = random.random() < chance
+                        selected = (
+                            mods.get("boost") if use_boost else mods.get("base", {})
+                        )
+                    else:
+                        selected = mods
+
+                    if "hp_mult" in selected:
+                        loner.hp = int(max(1, loner.hp * selected["hp_mult"]))
+                        loner.max_hp = loner.hp
+                    if "combat_mult" in selected:
+                        if hasattr(loner, "combat_strength"):
+                            loner.combat_strength *= selected["combat_mult"]
+                        else:
+                            loner.combat_strength = random.uniform(
+                                0.85, 1.25
+                            ) * selected.get("combat_mult", 1.0)
+                    if "hunger_delta" in selected:
+                        loner.hunger_threshold = (
+                            getattr(loner, "hunger_threshold", 200)
+                            + selected["hunger_delta"]
+                        )
+
                 self.loners.append(loner)
 
         # Erstelle Nahrungsplätze
@@ -1054,6 +1187,24 @@ class SimulationModel:
             for f in self.food_sources
         ]
 
+        # Update current species counts so UI can react (extinction detection)
+        try:
+            current_counts = {}
+            # Count clans
+            for g in self.groups:
+                current_counts[g.name] = current_counts.get(g.name, 0) + sum(
+                    c.population for c in g.clans
+                )
+            # Count loners
+            for l in self.loners:
+                current_counts[l.species] = current_counts.get(l.species, 0) + 1
+            # Ensure all known species keys exist (keep zeros for disabled species)
+            for s in self.species_config.keys():
+                current_counts.setdefault(s, 0)
+            self.stats["species_counts"] = current_counts
+        except Exception:
+            pass
+
         return {
             "time": self.time,
             "groups": groups_data,
@@ -1073,13 +1224,71 @@ class SimulationModel:
         FOOD_RANGE = 20  # Wie nah ein Clan sein muss um zu essen
         # Use grid to limit food candidate checks
         FOOD_SEARCH_RADIUS = 400
+        # Multiplier applied to loner acceleration when actively searching for food
+        # This gives loners a noticeable speed/acceleration boost while homing in.
+        LONER_SEARCH_BOOST = 1.5
 
         # Clans suchen und essen Nahrung
         for group in self.groups:
             for clan in group.clans:
-                # Kannibalen (Corrupted & Spores) essen keine Nahrung - nur Jagd!
+                # Cannibals (Corrupted & Spores) prefer arach prey but will
+                # fall back to food sources when no prey is available.
+                primary_prey_species = ["Icefang", "Crushed_Critters"]
+                primary_prey_exists = any(
+                    (
+                        g.name in primary_prey_species
+                        and any(c.population > 0 for c in g.clans)
+                    )
+                    for g in self.groups
+                ) or any(l.species in primary_prey_species for l in self.loners)
+
+                # If clan can cannibalize, try to find nearest primary prey (clan or loner)
                 if clan.can_cannibalize:
-                    continue
+                    nearest_prey = None
+                    nearest_prey_dist = float("inf")
+                    candidates = self._nearby_candidates(
+                        clan.x, clan.y, FOOD_SEARCH_RADIUS, ("clans", "loners")
+                    )
+                    for cand in candidates:
+                        if cand is clan:
+                            continue
+                        cand_species = getattr(cand, "species", None)
+                        if cand_species in primary_prey_species:
+                            dx = clan.x - getattr(cand, "x", 0)
+                            dy = clan.y - getattr(cand, "y", 0)
+                            dist_sq = dx * dx + dy * dy
+                            if dist_sq < nearest_prey_dist:
+                                nearest_prey_dist = dist_sq
+                                nearest_prey = cand
+
+                    # If no primary prey nearby and none exist globally, allow hunting other cannibals
+                    if not nearest_prey and not primary_prey_exists:
+                        candidates = self._nearby_candidates(
+                            clan.x, clan.y, FOOD_SEARCH_RADIUS, ("clans",)
+                        )
+                        for cand in candidates:
+                            if cand is clan:
+                                continue
+                            cand_species = getattr(cand, "species", None)
+                            if (
+                                cand_species
+                                and cand_species != clan.species
+                                and getattr(cand, "can_cannibalize", False)
+                            ):
+                                dx = clan.x - cand.x
+                                dy = clan.y - cand.y
+                                dist_sq = dx * dx + dy * dy
+                                if dist_sq < nearest_prey_dist:
+                                    nearest_prey_dist = dist_sq
+                                    nearest_prey = cand
+
+                    # If hungry, pursue prey
+                    if nearest_prey and clan.hunger_timer >= 50:
+                        clan.move_towards(
+                            getattr(nearest_prey, "x", nearest_prey.x),
+                            getattr(nearest_prey, "y", nearest_prey.y),
+                            strength=0.6,
+                        )
 
                 # Finde nächste Nahrungsquelle (begrenzte Suche via Grid)
                 nearest_food = None
@@ -1128,12 +1337,8 @@ class SimulationModel:
                         )
 
                         # Optional: probabilistisches Wachstum nach Essen
-                        # Wachstum folgt einer Normalverteilung (mu=1, sigma=0.8)
-                        # und tritt nur mit einer moderaten Chance auf.
                         try:
-                            # default growth chance after eating (reduced)
                             growth_chance = 0.08
-                            # reduce growth for Icefang to avoid runaway population
                             if group.name == "Icefang":
                                 growth_chance = 0.02
                             if (
@@ -1171,11 +1376,72 @@ class SimulationModel:
 
         # Loners suchen und essen Nahrung
         for loner in self.loners:
-            # Kannibalen (Corrupted & Spores) essen keine Nahrung - nur Jagd!
-            if loner.can_cannibalize:
-                continue
+            # Cannibal loners prefer primary prey but will fall back to food
+            primary_prey_species = ["Icefang", "Crushed_Critters"]
+            primary_prey_exists = any(
+                (
+                    g.name in primary_prey_species
+                    and any(c.population > 0 for c in g.clans)
+                )
+                for g in self.groups
+            ) or any(l.species in primary_prey_species for l in self.loners)
 
-            # Use grid to limit checks for loners
+            if loner.can_cannibalize:
+                nearest_prey = None
+                nearest_prey_dist = float("inf")
+                candidates = self._nearby_candidates(
+                    loner.x, loner.y, FOOD_SEARCH_RADIUS, ("clans", "loners")
+                )
+                for cand in candidates:
+                    if cand is loner:
+                        continue
+                    cand_species = getattr(cand, "species", None)
+                    if cand_species in primary_prey_species:
+                        dx = loner.x - getattr(cand, "x", 0)
+                        dy = loner.y - getattr(cand, "y", 0)
+                        dist_sq = dx * dx + dy * dy
+                        if dist_sq < nearest_prey_dist:
+                            nearest_prey_dist = dist_sq
+                            nearest_prey = cand
+
+                if not nearest_prey and not primary_prey_exists:
+                    candidates = self._nearby_candidates(
+                        loner.x, loner.y, FOOD_SEARCH_RADIUS, ("clans", "loners")
+                    )
+                    for cand in candidates:
+                        if cand is loner:
+                            continue
+                        cand_species = getattr(cand, "species", None)
+                        if (
+                            cand_species
+                            and cand_species != loner.species
+                            and getattr(cand, "can_cannibalize", False)
+                        ):
+                            dx = loner.x - getattr(cand, "x", 0)
+                            dy = loner.y - getattr(cand, "y", 0)
+                            dist_sq = dx * dx + dy * dy
+                            if dist_sq < nearest_prey_dist:
+                                nearest_prey_dist = dist_sq
+                                nearest_prey = cand
+
+                if nearest_prey and loner.hunger_timer >= 200:
+                    dx = nearest_prey.x - loner.x
+                    dy = nearest_prey.y - loner.y
+                    dist_sq = dx * dx + dy * dy
+                    if dist_sq > 0:
+                        inv = 1.0 / math.sqrt(dist_sq)
+                        # Immediately set loner velocity toward prey with boosted speed
+                        mult = (
+                            getattr(self, "loner_speed_multiplier", 1.0)
+                            * LONER_SEARCH_BOOST
+                        )
+                        base_prey_speed = 3.5
+                        vx_target = (dx * inv) * (base_prey_speed * mult)
+                        vy_target = (dy * inv) * (base_prey_speed * mult)
+                        loner.vx = vx_target
+                        loner.vy = vy_target
+
+            # Use grid to limit checks for loners (food fallback)
             nearest_food = None
             nearest_dist = float("inf")
             candidates = self._nearby_candidates(
@@ -1197,8 +1463,16 @@ class SimulationModel:
                 dist_sq = dx * dx + dy * dy
                 if dist_sq > 0:
                     inv = 1.0 / math.sqrt(dist_sq)
-                    loner.vx += (dx * inv) * 0.5
-                    loner.vy += (dy * inv) * 0.5
+                    # Immediately set loner velocity toward food with boosted speed
+                    mult = (
+                        getattr(self, "loner_speed_multiplier", 1.0)
+                        * LONER_SEARCH_BOOST
+                    )
+                    base_food_speed = 3.0
+                    vx_target = (dx * inv) * (base_food_speed * mult)
+                    vy_target = (dy * inv) * (base_food_speed * mult)
+                    loner.vx = vx_target
+                    loner.vy = vy_target
 
             # Wenn nah genug, esse
             if nearest_food and nearest_dist < (FOOD_RANGE * FOOD_RANGE):
@@ -1231,6 +1505,13 @@ class SimulationModel:
             self.hunt_log_timer = {}
 
         # Clan vs Clan Interaktionen
+        # Determine if primary prey species still exist anywhere (global check)
+        primary_prey_species = ["Icefang", "Crushed_Critters"]
+        primary_prey_exists = any(
+            (g.name in primary_prey_species and any(c.population > 0 for c in g.clans))
+            for g in self.groups
+        ) or any(l.species in primary_prey_species for l in self.loners)
+
         for i, group1 in enumerate(self.groups):
             for j, group2 in enumerate(self.groups):
                 # Include same-group checks (i == j) so same-species interactions
@@ -1253,30 +1534,19 @@ class SimulationModel:
                             group2.name, "Neutral"
                         )
 
-                        # SPEZIAL: Corrupted & Spores kämpfen gegeneinander wenn keine Hauptbeute da
-                        # Wenn clan1 ein Kannibal ist (Corrupted/Spores) und clan2 auch...
+                        # SPEZIAL: Corrupted & Spores kämpfen gegeneinander nur wenn
+                        # keine primären Arach-Beute mehr existiert.
                         if (
                             clan1.can_cannibalize
                             and clan2.can_cannibalize
                             and group1.name != group2.name
-                        ):  # Verschiedene Kannibalen-Arten
-                            # Prüfe ob Hauptbeute (Icefang/Crushed_Critters) in Reichweite ist
-                            has_primary_prey = False
-                            for other_group in self.groups:
-                                if other_group.name in ["Icefang", "Crushed_Critters"]:
-                                    for other_clan in other_group.clans:
-                                        prey_dist_sq = clan1.distance_to_clan(
-                                            other_clan
-                                        )
-                                        if prey_dist_sq < (HUNT_RANGE * HUNT_RANGE):
-                                            has_primary_prey = True
-                                            break
-                                if has_primary_prey:
-                                    break
-
-                            # Keine Hauptbeute da? Dann kämpfen sie gegeneinander!
-                            if not has_primary_prey:
+                        ):
+                            if not primary_prey_exists:
+                                # If primary prey are globally extinct, cannibals fight each other
                                 interaction = "Aggressiv"
+                            else:
+                                # Prefer hunting primary prey; do not force inter-cannibal aggression here
+                                pass
 
                         # Clans derselben Spezies stoßen sich ab (Territorialverhalten)
                         # Exception: wenn die Interaktion explizit 'Freundlich' ist,
@@ -1345,7 +1615,14 @@ class SimulationModel:
                                     attack_chance = 0.6 if self.is_day else 0.35
                                 if random.random() < attack_chance:
                                     old_pop = clan2.population
-                                    alive = clan2.take_damage(ATTACK_DAMAGE, self)
+                                    # scale damage by attacker/defender combat strength
+                                    atk = getattr(clan1, "combat_strength", 1.0)
+                                    df = getattr(clan2, "combat_strength", 1.0)
+                                    damage = max(
+                                        1,
+                                        int(round(ATTACK_DAMAGE * atk / max(0.5, df))),
+                                    )
+                                    alive = clan2.take_damage(damage, self)
                                     if old_pop > clan2.population:
                                         killed = old_pop - clan2.population
                                         self.add_log(
@@ -1543,7 +1820,13 @@ class SimulationModel:
                                 0.6 if self.is_day else 0.3
                             )  # War 0.4/0.2, jetzt 0.6/0.3
                             if random.random() < attack_chance:
-                                loner.hp -= ATTACK_DAMAGE
+                                # scale damage by attacker/defender combat strength
+                                atk = getattr(clan, "combat_strength", 1.0)
+                                df = getattr(loner, "combat_strength", 1.0)
+                                damage = max(
+                                    1, int(round(ATTACK_DAMAGE * atk / max(0.5, df)))
+                                )
+                                loner.hp -= damage
                                 if loner.hp <= 0:
                                     loners_to_remove.append(loner)
                                     self.add_log(

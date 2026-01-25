@@ -7,6 +7,7 @@ LOG_FONT_FAMILY = "Consolas"
 LOG_FONT_SIZE = 12
 
 import json
+import copy
 import sys
 import math
 from pathlib import Path
@@ -545,6 +546,148 @@ class StatsDialog(QDialog):
                 p_stats_layout.setContentsMargins(0, 0, 0, 0)
                 p_stats_layout.addWidget(pw)
 
+                # Randomizer toggles for final-stats overlay
+                try:
+                    rnd_toggle_layout = QHBoxLayout()
+                    rnd_toggle_layout.setSpacing(8)
+                    rnd_toggle_layout.setContentsMargins(0, 6, 0, 6)
+                    self._stats_rnd_toggles = {}
+                    cb = QCheckBox(_("Regeneration"))
+                    cb.setChecked(False)
+                    rnd_toggle_layout.addWidget(cb)
+                    self._stats_rnd_toggles["regen"] = cb
+                    cb = QCheckBox(_("Clanwachstum"))
+                    cb.setChecked(False)
+                    rnd_toggle_layout.addWidget(cb)
+                    self._stats_rnd_toggles["clan_growth"] = cb
+                    cb = QCheckBox(_("Einzelgänger Spawn"))
+                    cb.setChecked(False)
+                    rnd_toggle_layout.addWidget(cb)
+                    self._stats_rnd_toggles["loner_spawn"] = cb
+                    rnd_toggle_layout.addStretch()
+                    p_stats_layout.addLayout(rnd_toggle_layout)
+
+                    # overlay curves storage
+                    self._stats_rnd_curves = {}
+
+                    def _refresh_stats_overlays():
+                        try:
+                            samples = (self._stats or {}).get("rnd_samples", {}) or {}
+                            # compute y_max from population history similar to plot above
+                            pop_hist = (self._stats or {}).get(
+                                "population_history", {}
+                            ) or {}
+                            overall_max = 0
+                            for h in pop_hist.values():
+                                if h:
+                                    try:
+                                        overall_max = max(
+                                            overall_max, int(round(max(h)))
+                                        )
+                                    except Exception:
+                                        try:
+                                            overall_max = max(overall_max, int(max(h)))
+                                        except Exception:
+                                            pass
+                            padded = max(1.0, float(overall_max) * 1.10)
+                            y_max = int(math.ceil(padded))
+                            scale = float(y_max) / 100.0 if y_max > 0 else 1.0
+
+                            colors = {
+                                "regen": (102, 204, 102),
+                                "clan_growth": (102, 170, 255),
+                                "loner_spawn": (255, 204, 102),
+                            }
+
+                            for key, cb in self._stats_rnd_toggles.items():
+                                enabled = False
+                                try:
+                                    enabled = cb.isChecked()
+                                except Exception:
+                                    enabled = False
+                                vals = samples.get(key, []) or []
+                                if enabled and vals:
+                                    x = list(range(len(vals)))
+                                    try:
+                                        y = [float(v) for v in vals]
+                                    except Exception:
+                                        y = [0.0 for _ in vals]
+
+                                    # Scale each series to fit the population Y-range
+                                    # Use expected maxima per-randomizer so small-series
+                                    # (e.g. regen=1..3) don't get amplified to full height.
+                                    expected_max_map = {
+                                        "regen": 10.0,
+                                        "clan_growth": 10.0,
+                                        "loner_spawn": 5.0,
+                                    }
+                                    expected_max = expected_max_map.get(key, 10.0)
+                                    expected_max = max(1.0, float(expected_max))
+
+                                    # How strongly overlays should fill the population Y range
+                                    overlay_strength = 0.6
+
+                                    # Compute scaled y values clamped to [0, y_max*overlay_strength]
+                                    y_scaled = []
+                                    for yi in y:
+                                        try:
+                                            frac = float(yi) / expected_max
+                                        except Exception:
+                                            frac = 0.0
+                                        frac = max(0.0, min(frac, 1.0))
+                                        y_scaled.append(frac * y_max * overlay_strength)
+                                    if key not in self._stats_rnd_curves:
+                                        try:
+                                            pen = pg.mkPen(
+                                                color=colors.get(key, (200, 200, 200)),
+                                                width=1,
+                                                style=Qt.PenStyle.DashLine,
+                                            )
+                                            curve = pw.plot(x, y_scaled, pen=pen)
+                                            self._stats_rnd_curves[key] = curve
+                                        except Exception:
+                                            self._stats_rnd_curves[key] = None
+                                    else:
+                                        try:
+                                            if (
+                                                self._stats_rnd_curves.get(key)
+                                                is not None
+                                            ):
+                                                self._stats_rnd_curves[key].setData(
+                                                    x, y_scaled
+                                                )
+                                        except Exception:
+                                            pass
+                                else:
+                                    try:
+                                        if (
+                                            key in self._stats_rnd_curves
+                                            and self._stats_rnd_curves[key] is not None
+                                        ):
+                                            self._stats_rnd_curves[key].setData([], [])
+                                    except Exception:
+                                        pass
+
+                        except Exception:
+                            return
+
+                    # connect toggles
+                    for cb in self._stats_rnd_toggles.values():
+                        try:
+                            cb.stateChanged.connect(
+                                lambda _=None: _refresh_stats_overlays()
+                            )
+                        except Exception:
+                            pass
+
+                    # initial overlay pass
+                    try:
+                        _refresh_stats_overlays()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
                 # Page 1: Randomizers graph (uses rnd_samples from stats)
                 page_rand = QWidget()
                 p_rand_layout = QVBoxLayout(page_rand)
@@ -1008,7 +1151,7 @@ class SpeciesPanel(QWidget):
 
             member_slider = QSlider(Qt.Orientation.Horizontal)
             member_slider.setMinimum(0)
-            member_slider.setMaximum(20)
+            member_slider.setMaximum(30)
             member_slider.setValue(5)
             member_slider.valueChanged.connect(
                 lambda value, sid=species_id: self.update_member_value(sid, value)
@@ -2252,8 +2395,20 @@ class SimulationScreen(QWidget):
                 region_key = self.environment_panel.region_name_to_key.get(
                     region_display, "Wasteland"
                 )
+                # Apply UI member slider values as per-species max_clan_members so
+                # spawned / split behavior respects what the user configured.
+                adj_species_config = copy.deepcopy(self.species_config or {})
+                try:
+                    for sname, val in populations.items():
+                        if sname in adj_species_config and isinstance(
+                            adj_species_config[sname], dict
+                        ):
+                            adj_species_config[sname]["max_clan_members"] = int(val)
+                except Exception:
+                    pass
+
                 self.sim_model.setup(
-                    self.species_config,
+                    adj_species_config,
                     populations,
                     food_places,
                     food_amount,
@@ -2656,6 +2811,8 @@ class SimulationScreen(QWidget):
                     self.log_display.setMinimumHeight(80)
                     LogHighlighter(self.log_display.document())
                     layout.addWidget(self.log_display)
+
+                # (randomizer toggles removed from live graph — moved to final-stats dialog)
 
             # Update graph immediately
             self.update_live_graph()
@@ -3093,6 +3250,8 @@ class SimulationScreen(QWidget):
                     self._live_last_latest_time = latest
             except Exception:
                 pass
+
+            # (randomizer overlay removed from live graph — overlays shown on final-stats dialog)
 
             self.update_graph_legend()
 
