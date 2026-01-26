@@ -13,13 +13,14 @@ root = Path(__file__).resolve().parents[1]
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
 
+import config
 from utils import get_static_path
 from backend.model import SimulationModel
 
 
 def load_species_config():
     try:
-        p = get_static_path("data/species.json")
+        p = get_static_path(config.SPECIES_DATA_PATH)
         with open(p, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:

@@ -9,6 +9,8 @@ from pathlib import Path
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import config
+
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QFontDatabase
@@ -32,7 +34,7 @@ class ArachfaraApp(QMainWindow):
         self.color_preset = color_preset
 
         # Window size and position
-        self.setGeometry(100, 100, 1400, 900)
+        self.setGeometry(config.WINDOW_X_POS, config.WINDOW_Y_POS, config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
 
         # Start in fullscreen mode
         self.showFullScreen()

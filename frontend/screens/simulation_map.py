@@ -2,17 +2,22 @@
 SimulationMapWidget - Neu: Direktes Rendering für glitch-freie Darstellung
 """
 
+import sys
+from pathlib import Path
+import os
+import math
+import random
+
+# Add parent directory to path for config imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import config
+
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsTextItem
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 
-
-import os
-from pathlib import Path
-
 from utils import get_static_path
-import math
-import random
 
 
 class SimulationMapWidget(QGraphicsView):
@@ -226,8 +231,8 @@ class SimulationMapWidget(QGraphicsView):
         self.scene.setSceneRect(0, 0, width, height)
 
         # Scale from logical coordinates (1200x600) to actual display size
-        scale_x = width / 1200.0
-        scale_y = height / 600.0
+        scale_x = width / config.MAP_WIDTH
+        scale_y = height / config.MAP_HEIGHT
 
         # Zeichne Nahrungsplätze: prefer image icons if available, fallback to
         # colored circles when images are missing.
@@ -532,8 +537,8 @@ class SimulationMapWidget(QGraphicsView):
             cols = int(math.ceil(math.sqrt(num)))
             rows = int(math.ceil(num / cols))
             # logical map size is 1200x600
-            spacing_x = 1200.0 / (cols + 1)
-            spacing_y = 600.0 / (rows + 1)
+            spacing_x = config.MAP_WIDTH / (cols + 1)
+            spacing_y = config.MAP_HEIGHT / (rows + 1)
             placed = []
             # Use deterministic RNG when seed is provided so preview matches
             # backend initialization when the same seed is used.
@@ -557,8 +562,8 @@ class SimulationMapWidget(QGraphicsView):
                     y = cy + jy
 
                     # clamp into logical map bounds with small margin
-                    x = min(max(x, 16), 1200 - 16)
-                    y = min(max(y, 16), 600 - 16)
+                    x = min(max(x, 16), config.MAP_WIDTH - 16)
+                    y = min(max(y, 16), config.MAP_HEIGHT - 16)
 
                     # simple overlap avoidance: ensure not too close to existing
                     ok = True

@@ -1,5 +1,11 @@
+import sys
 from pathlib import Path
 import json
+
+# Add parent directory to path for config imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import config
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -31,7 +37,7 @@ class SpeciesInfoScreen(QWidget):
         self.init_ui()
         # Load species data for the right-hand details panel
         try:
-            json_path = get_static_path("data/species.json")
+            json_path = get_static_path(config.SPECIES_DATA_PATH)
             if json_path.exists():
                 with open(json_path, "r", encoding="utf-8") as f:
                     self.species_data = json.load(f)

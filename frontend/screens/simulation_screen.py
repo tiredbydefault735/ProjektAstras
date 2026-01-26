@@ -2,9 +2,17 @@
 SimulationScreen - Main simulation view with map and controls.
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path for backend imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import config
+
 # Log rendering constants
-LOG_FONT_FAMILY = "Consolas"
-LOG_FONT_SIZE = 12
+LOG_FONT_FAMILY = config.LOG_FONT_FAMILY
+LOG_FONT_SIZE = config.LOG_FONT_SIZE
 
 import json
 import copy
@@ -1319,7 +1327,7 @@ class EnvironmentPanel(QWidget):
         # Load region config for temperature ranges
         self.region_config = {}
         try:
-            region_json_path = get_static_path("data/region.json")
+            region_json_path = get_static_path(config.REGION_DATA_PATH)
             with open(region_json_path, "r") as f:
                 self.region_config = json.load(f)
         except Exception as e:
@@ -1982,7 +1990,7 @@ class SimulationScreen(QWidget):
         self._graph_update_interval = 0.5
 
         # Load species config
-        json_path = get_static_path("data/species.json")
+        json_path = get_static_path(config.SPECIES_DATA_PATH)
         # Debug logging removed: debug_log does not exist
         print(f"DEBUG: species.json path: {json_path}")
         print(f"DEBUG: species.json exists: {json_path.exists()}")

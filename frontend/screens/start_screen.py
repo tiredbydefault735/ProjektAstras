@@ -2,7 +2,14 @@
 StartScreen - First screen with logo and buttons.
 """
 
+import sys
 from pathlib import Path
+
+# Add parent directory to path for config imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import config
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -37,7 +44,7 @@ class StartScreen(QWidget):
         self.bg_label = QLabel(self)
         self.bg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        gif_path = get_static_path("ui/astras.gif")
+        gif_path = get_static_path(config.START_SCREEN_BACKGROUND)
         if gif_path.exists():
             self.movie = QMovie(str(gif_path))
             self.bg_label.setMovie(self.movie)
@@ -52,12 +59,8 @@ class StartScreen(QWidget):
         top_row.addStretch()
 
         # Flag icons (try common names in static/icons)
-        possible_en = ["icons/flag_en.png", "icons/us_flag.png", "icons/flag_us.png"]
-        possible_de = [
-            "icons/flag_de.png",
-            "icons/german_flag.png",
-            "icons/flag_deutsch.png",
-        ]
+        possible_en = config.FLAG_EN_PATHS
+        possible_de = config.FLAG_DE_PATHS
 
         def find_first(paths):
             for p in paths:
@@ -72,7 +75,7 @@ class StartScreen(QWidget):
 
         def make_flag_button(path, code):
             btn = QPushButton()
-            btn.setFixedSize(48, 32)
+            btn.setFixedSize(config.FLAG_BUTTON_WIDTH, config.FLAG_BUTTON_HEIGHT)
             btn.setStyleSheet("border: none; background: transparent; color: #ffffff;")
             try:
                 if Path(path).exists():

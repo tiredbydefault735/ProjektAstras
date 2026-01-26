@@ -5,6 +5,13 @@ Simulation Model - Neu aufgebaut für smoothe, glitch-freie Bewegung
 import simpy
 import random
 import math
+import sys
+from pathlib import Path
+
+# Add parent directory to path for config imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import config
 
 
 class FoodSource:
@@ -35,10 +42,10 @@ class FoodSource:
             return 0
 
         # Per-step chance to regenerate a small amount (2% default)
-        regen_prob = 0.02
+        regen_prob = config.FOOD_REGEN_PROBABILITY
         if random.random() < regen_prob:
             # Small regen amounts biased towards 1 and 2
-            regen_choices = [1, 1, 1, 2, 2, 3]
+            regen_choices = config.REGEN_CHOICES
             regen = random.choice(regen_choices)
             regen = max(1, regen)
             self.amount = min(self.amount + regen, self.max_amount)
@@ -64,8 +71,8 @@ class Loner:
         self.hp = hp  # Gesundheit
         self.max_hp = hp
         # Loners sind schneller als Clans!
-        self.vx = random.uniform(-2.5, 2.5)
-        self.vy = random.uniform(-2.5, 2.5)
+        self.vx = random.uniform(-config.LONER_VELOCITY_RANGE, config.LONER_VELOCITY_RANGE)
+        self.vy = random.uniform(-config.LONER_VELOCITY_RANGE, config.LONER_VELOCITY_RANGE)
         # Nahrungssystem
         self.food_intake = food_intake  # Wie viel Food benötigt wird
         self.hunger_timer = (
@@ -73,9 +80,9 @@ class Loner:
         )
         self.can_cannibalize = can_cannibalize  # Kann andere Arachs essen
         # Randomized combat strength (affects damage dealt/received)
-        self.combat_strength = random.uniform(0.85, 1.25)
+        self.combat_strength = random.uniform(config.COMBAT_STRENGTH_MIN, config.COMBAT_STRENGTH_MAX)
         # Randomized hunger threshold for loners (when they start seeking food)
-        self.hunger_threshold = random.randint(150, 260)
+        self.hunger_threshold = random.randint(config.LONER_HUNGER_MIN_THRESHOLD, config.LONER_HUNGER_MAX_THRESHOLD)
 
     def update(self, width, height, is_day=True, speed_multiplier=1.0):
         """Bewege Loner."""
@@ -83,7 +90,7 @@ class Loner:
         self.hunger_timer += 1
 
         # Bei Nacht: Langsamere Bewegung (70% Geschwindigkeit)
-        speed_modifier = 1.0 if is_day else 0.7
+        speed_modifier = 1.0 if is_day else config.NIGHT_SPEED_MODIFIER
         # Apply global speed multiplier
         speed_modifier *= speed_multiplier
         self.x += self.vx * speed_modifier
@@ -104,7 +111,7 @@ class Loner:
             self.vy = -abs(self.vy)
 
         # Gelegentliche Richtungsänderung
-        if random.random() < 0.02:
+        if random.random() < config.LONER_DIRECTION_CHANGE:
             angle = random.uniform(0, 2 * math.pi)
             speed = random.uniform(0.8, 1.5)
             self.vx = math.cos(angle) * speed
@@ -137,17 +144,17 @@ class Clan:
         self.max_members = max_members
         self.hp_per_member = hp_per_member  # HP pro Mitglied
         # Clans sind langsamer als Loners
-        self.vx = random.uniform(-2.0, 2.0)
-        self.vy = random.uniform(-2.0, 2.0)
+        self.vx = random.uniform(-config.CLAN_VELOCITY_RANGE, config.CLAN_VELOCITY_RANGE)
+        self.vy = random.uniform(-config.CLAN_VELOCITY_RANGE, config.CLAN_VELOCITY_RANGE)
         # Nahrungssystem
         self.food_intake = food_intake
         self.hunger_timer = hunger_timer  # Sekunden seit letzter Nahrung
         self.can_cannibalize = can_cannibalize
         self.seeking_food = False  # Aktive Nahrungssuche?
         # Randomized combat strength (affects damage dealt/received)
-        self.combat_strength = random.uniform(0.85, 1.25)
+        self.combat_strength = random.uniform(config.COMBAT_STRENGTH_MIN, config.COMBAT_STRENGTH_MAX)
         # Randomized hunger threshold for clans (when they start seeking food)
-        self.hunger_threshold = random.randint(40, 90)
+        self.hunger_threshold = random.randint(config.CLAN_HUNGER_MIN_THRESHOLD, config.CLAN_HUNGER_MAX_THRESHOLD)
 
     def total_hp(self):
         """Gesamte HP des Clans."""
@@ -225,7 +232,7 @@ class Clan:
         self.hunger_timer += 1
 
         # Day/night speed modifier (clans slightly slower at night)
-        speed_modifier = 1.0 if is_day else 0.7
+        speed_modifier = 1.0 if is_day else config.NIGHT_SPEED_MODIFIER
         speed_modifier *= speed_multiplier
 
         # Move
@@ -247,7 +254,7 @@ class Clan:
             self.vy = -abs(self.vy)
 
         # Occasional direction change
-        if random.random() < 0.01:
+        if random.random() < config.SPEED_CHANGE_CHANCE:
             angle = random.uniform(0, 2 * math.pi)
             speed = random.uniform(0.4, 1.0)
             self.vx = math.cos(angle) * speed
@@ -328,7 +335,7 @@ class SpeciesGroup:
                 clan.update(self.map_width, self.map_height, is_day, clan_speed_mult)
 
                 # Hunger death
-                if clan.hunger_timer >= 300:
+                if clan.hunger_timer >= config.CLAN_HUNGER_DEATH_THRESHOLD:
                     deaths = max(1, clan.population // 10)
                     clan.population = max(0, clan.population - deaths)
 
@@ -347,7 +354,7 @@ class SpeciesGroup:
     def check_clan_splits(self):
         """Split clans when they exceed thresholds."""
         for clan in self.clans[:]:
-            if len(self.clans) >= 15:
+            if len(self.clans) >= config.MAX_CLANS_PER_SPECIES:
                 continue
 
             if clan.population > clan.max_members:
@@ -430,7 +437,7 @@ class SimulationModel:
         if not hasattr(self, "logs"):
             self.logs = []
         if not hasattr(self, "max_logs"):
-            self.max_logs = 300
+            self.max_logs = config.MAX_LOG_ENTRIES
 
         entry = None
         try:
@@ -493,11 +500,11 @@ class SimulationModel:
         }
 
         # Ensure map dimensions are always set before use
-        self.map_width = 1200
-        self.map_height = 600
+        self.map_width = config.MAP_WIDTH
+        self.map_height = config.MAP_HEIGHT
         # Spatial grid for neighbor queries (uniform grid)
         # Cell size chosen near typical interaction radius to balance bucket counts
-        self.grid_cell_size = 150
+        self.grid_cell_size = config.GRID_CELL_SIZE
         self._grid = {}
 
         # Movement multipliers
@@ -532,8 +539,8 @@ class SimulationModel:
         # Tag/Nacht-Zyklus initialisieren
         self.is_day = start_is_day  # Start-Tageszeit aus UI
         self.day_night_timer = 0
-        self.day_night_cycle_duration = 300  # 30 Sekunden pro Zyklus (300 Steps)
-        self.transition_duration = 50  # 5 Sekunden Übergang (50 Steps)
+        self.day_night_cycle_duration = config.DAY_NIGHT_CYCLE_DURATION  # 30 Sekunden pro Zyklus (300 Steps)
+        self.transition_duration = config.TRANSITION_DURATION  # 5 Sekunden Übergang (50 Steps)
         self.in_transition = False
         self.transition_timer = 0
         self.transition_to_day = True  # Zielzustand des Übergangs
@@ -549,12 +556,7 @@ class SimulationModel:
                 pass
 
         # Farben für Spezies
-        color_map = {
-            "Icefang": (0.8, 0.9, 1, 1),
-            "Crushed_Critters": (0.6, 0.4, 0.2, 1),
-            "Spores": (0.2, 0.8, 0.2, 1),
-            "The_Corrupted": (0.5, 0, 0.5, 1),
-        }
+        color_map = config.COLOR_MAP
 
         # Speichere Config für Interaktionen
         self.species_config = species_config
@@ -568,32 +570,32 @@ class SimulationModel:
                 # Icefang native to Snowy Abyss
                 "Icefang": {
                     "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
-                    "boost": {"hp_mult": 1.18, "combat_mult": 1.12, "hunger_delta": 8},
-                    "chance": 0.35,
+                    "boost": {"hp_mult": config.REGION_NATIVE_HP_MULT, "combat_mult": config.REGION_NATIVE_COMBAT_MULT_MIN, "hunger_delta": config.REGION_HUNGER_DELTA_MAX},
+                    "chance": config.REGION_BOOST_CHANCE,
                 }
             },
             "Evergreen_Forest": {
                 # Spores native to Evergreen Forest
                 "Spores": {
                     "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
-                    "boost": {"hp_mult": 1.2, "combat_mult": 1.15, "hunger_delta": 8},
-                    "chance": 0.35,
+                    "boost": {"hp_mult": 1.2, "combat_mult": 1.15, "hunger_delta": config.REGION_HUNGER_DELTA_MAX},
+                    "chance": config.REGION_BOOST_CHANCE,
                 }
             },
             "Wasteland": {
                 # Crushed_Critters native to Wasteland
                 "Crushed_Critters": {
                     "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
-                    "boost": {"hp_mult": 1.18, "combat_mult": 1.1, "hunger_delta": 6},
-                    "chance": 0.35,
+                    "boost": {"hp_mult": config.REGION_NATIVE_HP_MULT, "combat_mult": 1.1, "hunger_delta": config.REGION_HUNGER_DELTA_MIN},
+                    "chance": config.REGION_BOOST_CHANCE,
                 }
             },
             "Corrupted_Caves": {
                 # The_Corrupted native to Corrupted Caves
                 "The_Corrupted": {
                     "base": {"hp_mult": 1.0, "combat_mult": 1.0, "hunger_delta": 0},
-                    "boost": {"hp_mult": 1.22, "combat_mult": 1.18, "hunger_delta": 8},
-                    "chance": 0.35,
+                    "boost": {"hp_mult": 1.22, "combat_mult": config.REGION_NATIVE_COMBAT_MULT_MAX, "hunger_delta": config.REGION_HUNGER_DELTA_MAX},
+                    "chance": config.REGION_BOOST_CHANCE,
                 }
             },
         }
@@ -882,10 +884,10 @@ class SimulationModel:
                 continue
 
             # Reduce overall spawn frequency to give species a chance to die out
-            spawn_threshold = 0.005
+            spawn_threshold = config.SPAWN_THRESHOLD_NORMAL
             # Icefang spawn even more rarely
             if species_name == "Icefang":
-                spawn_threshold = 0.001
+                spawn_threshold = config.SPAWN_THRESHOLD_LOW_POP
             spawn_chance = random.uniform(0.0, 1.0)
             if spawn_chance < spawn_threshold:
                 # Spawn a single loner to keep overall pressure low
@@ -1058,8 +1060,8 @@ class SimulationModel:
 
                 # Erhöhter Schaden für Einzelgänger: 6 HP + 3 HP pro 5 Grad
                 # Bei 30 Grad Unterschied: 6 + 18 = 24 HP pro Step
-                damage = 6 + (temp_diff // 5) * 3
-                damage = max(6, min(damage, 40))  # Min 6, Max 40 HP pro Step
+                damage = config.LONER_TEMP_DAMAGE_BASE + (temp_diff // 5) * config.LONER_TEMP_DAMAGE_PER_5DEG
+                damage = max(config.LONER_TEMP_DAMAGE_BASE, min(damage, config.LONER_TEMP_DAMAGE_MAX))  # Min 6, Max 40 HP pro Step
 
                 loner.hp -= damage
                 if loner.hp <= 0:
@@ -1078,7 +1080,7 @@ class SimulationModel:
                     )
 
             # Hungertod: Nach 300 Steps (30 Sekunden)
-            if loner.hunger_timer >= 300:
+            if loner.hunger_timer >= config.CLAN_HUNGER_DEATH_THRESHOLD:
                 loners_to_remove.append(loner)
                 self.add_log(
                     ("☠️ {species} Einzelgänger verhungert!", {"species": loner.species})
@@ -1110,8 +1112,8 @@ class SimulationModel:
 
                 # Normaler Schaden für Clans: 2 HP + 1 HP pro 5 Grad
                 # Bei 30 Grad Unterschied: 2 + 6 = 8 HP pro Step
-                damage = 2 + (temp_diff // 5)
-                damage = max(2, min(damage, 12))  # Min 2, Max 12 HP pro Step
+                damage = config.CLAN_TEMP_DAMAGE_BASE + (temp_diff // 5)
+                damage = max(config.CLAN_TEMP_DAMAGE_BASE, min(damage, config.CLAN_TEMP_DAMAGE_MAX))  # Min 2, Max 12 HP pro Step
 
                 # Wende Schaden auf alle Clans dieser Gruppe an
                 for clan in group.clans:
@@ -1221,12 +1223,12 @@ class SimulationModel:
 
     def _process_food_seeking(self):
         """Nahrungssuche und Essen."""
-        FOOD_RANGE = 20  # Wie nah ein Clan sein muss um zu essen
+        FOOD_RANGE = config.FOOD_RANGE  # Wie nah ein Clan sein muss um zu essen
         # Use grid to limit food candidate checks
-        FOOD_SEARCH_RADIUS = 400
+        FOOD_SEARCH_RADIUS = config.FOOD_SEARCH_RADIUS
         # Multiplier applied to loner acceleration when actively searching for food
         # This gives loners a noticeable speed/acceleration boost while homing in.
-        LONER_SEARCH_BOOST = 1.5
+        LONER_SEARCH_BOOST = config.LONER_SEARCH_BOOST
 
         # Clans suchen und essen Nahrung
         for group in self.groups:
@@ -1321,7 +1323,7 @@ class SimulationModel:
                         species_stats = self.species_config.get(group.name, {})
                         max_hp = species_stats.get("hp", 50)
                         clan.hp_per_member = min(
-                            clan.hp_per_member + (consumed * 5),
+                            clan.hp_per_member + (consumed * config.HP_REGEN_PER_FOOD),
                             max_hp,
                         )
                         self.add_log(
@@ -1338,15 +1340,15 @@ class SimulationModel:
 
                         # Optional: probabilistisches Wachstum nach Essen
                         try:
-                            growth_chance = 0.08
+                            growth_chance = config.GROWTH_CHANCE_BASE
                             if group.name == "Icefang":
-                                growth_chance = 0.02
+                                growth_chance = config.GROWTH_CHANCE_HUNGRY
                             if (
                                 random.random() < growth_chance
                                 and clan.population < clan.max_members
                             ):
-                                mu = 1.0
-                                sigma = 0.8
+                                mu = config.MUTATION_MU
+                                sigma = config.MUTATION_SIGMA
                                 increase = int(round(random.gauss(mu, sigma)))
                                 increase = max(1, increase)
                                 space = clan.max_members - clan.population
@@ -1481,7 +1483,7 @@ class SimulationModel:
                     loner.hunger_timer = max(0, loner.hunger_timer - (consumed * 10))
                     # HP-Regeneration: Pro Food +5 HP (bis max HP)
                     old_hp = loner.hp
-                    loner.hp = min(loner.hp + (consumed * 5), loner.max_hp)
+                    loner.hp = min(loner.hp + (consumed * config.HP_REGEN_PER_FOOD), loner.max_hp)
                     self.add_log(
                         (
                             "🍽️ {species} Einzelgänger isst {consumed} Food (+{hp_gain} HP)",
@@ -1495,10 +1497,10 @@ class SimulationModel:
 
     def _process_interactions(self):
         """Prozessiere alle Interaktionen zwischen Clans und Loners."""
-        ATTACK_DAMAGE = 6  # Fester Attack-Wert (higher to overcome high HP per member)
-        INTERACTION_RANGE = 100  # Reichweite für Interaktionen
-        HUNT_RANGE = 400  # Reichweite für aktive Jagd (erhöht)
-        HUNT_LOG_COOLDOWN = 100  # Nur alle 100 Steps loggen
+        ATTACK_DAMAGE = config.ATTACK_DAMAGE  # Fester Attack-Wert (higher to overcome high HP per member)
+        INTERACTION_RANGE = config.INTERACTION_RANGE  # Reichweite für Interaktionen
+        HUNT_RANGE = config.HUNT_RANGE  # Reichweite für aktive Jagd (erhöht)
+        HUNT_LOG_COOLDOWN = config.HUNT_LOG_COOLDOWN  # Nur alle 100 Steps loggen
 
         # Tracking für Jagd-Logs (verhindert Spam)
         if not hasattr(self, "hunt_log_timer"):
@@ -1686,15 +1688,15 @@ class SimulationModel:
                                 if group1.name == group2.name:
                                     # Friendly growth only for same-species encounters
                                     # Reduce base friendly-growth to make results less deterministic
-                                    growth_chance = 0.03
+                                    growth_chance = config.GROWTH_CHANCE_COMBAT_WIN
                                     # Reduce Icefang self-growth further to limit dominance
                                     if group1.name == "Icefang":
-                                        growth_chance = 0.005
+                                        growth_chance = config.GROWTH_CHANCE_RARE
                                     if random.random() < growth_chance:
                                         if clan1.population < clan1.max_members:
                                             # Ziehe inkrementell Mitglieder aus einer Normalverteilung
-                                            mu = 1.0
-                                            sigma = 0.8
+                                            mu = config.MUTATION_MU
+                                            sigma = config.MUTATION_SIGMA
                                             increase = int(
                                                 round(random.gauss(mu, sigma))
                                             )
@@ -1865,9 +1867,9 @@ class SimulationModel:
                         elif interaction == "Freundlich":
                             # Loner kann Clan beitreten
                             # Höhere Chance wenn hungrig (>50 steps ohne Essen)
-                            join_chance = 0.03  # 3% Basis-Chance
+                            join_chance = config.LONER_JOIN_BASE_CHANCE  # 3% Basis-Chance
                             if loner.hunger_timer >= 50:
-                                join_chance = 0.15  # 15% wenn hungrig
+                                join_chance = config.LONER_JOIN_HUNGRY_CHANCE  # 15% wenn hungrig
 
                             if (
                                 random.random() < join_chance
@@ -1942,7 +1944,7 @@ class SimulationModel:
 
     def _process_loner_clan_formation(self):
         """Einzelgänger können sich zu einem neuen Clan zusammenschließen."""
-        FORMATION_RANGE = 50  # Wie nah Loners sein müssen
+        FORMATION_RANGE = config.FORMATION_RANGE  # Wie nah Loners sein müssen
 
         # Gruppiere Loners nach Spezies
         species_loners = {}
