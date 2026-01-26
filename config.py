@@ -55,16 +55,13 @@ HP_REGEN_PER_FOOD = 5  # HP regenerated per food unit
 
 # ========== SPAWNING & POPULATION LIMITS ==========
 MAX_CLANS_PER_SPECIES = 15  # Maximum clans allowed per species
-MAX_CLAN_SIZE_FACTOR = 0.5  # Split when clan reaches 50% of max members
 SPAWN_THRESHOLD_NORMAL = 0.005  # Normal spawn chance (0.5%)
 SPAWN_THRESHOLD_LOW_POP = 0.001  # Spawn chance when population < 10
 FOOD_REGEN_PROBABILITY = 0.02  # 2% chance per step for food regeneration
 REGEN_CHOICES = [1, 1, 1, 2, 2, 3]  # Small regeneration amounts (biased towards 1 and 2)
 
 # ========== MOVEMENT SPEEDS & MODIFIERS ==========
-# Base speeds
-CLAN_BASE_SPEED = 1.0  # Clan velocity range ±2.0
-LONER_BASE_SPEED = 1.0  # Loner velocity range ±2.5
+# Velocity ranges
 CLAN_VELOCITY_RANGE = 2.0  # Clan velocity randomization range
 LONER_VELOCITY_RANGE = 2.5  # Loner velocity randomization range
 
@@ -110,7 +107,6 @@ REGION_HUNGER_DELTA_MAX = 8  # Max hunger delta for region
 
 # ========== MAX LIMITS & HISTORY ==========
 MAX_LOG_ENTRIES = 300  # Maximum log entries to keep
-MAX_CLANS_PER_GROUP = 8  # Maximum clans per species group
 
 # ========== FILE PATHS (Static Resources) ==========
 # Data files
@@ -122,36 +118,14 @@ START_SCREEN_BACKGROUND = "ui/astras.gif"
 FLAG_EN_PATHS = ["icons/flag_en.png", "icons/us_flag.png", "icons/flag_us.png"]
 FLAG_DE_PATHS = ["icons/flag_de.png", "icons/german_flag.png", "icons/flag_deutsch.png"]
 
-# Map textures and icons
-TEXTURE_PATH_PATTERN = "textures/{}.png"  # Format: textures/<region_name>.png
-UI_ICON_PATH_PATTERN = "ui/{}.png"  # Format: ui/<icon_name>.png
-
 # ========== UI/DISPLAY CONSTANTS ==========
 # Log display
 LOG_FONT_FAMILY = "Consolas"
 LOG_FONT_SIZE = 12
 
-# Start screen
-START_SCREEN_TOTAL_HEIGHT = 625
-START_SCREEN_PADDING = 20
-LOGO_SIZE = 250
-CONTAINER_HEIGHT = 420
+# Flag buttons
 FLAG_BUTTON_WIDTH = 48
 FLAG_BUTTON_HEIGHT = 32
-
-# Food icon display
-FOOD_ICON_BASE_SIZE = 24
-FOOD_ICON_SCALE = 2.5
-
-# Clan display sizes
-CLAN_SIZE_MIN = 48
-CLAN_SIZE_MAX = 180
-CLAN_BASE_SIZE = 40
-CLAN_PER_MEMBER_SIZE = 3
-
-# Loner display
-LONER_DISPLAY_SIZE = 12
-LONER_TO_CLAN_SIZE_RATIO = 0.5
 
 # ========== COLOR PRESETS ==========
 # Species color mapping (RGBA tuples)
