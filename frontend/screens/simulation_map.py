@@ -13,6 +13,7 @@ from pathlib import Path
 from utils import get_static_path
 import math
 import random
+import re
 
 
 class SimulationMapWidget(QGraphicsView):
@@ -209,6 +210,76 @@ class SimulationMapWidget(QGraphicsView):
     ):
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
 
+        def _color_to_qcolor(col, alpha_override=None, fallback_alpha=255):
+            """Robustly convert backend color to a QColor.
+
+            Accepts:
+              - tuple/list of 3 or 4 floats in 0..1 or ints in 0..255
+              - hex string '#rrggbb' or '#rrggbbaa'
+              - QColor (returned as-is)
+            Falls back to a neutral gray on parse errors.
+            """
+            try:
+                # Already a QColor
+                if isinstance(col, QColor):
+                    return col
+
+                # Tuple/list of numbers
+                if isinstance(col, (list, tuple)):
+                    vals = list(col)
+                    if len(vals) >= 3 and all(
+                        isinstance(x, (int, float)) for x in vals[:3]
+                    ):
+                        # detect 0..1 floats vs 0..255 ints
+                        if any(isinstance(x, int) and x > 1 for x in vals[:3]) or any(
+                            isinstance(x, float) and x > 1.0 for x in vals[:3]
+                        ):
+                            r, g, b = int(vals[0]), int(vals[1]), int(vals[2])
+                        else:
+                            r, g, b = (
+                                int(vals[0] * 255),
+                                int(vals[1] * 255),
+                                int(vals[2] * 255),
+                            )
+                        a = None
+                        if len(vals) >= 4:
+                            v = vals[3]
+                            a = (
+                                int(v * 255)
+                                if isinstance(v, float) and v <= 1.0
+                                else int(v)
+                            )
+                        if alpha_override is not None:
+                            a = alpha_override
+                        if a is None:
+                            a = fallback_alpha
+                        return QColor(
+                            max(0, min(255, r)),
+                            max(0, min(255, g)),
+                            max(0, min(255, b)),
+                            max(0, min(255, int(a))),
+                        )
+
+                # Hex string like '#rrggbb' or '#rrggbbaa'
+                if isinstance(col, str):
+                    s = col.strip()
+                    m = re.match(r"^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$", s)
+                    if m:
+                        rgb = m.group(1)
+                        alpha = m.group(2) or "ff"
+                        r = int(rgb[0:2], 16)
+                        g = int(rgb[2:4], 16)
+                        b = int(rgb[4:6], 16)
+                        a = int(alpha, 16)
+                        if alpha_override is not None:
+                            a = alpha_override
+                        return QColor(r, g, b, a)
+            except Exception:
+                pass
+
+            # fallback neutral
+            return QColor(200, 200, 200, fallback_alpha)
+
         # Remove all items except the background
         for item in self.scene.items():
             if getattr(self, "_bg_item", None) and item is self._bg_item:
@@ -318,14 +389,11 @@ class SimulationMapWidget(QGraphicsView):
                     size = 80
 
                 color = clan["color"]
-                rgb_color = QColor(
-                    int(color[0] * 255),
-                    int(color[1] * 255),
-                    int(color[2] * 255),
-                    100,  # Semi-transparent
+                rgb_color = _color_to_qcolor(
+                    color, alpha_override=100, fallback_alpha=100
                 )
-                border_color = QColor(
-                    int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 200
+                border_color = _color_to_qcolor(
+                    color, alpha_override=200, fallback_alpha=200
                 )
 
                 # Try to draw a species icon (Spores, Crushed_Critters, Icefang) if available
@@ -407,8 +475,8 @@ class SimulationMapWidget(QGraphicsView):
 
                 species = loner.get("species", "")
                 color = loner["color"]
-                rgb_color = QColor(
-                    int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255
+                rgb_color = _color_to_qcolor(
+                    color, alpha_override=255, fallback_alpha=255
                 )
 
                 # Default loner visual size (fixed by default).

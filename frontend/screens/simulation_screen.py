@@ -46,6 +46,19 @@ from PyQt6.QtGui import (
 from backend.model import SimulationModel
 from screens.simulation_map import SimulationMapWidget
 from frontend.i18n import _
+from config import (
+    MIN_PANEL_HEIGHT,
+    RIGHT_COLUMN_MIN_WIDTH,
+    MAX_SIMULATION_TIME,
+    MAP_MIN_WIDTH,
+    MAP_MIN_HEIGHT,
+    PANEL_STACK_MIN_HEIGHT,
+    LIVE_PLOT_MIN_HEIGHT,
+    LOG_MIN_HEIGHT,
+    CONTENT_MARGIN,
+    BUTTON_FIXED_WIDTH,
+    UPDATE_TIMER_INTERVAL_MS,
+)
 
 
 class LogHighlighter(QSyntaxHighlighter):
@@ -364,7 +377,7 @@ class StatsDialog(QDialog):
 
             pw = pg.PlotWidget(background="#1a1a1a")
             # Give final-stats graph more vertical room so curves aren't squished
-            pw.setMinimumHeight(300)
+            pw.setMinimumHeight(MIN_PANEL_HEIGHT)
             try:
                 pw.setMaximumHeight(16777215)
             except Exception:
@@ -698,7 +711,7 @@ class StatsDialog(QDialog):
 
                     rpw = pg.PlotWidget(background="#151515")
                     rpw.getPlotItem().showGrid(x=True, y=True, alpha=0.15)
-                    rpw.setMinimumHeight(300)
+                    rpw.setMinimumHeight(MIN_PANEL_HEIGHT)
                     rpw.setLabel("left", "Value", color="#ffffff", size="9pt")
                     rpw.setLabel("bottom", "Samples", color="#ffffff", size="9pt")
                     try:
@@ -1973,7 +1986,7 @@ class SimulationScreen(QWidget):
         self.time_step = 0
         self.log_expanded = False  # Track log expansion state
         self.simulation_time = 0  # Time in seconds
-        self.max_simulation_time = 300  # 5 minutes = 300 seconds
+        self.max_simulation_time = MAX_SIMULATION_TIME  # seconds
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
         self.population_data = {}  # Store population history for live graph
         self.live_graph_widget = None  # Widget for live graph, initialized later
@@ -2019,7 +2032,7 @@ class SimulationScreen(QWidget):
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_back.setFont(btn_back_font)
-        self.btn_back.setFixedWidth(100)
+        self.btn_back.setFixedWidth(BUTTON_FIXED_WIDTH)
         self.btn_back.clicked.connect(self.on_back)
         top_bar.addWidget(self.btn_back)
 
@@ -2029,7 +2042,7 @@ class SimulationScreen(QWidget):
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_exit.setFont(btn_exit_font)
-        self.btn_exit.setFixedWidth(100)
+        self.btn_exit.setFixedWidth(BUTTON_FIXED_WIDTH)
         self.btn_exit.clicked.connect(self.on_exit)
         top_bar.addWidget(self.btn_exit)
 
@@ -2053,7 +2066,9 @@ class SimulationScreen(QWidget):
         map_layout.setContentsMargins(0, 0, 0, 0)
 
         self.map_widget = SimulationMapWidget()
-        self.map_widget.setMinimumSize(600, 400)  # Minimum size for usability
+        self.map_widget.setMinimumSize(
+            MAP_MIN_WIDTH, MAP_MIN_HEIGHT
+        )  # Minimum size for usability
         map_layout.addWidget(self.map_widget)
 
         left_layout.addWidget(self.map_frame)
@@ -2061,7 +2076,7 @@ class SimulationScreen(QWidget):
 
         # Right column: Settings and controls (25%)
         right_column = QFrame()
-        right_column.setMinimumWidth(300)
+        right_column.setMinimumWidth(RIGHT_COLUMN_MIN_WIDTH)
         right_layout = QVBoxLayout(right_column)
         right_layout.setContentsMargins(10, 0, 0, 0)
         right_layout.setSpacing(10)
@@ -2094,7 +2109,7 @@ class SimulationScreen(QWidget):
 
         # Use QStackedWidget to prevent layout shifts when switching tabs
         self.panel_stack = QStackedWidget()
-        self.panel_stack.setMinimumHeight(400)
+        self.panel_stack.setMinimumHeight(PANEL_STACK_MIN_HEIGHT)
 
         # Create panels
         self.species_panel = SpeciesPanel(self.species_config, self.color_preset)
@@ -2448,7 +2463,7 @@ class SimulationScreen(QWidget):
             if not self.update_timer:
                 self.update_timer = QTimer()
                 self.update_timer.timeout.connect(self.update_simulation_with_speed)
-            self.update_timer.start(100)
+            self.update_timer.start(UPDATE_TIMER_INTERVAL_MS)
 
     def toggle_play_pause(self):
         """Toggle between play and pause."""
@@ -2736,7 +2751,7 @@ class SimulationScreen(QWidget):
                 # Give a reasonable minimum height but allow expansion so the
                 # plot can use more vertical space instead of being compressed.
                 # Make live graph slightly smaller to give room for distribution graph
-                pw.setMinimumHeight(240)
+                pw.setMinimumHeight(LIVE_PLOT_MIN_HEIGHT)
                 try:
                     # Remove any strict maximum so layouts may expand vertically
                     pw.setMaximumHeight(16777215)
@@ -2808,7 +2823,7 @@ class SimulationScreen(QWidget):
                     self.log_display.setStyleSheet(
                         f"background-color: #222; color: #fff; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px; margin-top: 6px; border: none;"
                     )
-                    self.log_display.setMinimumHeight(80)
+                    self.log_display.setMinimumHeight(LOG_MIN_HEIGHT)
                     LogHighlighter(self.log_display.document())
                     layout.addWidget(self.log_display)
 
@@ -3329,7 +3344,7 @@ class SimulationScreen(QWidget):
                     for v in samples.values():
                         if v:
                             latest = max(latest, len(v) - 1)
-                    start = max(0, latest - 300)
+                    start = max(0, latest - MAX_SIMULATION_TIME)
                     vb.setXRange(start, latest, padding=0)
                 except Exception:
                     pass

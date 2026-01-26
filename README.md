@@ -24,9 +24,8 @@ pip install PyQt6 simpy
 python frontend/main.py
 ```
 
-## Dokumentation
+## Documentation
 
-- **[PyQt6 Guide](./docs/PYQT6_GUIDE.md)** - Umfassende Anleitung zu PyQt6 und der Verwendung in ProjektAstras (START HERE!)
 - **[Theme System](./docs/THEME_SYSTEM.md)** - Dokumentation des modularen Farbsystems
 - **[Anforderungen](./docs/Anforderungen.md)** - Funktionale Anforderungen
 - **[Konzeption](./docs/Konzeption.md)** - Technisches Design
@@ -39,42 +38,77 @@ ProjektAstras/
 │   ├── screens/          # UI Screens
 │   │   ├── start_screen.py
 │   │   ├── simulation_screen.py
-│   │   └── simulation_map.py
-│   └── styles/           # Styling & Theming
-│       ├── stylesheet.py     # Dynamischer CSS-Generator
-│       └── color_presets.py  # Farbthemes
-├── backend/              # Simulation Logic
-│   └── model.py          # SimPy Model
-├── static/               # Assets & Data
-│   ├── data/
-│   │   └── species.json  # Species Config
-│   └── src/              # Images
-└── docs/                 # Documentation
-    ├── PYQT6_GUIDE.md           # PyQt6 Anleitung ⭐
-    ├── THEME_SYSTEM.md          # Theme-Dokumentation
-    ├── Anforderungen.md
-    └── Konzeption.md
-```
-
-## Über das Projekt
 - **Framework:** PyQt6 für native, scharfe UI (ideal für Pixel-Art Ästhetik)
-- **Simulation:** SimPy für Ereignis-basierte Simulation
-- **Design:** Dark Theme mit konfigurierbaren Farbpresets, keine Abrundungen
-- **Modular:** Einfache Erweiterung durch Separation of Concerns
+# ProjektAstras — Arachfara Simulation
 
-## Quick Start für Entwicklung
+ProjektAstras ist eine diskrete Ereignis-Simulation, die das Verhalten und die Interaktionen mehrerer Arachfara-Subspezies in einer begrenzten Umgebung modelliert und visualisiert.
 
-### Neue UI-Komponente hinzufügen
-Siehe [PyQt6 Guide - Task 1](./docs/PYQT6_GUIDE.md#task-1-neuen-button-hinzufügen)
+Kurz: Backend (SimPy) simuliert die Entitäten und Interaktionen; Frontend (PyQt6) zeigt die Karte, Populationen und Logs an.
 
-### Theme wechseln
-```python
-# In main.py
-main(preset_name="Dark Blue")  # Dark Red, Dark Green, Dark Purple
+## Tech stack
+- Backend: Python 3.10+ mit SimPy
+- Frontend: PyQt6 (UI)
+
+## Schnellstart (Entwicklung)
+1. Repository klonen
+
+```bash
+git clone <repo-url>
+cd ProjektAstras
 ```
 
-### Neuen Screen hinzufügen
-Siehe [PyQt6 Guide - Task 4](./docs/PYQT6_GUIDE.md#task-4-neuen-screen-hinzufügen)
+2. Abhängigkeiten installieren
 
-## Über den Autor
-Dieses Projekt wurde von Tired im Rahmen des 3. Lehrjahres an der Berufsschule erstellt.
+```bash
+pip install -r requirements.txt  # or: pip install PyQt6 simpy
+```
+
+3. App starten (Entwickler-Modus)
+
+```bash
+python frontend/main.py
+```
+
+## Projektstruktur (Kurzüberblick)
+
+ProjektAstras/
+├── frontend/         # PyQt6 UI and screens (app entry point)
+│   ├── main.py       # Application entry (runs the UI)
+│   ├── screens/      # UI screens (start, simulation, map, ...)
+│   └── styles/       # Styling and theme presets
+├── backend/          # Simulation logic (core app code)
+│   ├── model.py      # `SimulationModel` — setup() and step()
+│   ├── entities.py   # Entity classes (Loner, Clan, FoodSource)
+│   ├── processors.py # Interaction & behavior processors (food, combat, formation)
+│   ├── spatial.py    # Spatial grid helper (nearby queries)
+│   ├── temperature.py# Temperature/transition/regen logic
+│   ├── spawn.py      # Loner spawn helpers
+   └── stats.py      # Snapshot collector and stats helpers
+├── static/           # Assets (images, fonts, icons)
+├── docs/             # Project documentation and notes (non-essential for runtime)
+├── tests/            # Unit and integration tests (not required to run the app)
+└── build/            # Build artifacts (safe to ignore/remove)
+
+## Entwickeln & Übersicht
+
+- Laufzeit-relevante Dateien (für die App-Ausführung):
+    - `frontend/main.py` — Startet die GUI und verbindet Controls mit Backend
+    - `frontend/screens/` — Enthält `simulation_screen.py` und `simulation_map.py` (UI rendering)
+    - `backend/model.py` — Simulation core (`setup`, `step`)
+    - `backend/entities.py` — `Loner`, `Clan`, `FoodSource`
+    - `backend/processors.py` — Verhalten (Nahrung, Interaktionen, Formation)
+    - `backend/spatial.py` — Nachbarschafts-/Grid-Abfragen
+    - `config.py` — zentrale Konstanten/Defaults
+
+- Development / non-runtime files (safe to ignore when running the app):
+    - `build/`, `main.onefile-build/` — generated build artifacts
+    - `tests/` — test code
+    - `docs/` — long-form docs (useful for contributors, not required at runtime)
+
+Die Hauptsimulation wird in `backend/model.py` initialisiert (`SimulationModel.setup`) und per `SimulationModel.step()` vorwärts bewegt. Helper-Module (`processors.py`, `spatial.py`, `temperature.py`, `stats.py`, `spawn.py`) kapseln Verhalten und erleichtern Wartung.
+
+## Hinweise
+- Entfernte veraltete/detaillierte Guides aus der Haupt-README; für tiefere UI-Infos sehen Sie bitte `docs/` oder den Code in `frontend/screens/`.
+
+---
+Wenn Sie möchten, kann ich `docs/PYQT6_GUIDE.md` entweder löschen, kürzen oder in eine kurze `docs/DEVELOPER_NOTES.md` übertragen.

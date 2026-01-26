@@ -77,7 +77,9 @@ class SpeciesInfoScreen(QWidget):
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_back.setFont(btn_back_font)
-        self.btn_back.setFixedWidth(100)
+        from config import BUTTON_FIXED_WIDTH
+
+        self.btn_back.setFixedWidth(BUTTON_FIXED_WIDTH)
         self.btn_back.clicked.connect(self._on_back)
         top_bar.addWidget(self.btn_back)
 
@@ -87,7 +89,7 @@ class SpeciesInfoScreen(QWidget):
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_exit.setFont(btn_exit_font)
-        self.btn_exit.setFixedWidth(100)
+        self.btn_exit.setFixedWidth(BUTTON_FIXED_WIDTH)
         self.btn_exit.clicked.connect(self.on_exit)
         top_bar.addWidget(self.btn_exit)
 
