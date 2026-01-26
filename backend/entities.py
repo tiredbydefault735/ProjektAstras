@@ -7,28 +7,37 @@ Entity classes extracted from `backend/model.py`:
 These are plain data/behavior classes used by the simulation.
 """
 
+from __future__ import annotations
 import random
 import math
+import logging
+from typing import TYPE_CHECKING, Optional, Union
+
 from config import *
+
+if TYPE_CHECKING:
+    from backend.model import SimulationModel
+
+logger = logging.getLogger(__name__)
 
 
 class FoodSource:
     """Nahrungsplatz auf der Map."""
 
-    def __init__(self, x, y, amount):
-        self.x = x
-        self.y = y
-        self.amount = amount
-        self.max_amount = amount
-        self.regeneration_timer = 0
+    def __init__(self, x: float, y: float, amount: float) -> None:
+        self.x: float = x
+        self.y: float = y
+        self.amount: float = amount
+        self.max_amount: float = amount
+        self.regeneration_timer: int = 0
 
-    def consume(self, requested_amount):
+    def consume(self, requested_amount: float) -> float:
         """Konsumiere Nahrung, gibt tatsächlich konsumierte Menge zurück."""
         consumed = min(requested_amount, self.amount)
         self.amount -= consumed
         return consumed
 
-    def regenerate(self):
+    def regenerate(self) -> float:
         """Stochastic, small food regeneration events."""
         if self.amount >= self.max_amount:
             return 0
@@ -41,7 +50,7 @@ class FoodSource:
             return regen
         return 0
 
-    def is_depleted(self):
+    def is_depleted(self) -> bool:
         """Ist die Nahrung aufgebraucht?"""
         return self.amount <= 0
 
@@ -50,23 +59,33 @@ class Loner:
     """Einzelgänger - bewegt sich unabhängig."""
 
     def __init__(
-        self, species, x, y, color, hp, food_intake, hunger_timer, can_cannibalize
-    ):
-        self.species = species
-        self.x = x
-        self.y = y
-        self.color = color
-        self.hp = hp
-        self.max_hp = hp
-        self.vx = random.uniform(*LONER_VELOCITY_RANGE)
-        self.vy = random.uniform(*LONER_VELOCITY_RANGE)
-        self.food_intake = food_intake
-        self.hunger_timer = hunger_timer
-        self.can_cannibalize = can_cannibalize
-        self.combat_strength = random.uniform(*COMBAT_STRENGTH_RANGE)
-        self.hunger_threshold = random.randint(*HUNGER_THRESHOLD_RANGE)
+        self,
+        species: str,
+        x: float,
+        y: float,
+        color: str,
+        hp: float,
+        food_intake: float,
+        hunger_timer: int,
+        can_cannibalize: bool,
+    ) -> None:
+        self.species: str = species
+        self.x: float = x
+        self.y: float = y
+        self.color: str = color
+        self.hp: float = hp
+        self.max_hp: float = hp
+        self.vx: float = random.uniform(*LONER_VELOCITY_RANGE)
+        self.vy: float = random.uniform(*LONER_VELOCITY_RANGE)
+        self.food_intake: float = food_intake
+        self.hunger_timer: float = hunger_timer
+        self.can_cannibalize: bool = can_cannibalize
+        self.combat_strength: float = random.uniform(*COMBAT_STRENGTH_RANGE)
+        self.hunger_threshold: int = random.randint(*HUNGER_THRESHOLD_RANGE)
 
-    def update(self, width, height, is_day=True, speed_multiplier=1.0):
+    def update(
+        self, width: float, height: float, is_day: bool = True, speed_multiplier: float = 1.0
+    ) -> None:
         self.hunger_timer += 1
         speed_modifier = 1.0 if is_day else NIGHT_SPEED_MODIFIER
         speed_modifier *= speed_multiplier
@@ -96,39 +115,39 @@ class Clan:
 
     def __init__(
         self,
-        clan_id,
-        species,
-        x,
-        y,
-        population,
-        color,
-        max_members,
-        hp_per_member,
-        food_intake,
-        hunger_timer,
-        can_cannibalize,
-    ):
-        self.clan_id = clan_id
-        self.species = species
-        self.x = x
-        self.y = y
-        self.population = population
-        self.color = color
-        self.max_members = max_members
-        self.hp_per_member = hp_per_member
-        self.vx = random.uniform(*CLAN_VELOCITY_RANGE)
-        self.vy = random.uniform(*CLAN_VELOCITY_RANGE)
-        self.food_intake = food_intake
-        self.hunger_timer = hunger_timer
-        self.can_cannibalize = can_cannibalize
-        self.seeking_food = False
-        self.combat_strength = random.uniform(*COMBAT_STRENGTH_RANGE)
-        self.hunger_threshold = random.randint(*LONER_HUNGER_RANGE)
+        clan_id: str,
+        species: str,
+        x: float,
+        y: float,
+        population: int,
+        color: str,
+        max_members: int,
+        hp_per_member: float,
+        food_intake: float,
+        hunger_timer: int,
+        can_cannibalize: bool,
+    ) -> None:
+        self.clan_id: str = clan_id
+        self.species: str = species
+        self.x: float = x
+        self.y: float = y
+        self.population: int = population
+        self.color: str = color
+        self.max_members: int = max_members
+        self.hp_per_member: float = hp_per_member
+        self.vx: float = random.uniform(*CLAN_VELOCITY_RANGE)
+        self.vy: float = random.uniform(*CLAN_VELOCITY_RANGE)
+        self.food_intake: float = food_intake
+        self.hunger_timer: int = hunger_timer
+        self.can_cannibalize: bool = can_cannibalize
+        self.seeking_food: bool = False
+        self.combat_strength: float = random.uniform(*COMBAT_STRENGTH_RANGE)
+        self.hunger_threshold: int = random.randint(*LONER_HUNGER_RANGE)
 
-    def total_hp(self):
+    def total_hp(self) -> float:
         return self.population * self.hp_per_member
 
-    def take_damage(self, damage, sim_model=None):
+    def take_damage(self, damage: float, sim_model: Optional[SimulationModel] = None) -> bool:
         if not hasattr(self, "_accum_damage"):
             self._accum_damage = 0
         self._accum_damage += damage
@@ -146,28 +165,28 @@ class Clan:
             )
         return self.population > 0
 
-    def distance_to_clan(self, other_clan):
+    def distance_to_clan(self, other_clan: Clan) -> float:
         dx = self.x - other_clan.x
         dy = self.y - other_clan.y
         return dx * dx + dy * dy
 
-    def distance_to_loner(self, loner):
+    def distance_to_loner(self, loner: Loner) -> float:
         dx = self.x - loner.x
         dy = self.y - loner.y
         return dx * dx + dy * dy
 
-    def distance_to_food(self, food_source):
+    def distance_to_food(self, food_source: FoodSource) -> float:
         dx = self.x - food_source.x
         dy = self.y - food_source.y
         return dx * dx + dy * dy
 
     def move_towards(
         self,
-        tx,
-        ty,
-        strength=MOVE_TOWARDS_DEFAULT_STRENGTH,
-        max_speed=MOVE_TOWARDS_MAX_SPEED,
-    ):
+        tx: float,
+        ty: float,
+        strength: float = MOVE_TOWARDS_DEFAULT_STRENGTH,
+        max_speed: float = MOVE_TOWARDS_MAX_SPEED,
+    ) -> None:
         dx = tx - self.x
         dy = ty - self.y
         dist_sq = dx * dx + dy * dy
@@ -182,7 +201,9 @@ class Clan:
             self.vx *= s
             self.vy *= s
 
-    def update(self, width, height, is_day=True, speed_multiplier=1.0):
+    def update(
+        self, width: float, height: float, is_day: bool = True, speed_multiplier: float = 1.0
+    ) -> None:
         if not hasattr(self, "hunger_timer"):
             self.hunger_timer = 0
         self.hunger_timer += 1

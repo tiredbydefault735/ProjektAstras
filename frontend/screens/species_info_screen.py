@@ -1,5 +1,7 @@
+from __future__ import annotations
 from pathlib import Path
 import json
+from typing import Callable, Optional, Any, Dict
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -17,12 +19,17 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 
 from utils import get_static_path
+from config import SPECIES_DATA_PATH, DEFAULT_INFOGRAPHIC_PATH, UI_FONT_FAMILY
 
 
 class SpeciesInfoScreen(QWidget):
     """Full-page species info screen similar in layout to SimulationScreen."""
 
-    def __init__(self, go_back_callback=None, color_preset=None):
+    def __init__(
+        self,
+        go_back_callback: Optional[Callable[[], None]] = None,
+        color_preset: Optional[Any] = None,
+    ) -> None:
         super().__init__()
         self.go_back = go_back_callback
         self.color_preset = color_preset
@@ -31,7 +38,7 @@ class SpeciesInfoScreen(QWidget):
         self.init_ui()
         # Load species data for the right-hand details panel
         try:
-            json_path = get_static_path("data/species.json")
+            json_path = get_static_path(SPECIES_DATA_PATH)
             if json_path.exists():
                 with open(json_path, "r", encoding="utf-8") as f:
                     self.species_data = json.load(f)
@@ -45,7 +52,7 @@ class SpeciesInfoScreen(QWidget):
 
         # Load default infographic if present and set matching region background
         try:
-            img_path = get_static_path("ui/icefang_info.png")
+            img_path = get_static_path(DEFAULT_INFOGRAPHIC_PATH)
             if img_path.exists():
                 pm = QPixmap(str(img_path))
                 self._pixmap = pm
@@ -64,7 +71,7 @@ class SpeciesInfoScreen(QWidget):
         except Exception:
             self.img_label.setText("No infographic available")
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
@@ -74,7 +81,7 @@ class SpeciesInfoScreen(QWidget):
         top_bar.setSpacing(10)
 
         self.btn_back = QPushButton("← Back")
-        btn_back_font = QFont("Minecraft", 12)
+        btn_back_font = QFont(UI_FONT_FAMILY, 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_back.setFont(btn_back_font)
         from config import BUTTON_FIXED_WIDTH
@@ -86,7 +93,7 @@ class SpeciesInfoScreen(QWidget):
         top_bar.addStretch()
 
         self.btn_exit = QPushButton("Exit")
-        btn_exit_font = QFont("Minecraft", 12)
+        btn_exit_font = QFont(UI_FONT_FAMILY, 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_exit.setFont(btn_exit_font)
         self.btn_exit.setFixedWidth(BUTTON_FIXED_WIDTH)
@@ -146,11 +153,11 @@ class SpeciesInfoScreen(QWidget):
 
         self.setLayout(main_layout)
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: Any) -> None:
         super().resizeEvent(event)
         self._update_pixmap()
 
-    def _update_pixmap(self):
+    def _update_pixmap(self) -> None:
         if getattr(self, "_pixmap", None) is None:
             return
         try:
@@ -165,7 +172,7 @@ class SpeciesInfoScreen(QWidget):
             except Exception:
                 pass
 
-    def update_language(self):
+    def update_language(self) -> None:
         # Update translated button texts when language changes
         try:
             from frontend.i18n import _
@@ -177,7 +184,7 @@ class SpeciesInfoScreen(QWidget):
         except Exception:
             pass
 
-    def update_theme(self, preset):
+    def update_theme(self, preset: Any) -> None:
         # Apply color preset to background if provided
         self.color_preset = preset
         try:
@@ -186,7 +193,7 @@ class SpeciesInfoScreen(QWidget):
         except Exception:
             pass
 
-    def set_region_background(self, region_name: str | None):
+    def set_region_background(self, region_name: Optional[str]) -> None:
         """Try to locate a background image for the given region and apply it.
 
         This will try several candidate paths under `static/` and apply the
@@ -224,7 +231,7 @@ class SpeciesInfoScreen(QWidget):
         except Exception:
             pass
 
-    def _populate_details(self):
+    def _populate_details(self) -> None:
         # Populate the right-hand details panel from self.species_data
         try:
             # clear existing
@@ -281,14 +288,14 @@ class SpeciesInfoScreen(QWidget):
         except Exception:
             pass
 
-    def _on_back(self):
+    def _on_back(self) -> None:
         if callable(self.go_back):
             try:
                 self.go_back()
             except Exception:
                 pass
 
-    def on_exit(self):
+    def on_exit(self) -> None:
         from PyQt6.QtWidgets import QApplication
 
         try:

@@ -13,18 +13,67 @@ DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_SAVE_PATH = PROJECT_ROOT / "data" / "save.json"
 
 # UI / Window
-WINDOW_WIDTH = 1280
-WINDOW_HEIGHT = 720
+WINDOW_START_X = 100
+WINDOW_START_Y = 100
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 900
 MIN_WINDOW_WIDTH = 800
 MIN_WINDOW_HEIGHT = 600
 FPS = 60
 DEFAULT_FONT = "Arial"
 DEFAULT_FONT_SIZE = 14
+UI_FONT_FAMILY = "Minecraft"
+LOG_FONT_FAMILY = "Consolas"
+LOG_FONT_SIZE = 12
+
+# UI File Paths
+START_SCREEN_GIF_PATH = "ui/astras.gif"
+SPECIES_DATA_PATH = "data/species.json"
+DEFAULT_INFOGRAPHIC_PATH = "ui/icefang_info.png"
+
+# UI Flag Icons
+FLAG_ICON_EN_CANDIDATES = (
+    "icons/flag_en.png",
+    "icons/us_flag.png",
+    "icons/flag_us.png",
+)
+FLAG_ICON_DE_CANDIDATES = (
+    "icons/flag_de.png",
+    "icons/german_flag.png",
+    "icons/flag_deutsch.png",
+)
+
+# Log Colors
+LOG_COLOR_DEATH = "#cc3333"
+LOG_COLOR_COLD = "#99ddff"
+LOG_COLOR_COLD_DEATH = "#ff9999"
+LOG_COLOR_EAT = "#cd853f"
+LOG_COLOR_JOIN = "#bb88ff"
+LOG_COLOR_LEAVE = "#ff9944"
+LOG_COLOR_COMBAT = "#ff6666"
+LOG_COLOR_TEMP = "#66ccff"
+LOG_COLOR_DAY = "#ffdd44"
+LOG_COLOR_NIGHT = "#aa88ff"
 
 # Colors (RGB tuples) - adapt to your UI library as needed
 COLOR_BACKGROUND = (34, 34, 34)
 COLOR_FOREGROUND = (240, 240, 240)
 COLOR_ACCENT = (40, 160, 220)
+DEFAULT_COLOR_HEX = "#ffffff"
+
+# Region Textures
+REGION_TEXTURES = {
+    "Snowy Abyss": "textures/snowy_abyss.png",
+    "Wasteland": "textures/wasteland.png",
+    "Evergreen Forest": "textures/evergreen_forest.png",
+    "Corrupted Caves": "textures/corrupted_caves.png",
+}
+
+# UI/Species Icons (defaults/fallback)
+ICON_SPORES = "ui/spores.png"
+ICON_CRUSHED = "ui/crushed_critters.png"
+ICON_ICEFANG = "ui/icefang.png"
+ICON_CORRUPTED = "ui/corrupted.png"
 
 # Simulation / Timing
 SIM_TICK_MS = 16  # ~60 updates per second (1000/60 ≈ 16.67)

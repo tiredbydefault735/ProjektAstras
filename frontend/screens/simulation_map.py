@@ -2,6 +2,7 @@
 SimulationMapWidget - Neu: Direktes Rendering für glitch-freie Darstellung
 """
 
+from __future__ import annotations
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsTextItem
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPixmap
 from PyQt6.QtCore import Qt, QTimer
@@ -9,17 +10,25 @@ from PyQt6.QtCore import Qt, QTimer
 
 import os
 from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple, Union
 
 from utils import get_static_path
 import math
 import random
 import re
+from config import (
+    REGION_TEXTURES,
+    ICON_SPORES,
+    ICON_CRUSHED,
+    ICON_ICEFANG,
+    ICON_CORRUPTED,
+)
 
 
 class SimulationMapWidget(QGraphicsView):
     """Map Widget - direktes Rendering ohne Interpolation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         # Create graphics scene (will resize with viewport)
@@ -39,12 +48,7 @@ class SimulationMapWidget(QGraphicsView):
 
         # Region image mapping
         # Use get_static_path so resources work when frozen with PyInstaller
-        self.region_images = {
-            "Snowy Abyss": get_static_path("textures/snowy_abyss.png"),
-            "Wasteland": get_static_path("textures/wasteland.png"),
-            "Evergreen Forest": get_static_path("textures/evergreen_forest.png"),
-            "Corrupted Caves": get_static_path("textures/corrupted_caves.png"),
-        }
+        self.region_images = {k: get_static_path(v) for k, v in REGION_TEXTURES.items()}
         self.bg_pixmap = None
 
         # Current region
@@ -78,7 +82,7 @@ class SimulationMapWidget(QGraphicsView):
         except Exception:
             pass
         # Fallback to the canonical lowercase name
-        candidate = get_static_path("ui/spores.png")
+        candidate = get_static_path(ICON_SPORES)
         if candidate.exists():
             self._spores_icon_path = candidate
             return candidate
@@ -97,13 +101,13 @@ class SimulationMapWidget(QGraphicsView):
                         return p
         except Exception:
             pass
-        candidate = get_static_path("ui/crushed_critters.png")
+        candidate = get_static_path(ICON_CRUSHED)
         if candidate.exists():
             self._crushed_icon_path = candidate
             return candidate
         return None
 
-    def _find_icefang_icon(self):
+    def _find_icefang_icon(self) -> Optional[Path]:
         """Return the path to the icefang icon (case-insensitive search)."""
         if getattr(self, "_icefang_icon_path", None):
             return self._icefang_icon_path
@@ -116,13 +120,13 @@ class SimulationMapWidget(QGraphicsView):
                         return p
         except Exception:
             pass
-        candidate = get_static_path("ui/icefang.png")
+        candidate = get_static_path(ICON_ICEFANG)
         if candidate.exists():
             self._icefang_icon_path = candidate
             return candidate
         return None
 
-    def _find_corrupted_icon(self):
+    def _find_corrupted_icon(self) -> Optional[Path]:
         """Return the path to the corrupted icon (case-insensitive search)."""
         if getattr(self, "_corrupted_icon_path", None):
             return self._corrupted_icon_path
@@ -135,13 +139,13 @@ class SimulationMapWidget(QGraphicsView):
                         return p
         except Exception:
             pass
-        candidate = get_static_path("ui/corrupted.png")
+        candidate = get_static_path(ICON_CORRUPTED)
         if candidate.exists():
             self._corrupted_icon_path = candidate
             return candidate
         return None
 
-    def set_region(self, region_name):
+    def set_region(self, region_name: str) -> None:
         """Set the current region and update background image."""
         self.current_region = region_name
         image_path = self.region_images.get(region_name)
@@ -151,14 +155,14 @@ class SimulationMapWidget(QGraphicsView):
             self.bg_pixmap = None
         self.update_background()
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: Any) -> None:
         super().resizeEvent(event)
         self.update_background()
         # Replay any pending preview (use small delay to wait for layout)
         if getattr(self, "_last_preview", None):
             QTimer.singleShot(20, self._replay_preview)
 
-    def update_background(self):
+    def update_background(self) -> None:
         # Remove any previous background pixmap item
         if hasattr(self, "_bg_item") and self._bg_item:
             self.scene.removeItem(self._bg_item)
@@ -202,12 +206,12 @@ class SimulationMapWidget(QGraphicsView):
 
     def draw_groups(
         self,
-        groups_data,
-        loners_data=None,
-        food_sources_data=None,
-        transition_progress=1.0,
-        cell_size=40,
-    ):
+        groups_data: List[Any],
+        loners_data: Optional[List[Any]] = None,
+        food_sources_data: Optional[List[Any]] = None,
+        transition_progress: float = 1.0,
+        cell_size: int = 40,
+    ) -> None:
         """Zeichne Clans, Loners und Nahrungsplätze - DIREKTES Rendering."""
 
         def _color_to_qcolor(col, alpha_override=None, fallback_alpha=255):
@@ -562,13 +566,18 @@ class SimulationMapWidget(QGraphicsView):
             )
             overlay.setZValue(10)  # Über allem
 
-    def clear_map(self):
+    def clear_map(self) -> None:
         """Lösche Map."""
         self.scene.clear()
 
     def preview_food_sources(
-        self, num, amount, max_amount=100, transition_progress=1.0, seed=None
-    ):
+        self,
+        num: int,
+        amount: float,
+        max_amount: float = 100,
+        transition_progress: float = 1.0,
+        seed: Optional[Any] = None,
+    ) -> None:
         """Render a preview of `num` food sources on the map using logical
         coordinates. This places icons in a simple grid so users can see where
         food will appear before the simulation starts.
@@ -654,7 +663,7 @@ class SimulationMapWidget(QGraphicsView):
         except Exception:
             pass
 
-    def _replay_preview(self):
+    def _replay_preview(self) -> None:
         """Replay last preview request (used after resize/layout)."""
         try:
             params = getattr(self, "_last_preview", None)

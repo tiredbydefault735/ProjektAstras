@@ -6,6 +6,7 @@ import sys
 import json
 import time
 import random
+import logging
 from pathlib import Path
 
 # ensure repo root on path
@@ -15,6 +16,8 @@ if str(root) not in sys.path:
 
 from utils import get_static_path
 from backend.model import SimulationModel
+
+logger = logging.getLogger(__name__)
 
 
 def load_species_config():
@@ -48,7 +51,7 @@ def run_batch(runs_per_region=40, max_steps=3000, regions=None):
 
     for region in regions:
         counts = {}
-        print(f"\n=== Region: {region} (runs={runs_per_region}) ===")
+        logger.info(f"\n=== Region: {region} (runs={runs_per_region}) ===")
         for r in range(runs_per_region):
             # use varying seed for each run for randomness
             seed = int(time.time() * 1000) ^ (r * 7919)
@@ -111,7 +114,7 @@ def run_batch(runs_per_region=40, max_steps=3000, regions=None):
 
             counts[win] = counts.get(win, 0) + 1
             if (r + 1) % max(1, runs_per_region // 8) == 0:
-                print(
+                logger.info(
                     f"  run {r+1}/{runs_per_region}... current partial counts: {counts}"
                 )
 
@@ -119,23 +122,24 @@ def run_batch(runs_per_region=40, max_steps=3000, regions=None):
 
     # print summary
     summary = {"runs_per_region": runs_per_region, "results": results}
-    print("\n=== Summary ===")
+    logger.info("\n=== Summary ===")
     for region, cnts in results.items():
         total = sum(cnts.values())
-        print(f"Region: {region} — total runs: {total}")
+        logger.info(f"Region: {region} — total runs: {total}")
         for k, v in sorted(cnts.items(), key=lambda x: -x[1]):
-            print(f"  {k}: {v} ({v/total:.2%})")
+            logger.info(f"  {k}: {v} ({v/total:.2%})")
 
     out_path = Path(root) / "build" / "batch_results.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
-    print(f"Results saved to: {out_path}")
+    logger.info(f"Results saved to: {out_path}")
 
 
 if __name__ == "__main__":
     import argparse
 
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=40)
     parser.add_argument("--steps", type=int, default=3000)

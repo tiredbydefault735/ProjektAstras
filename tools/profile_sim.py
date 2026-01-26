@@ -8,6 +8,7 @@ import json
 import cProfile
 import pstats
 import io
+import logging
 from pathlib import Path
 
 # ensure repo root is on path
@@ -17,6 +18,8 @@ if str(root) not in sys.path:
 
 from utils import get_static_path
 from backend.model import SimulationModel
+
+logger = logging.getLogger(__name__)
 
 
 def load_species_config():
@@ -48,7 +51,7 @@ def run_steps(steps=2000):
     try:
         sim.setup(species_config, populations, 5, 50, 20, True, "Wasteland")
     except Exception as e:
-        print("Warning: sim.setup failed, trying minimal init:", e)
+        logger.warning(f"sim.setup failed, trying minimal init: {e}")
         try:
             sim.setup({}, {"Default": 10}, 5, 50, 20, True, "Wasteland")
         except Exception:
@@ -70,14 +73,15 @@ def run_steps(steps=2000):
     s = io.StringIO()
     ps = pstats.Stats(pr, stream=s).strip_dirs().sort_stats("cumtime")
     ps.print_stats(30)
-    print(s.getvalue())
+    logger.info(s.getvalue())
 
 
 if __name__ == "__main__":
     import argparse
 
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument("--steps", type=int, default=2000)
     args = parser.parse_args()
-    print(f"Profiling SimulationModel.step() for {args.steps} steps...")
+    logger.info(f"Profiling SimulationModel.step() for {args.steps} steps...")
     run_steps(args.steps)

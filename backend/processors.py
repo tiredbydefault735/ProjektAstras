@@ -3,15 +3,23 @@ Processors extracted from model.py: food-seeking, interactions and loner->clan f
 These functions operate on a SimulationModel instance passed as `sim`.
 """
 
+from __future__ import annotations
 import math
 import random
+import logging
+from typing import TYPE_CHECKING
 from config import *
 
 # Import Loner/Clan types from entities to construct instances when needed
 from backend.entities import Loner, Clan
 
+if TYPE_CHECKING:
+    from backend.model import SimulationModel
 
-def process_food_seeking(sim):
+logger = logging.getLogger(__name__)
+
+
+def process_food_seeking(sim: SimulationModel) -> None:
     """Nahrungssuche und Essen (extracted)."""
     # Clans suchen und essen Nahrung
     for group in sim.groups:
@@ -262,7 +270,7 @@ def process_food_seeking(sim):
                 )
 
 
-def process_interactions(sim):
+def process_interactions(sim: SimulationModel) -> None:
     """Prozessiere alle Interaktionen zwischen Clans und Loners (extracted)."""
     if not hasattr(sim, "hunt_log_timer"):
         sim.hunt_log_timer = {}
@@ -626,7 +634,7 @@ def process_interactions(sim):
         pass
 
 
-def process_loner_clan_formation(sim):
+def process_loner_clan_formation(sim: SimulationModel) -> None:
     """Einzelgänger können sich zu einem neuen Clan zusammenschließen (extracted)."""
     species_loners = {}
     for loner in sim.loners:

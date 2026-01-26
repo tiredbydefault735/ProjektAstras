@@ -3,20 +3,38 @@ Spatial grid helper extracted from model.py to keep single-responsibility.
 Provides a uniform grid for neighbor queries and simple nearby candidate lookup.
 """
 
+from __future__ import annotations
+import logging
+from typing import Dict, List, Tuple, Optional, Any, TYPE_CHECKING, Iterable, Union
+
 from config import GRID_CELL_MIN
+
+if TYPE_CHECKING:
+    from backend.entities import Clan, Loner, FoodSource
+    from backend.model import SpeciesGroup
+
+logger = logging.getLogger(__name__)
 
 
 class SpatialGrid:
-    def __init__(self, grid_cell_size=None):
-        self.grid_cell_size = grid_cell_size or GRID_CELL_MIN
-        self.grid = {}
+    def __init__(self, grid_cell_size: Optional[int] = None) -> None:
+        self.grid_cell_size: int = grid_cell_size or GRID_CELL_MIN
+        # Grid maps (x, y) tuple to a dict of lists
+        self.grid: Dict[Tuple[int, int], Dict[str, List[Any]]] = {}
+        self._cell_size: int = self.grid_cell_size
 
-    def build(self, groups, loners, food_sources, grid_cell_size=None):
+    def build(
+        self,
+        groups: List[SpeciesGroup],
+        loners: List[Loner],
+        food_sources: List[FoodSource],
+        grid_cell_size: Optional[int] = None,
+    ) -> None:
         """Builds a uniform spatial grid mapping (cell_x,cell_y) -> {'clans','loners','food'}"""
         self.grid = {}
         cs = max(GRID_CELL_MIN, int(grid_cell_size or self.grid_cell_size))
 
-        def _add(entity, kind, x, y):
+        def _add(entity: Any, kind: str, x: float, y: float) -> None:
             cx = int(x) // cs
             cy = int(y) // cs
             key = (cx, cy)
@@ -39,7 +57,13 @@ class SpatialGrid:
         # remember used cell size for nearby calculations
         self._cell_size = cs
 
-    def nearby_candidates(self, x, y, radius, kinds=("clans", "loners", "food")):
+    def nearby_candidates(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+        kinds: Iterable[str] = ("clans", "loners", "food"),
+    ) -> List[Any]:
         """Return candidate entities within grid cells overlapping a radius around (x,y).
         Note: returned candidates are a superset; caller must check exact distance if needed.
         """
@@ -50,7 +74,7 @@ class SpatialGrid:
         min_cy = int((y - r)) // cs
         max_cy = int((y + r)) // cs
 
-        out = []
+        out: List[Any] = []
         for cx in range(min_cx, max_cx + 1):
             for cy in range(min_cy, max_cy + 1):
                 cell = self.grid.get((cx, cy))

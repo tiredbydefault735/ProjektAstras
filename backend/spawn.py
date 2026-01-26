@@ -2,21 +2,30 @@
 Spawn helpers extracted from model.py to keep `SimulationModel.step` concise.
 """
 
+from __future__ import annotations
 import random
+import logging
+from typing import TYPE_CHECKING
 from config import (
     SPAWN_PADDING,
     SPAWN_THRESHOLD_HIGH,
     SPAWN_THRESHOLD_LOW,
     SPAWN_SINGLE_COUNT,
     DEFAULT_COLOR,
+    DEFAULT_COLOR_HEX,
     LONER_SPAWN_RANGE,
     LONER_SPAWN_RANGE as _LONER_SPAWN_RANGE,
     FOOD_INTAKE_DEFAULT,
     DEFAULT_FOOD_PLACES,
 )
 
+if TYPE_CHECKING:
+    from backend.model import SimulationModel
 
-def spawn_loners(sim):
+logger = logging.getLogger(__name__)
+
+
+def spawn_loners(sim: SimulationModel) -> None:
     """Spawn loners according to species_config and population overrides."""
     # Import Loner locally to avoid circular import at module import time
     from backend.entities import Loner
@@ -37,11 +46,12 @@ def spawn_loners(sim):
         if spawn_chance < spawn_threshold:
             spawn_count = SPAWN_SINGLE_COUNT
             color_map = {
-                "Icefang": getattr(sim, "ICEFANG_COLOR", None) or "#fff",
+                "Icefang": getattr(sim, "ICEFANG_COLOR", None) or DEFAULT_COLOR_HEX,
                 "Crushed_Critters": getattr(sim, "CRUSHED_CRITTERS_COLOR", None)
-                or "#fff",
-                "Spores": getattr(sim, "SPORES_COLOR", None) or "#fff",
-                "The_Corrupted": getattr(sim, "THE_CORRUPTED_COLOR", None) or "#fff",
+                or DEFAULT_COLOR_HEX,
+                "Spores": getattr(sim, "SPORES_COLOR", None) or DEFAULT_COLOR_HEX,
+                "The_Corrupted": getattr(sim, "THE_CORRUPTED_COLOR", None)
+                or DEFAULT_COLOR_HEX,
             }
             color = color_map.get(species_name, DEFAULT_COLOR)
             hp = stats.get("hp", getattr(sim, "DEFAULT_HP", 1))

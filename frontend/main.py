@@ -3,27 +3,36 @@ ProjektAstras - PyQt6 Frontend
 Main application entry point.
 """
 
+from __future__ import annotations
 import sys
+import logging
 from pathlib import Path
+from typing import Optional, TYPE_CHECKING, Any
 
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon, QFontDatabase
+from PyQt6.QtGui import QIcon, QFontDatabase, QCloseEvent
 
 from screens.start_screen import StartScreen
 from screens.simulation_screen import SimulationScreen
 from screens.species_info_screen import SpeciesInfoScreen
 from styles.stylesheet import get_stylesheet
-from frontend.i18n import _
+from frontend.i18n import _, set_language
+from config import WINDOW_START_X, WINDOW_START_Y, WINDOW_WIDTH, WINDOW_HEIGHT
+
+if TYPE_CHECKING:
+    from styles.color_presets import ColorPresetShim
+
+logger = logging.getLogger(__name__)
 
 
 class ArachfaraApp(QMainWindow):
     """Main application window with screen management."""
 
-    def __init__(self, color_preset=None):
+    def __init__(self, color_preset: Optional[ColorPresetShim] = None) -> None:
         super().__init__()
         self.setWindowTitle(_("PROJEKT ASTRAS"))
         self.setWindowIconText("Astras")
@@ -32,7 +41,7 @@ class ArachfaraApp(QMainWindow):
         self.color_preset = color_preset
 
         # Window size and position
-        self.setGeometry(100, 100, 1400, 900)
+        self.setGeometry(WINDOW_START_X, WINDOW_START_Y, WINDOW_WIDTH, WINDOW_HEIGHT)
 
         # Start in fullscreen mode
         self.showFullScreen()
@@ -41,7 +50,7 @@ class ArachfaraApp(QMainWindow):
         self.stacked = QStackedWidget()
         self.setCentralWidget(self.stacked)
 
-        # Create screens with optional color preset. Settings screen removed.
+        # Create screens with optional color preset
         self.start_screen = StartScreen(
             self.go_to_simulation, self.go_to_species_info, self.color_preset
         )
@@ -50,7 +59,7 @@ class ArachfaraApp(QMainWindow):
             self.go_to_start, self.color_preset
         )
 
-        # Register screens with i18n so they're guaranteed to be notified
+        # Register screens with i18n
         try:
             from frontend.i18n import register_language_listener
 
@@ -83,7 +92,7 @@ class ArachfaraApp(QMainWindow):
         try:
             from frontend.i18n import register_language_listener
 
-            def _update_title():
+            def _update_title() -> None:
                 try:
                     # use module-level _ (imported at top) to translate
                     self.setWindowTitle(_("PROJEKT ASTRAS"))
@@ -94,21 +103,21 @@ class ArachfaraApp(QMainWindow):
         except Exception:
             pass
 
-    def go_to_simulation(self):
+    def go_to_simulation(self) -> None:
         """Switch to simulation screen."""
         self.stacked.setCurrentWidget(self.simulation_screen)
 
-    def go_to_species_info(self):
+    def go_to_species_info(self) -> None:
         """Switch to species info page."""
         self.stacked.setCurrentWidget(self.species_info_screen)
 
-    def open_settings(self):
+    def open_settings(self) -> None:
         """Settings screen removed; noop callback."""
         return
 
     # Theme application and settings UI removed.
 
-    def go_to_start(self):
+    def go_to_start(self) -> None:
         """Switch to start screen."""
         self.stacked.setCurrentWidget(self.start_screen)
         # Ensure start button is visible again if it was hidden
@@ -121,13 +130,13 @@ class ArachfaraApp(QMainWindow):
         except Exception:
             pass
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         """Handle window close."""
         if self.simulation_screen.is_running:
             self.simulation_screen.stop_simulation()
         super().closeEvent(event)
 
-    def _on_screen_changed(self, index: int):
+    def _on_screen_changed(self, index: int) -> None:
         """Called when the stacked widget changes visible screen.
 
         Force a language refresh for the newly shown screen so translations
@@ -165,7 +174,7 @@ class ArachfaraApp(QMainWindow):
             pass
 
 
-def main(preset_name=None):
+def main(preset_name: Optional[str] = None) -> None:
     """
     Start the application.
 
@@ -175,6 +184,9 @@ def main(preset_name=None):
     from styles.color_presets import get_preset_by_name
     from utils import get_static_path
 
+    # Initialize language
+    set_language("de")
+
     app = QApplication(sys.argv)
 
     # Set application icon (for taskbar)
@@ -182,18 +194,18 @@ def main(preset_name=None):
     if icon_path.exists():
         app_icon = QIcon(str(icon_path))
         app.setWindowIcon(app_icon)
-        print(f"Loaded application icon from {icon_path}")
+        logger.info(f"Loaded application icon from {icon_path}")
     else:
-        print("Warning: Application icon not found")
+        logger.warning("Warning: Application icon not found")
 
     # Load custom Minecraft font
     font_path = get_static_path("fonts/Minecraft.ttf")
     font_id = QFontDatabase.addApplicationFont(str(font_path))
     if font_id != -1:
         font_families = QFontDatabase.applicationFontFamilies(font_id)
-        print(f"Loaded custom font: {font_families}")
+        logger.info(f"Loaded custom font: {font_families}")
     else:
-        print("Failed to load Minecraft.ttf, using fallback fonts")
+        logger.warning("Failed to load Minecraft.ttf, using fallback fonts")
 
     # Get preset if specified
     preset = None
@@ -206,4 +218,5 @@ def main(preset_name=None):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

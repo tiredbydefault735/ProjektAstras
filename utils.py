@@ -2,11 +2,13 @@
 Utility functions for resource path handling.
 """
 
+from __future__ import annotations
 import sys
 from pathlib import Path
+from typing import Union
 
 
-def get_static_path(relative_path):
+def get_static_path(relative_path: Union[str, Path]) -> Path:
     """
     Get the absolute path to a static resource file.
     Works both in development and when frozen with PyInstaller.

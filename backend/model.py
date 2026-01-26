@@ -2,9 +2,13 @@
 Simulation Model - Neu aufgebaut für smoothe, glitch-freie Bewegung
 """
 
+from __future__ import annotations
 import simpy
 import random
 import math
+import logging
+from typing import TYPE_CHECKING, Optional, List, Dict, Any, Tuple, Union, Generator
+
 from config import (
     SPAWN_PADDING,
     GRID_CELL_SIZE,
@@ -134,6 +138,8 @@ from config import (
     LONER_HUNGER_SEEK,
 )
 
+logger = logging.getLogger(__name__)
+
 # Entities are extracted to backend.entities to keep this file concise
 from backend.entities import FoodSource, Loner, Clan
 
@@ -143,36 +149,36 @@ class SpeciesGroup:
 
     def __init__(
         self,
-        env,
-        name,
-        start_population,
-        color,
-        max_members,
-        hp_per_member,
-        food_intake,
-        can_cannibalize,
-        map_width,
-        map_height,
-    ):
-        self.env = env
-        self.name = name
-        self.color = color
-        self.max_members = max_members
-        self.hp_per_member = hp_per_member
-        self.food_intake = food_intake
-        self.can_cannibalize = can_cannibalize
-        self.map_width = map_width
-        self.map_height = map_height
-        self.max_clans = MAX_CLANS_DEFAULT
-        self.clans = []
-        self.next_clan_id = 0
+        env: simpy.Environment,
+        name: str,
+        start_population: int,
+        color: str,
+        max_members: int,
+        hp_per_member: float,
+        food_intake: float,
+        can_cannibalize: bool,
+        map_width: float,
+        map_height: float,
+    ) -> None:
+        self.env: simpy.Environment = env
+        self.name: str = name
+        self.color: str = color
+        self.max_members: int = max_members
+        self.hp_per_member: float = hp_per_member
+        self.food_intake: float = food_intake
+        self.can_cannibalize: bool = can_cannibalize
+        self.map_width: float = map_width
+        self.map_height: float = map_height
+        self.max_clans: int = MAX_CLANS_DEFAULT
+        self.clans: List[Clan] = []
+        self.next_clan_id: int = 0
 
         # Create initial clan if population > 0
         if start_population > 0:
             x = random.uniform(MAP_EDGE_PADDING, map_width - MAP_EDGE_PADDING)
             y = random.uniform(MAP_EDGE_PADDING, map_height - MAP_EDGE_PADDING)
             clan = Clan(
-                self.next_clan_id,
+                str(self.next_clan_id),
                 name,
                 x,
                 y,
@@ -189,7 +195,7 @@ class SpeciesGroup:
 
         self.process = env.process(self.live())
 
-    def live(self):
+    def live(self) -> Generator[simpy.events.Event, None, None]:
         while True:
             yield self.env.timeout(SIM_STEP_TIMEOUT)
             is_day = getattr(self.env, "sim_model", None) and getattr(
@@ -220,7 +226,7 @@ class SpeciesGroup:
             # Try splits
             self.check_clan_splits()
 
-    def check_clan_splits(self):
+    def check_clan_splits(self) -> None:
         """Split clans when they exceed thresholds."""
         for clan in self.clans[:]:
             if len(self.clans) >= MAX_CLANS_PER_SPECIES:
@@ -246,7 +252,7 @@ class SpeciesGroup:
                 new_x = max(SPAWN_PADDING, min(new_x, self.map_width - SPAWN_PADDING))
                 new_y = max(SPAWN_PADDING, min(new_y, self.map_height - SPAWN_PADDING))
                 new_clan = Clan(
-                    self.next_clan_id,
+                    str(self.next_clan_id),
                     clan.species,
                     new_x,
                     new_y,
@@ -289,9 +295,8 @@ class SpeciesGroup:
                     except Exception:
                         pass
 
-
 class SimulationModel:
-    def add_log(self, message):
+    def add_log(self, message: Union[str, Tuple[str, Dict[str, Any]], Dict[str, Any]]) -> None:
         """Log-Nachricht hinzufügen.
 
         Accepts either:
@@ -306,9 +311,9 @@ class SimulationModel:
         t = getattr(self, "time", 0)
         # ensure logs container exists
         if not hasattr(self, "logs"):
-            self.logs = []
+            self.logs: List[Dict[str, Any]] = []
         if not hasattr(self, "max_logs"):
-            self.max_logs = MAX_LOGS
+            self.max_logs: int = MAX_LOGS
 
         entry = None
         try:
@@ -340,16 +345,16 @@ class SimulationModel:
 
     def setup(
         self,
-        species_config,
-        population_overrides,
-        food_places=DEFAULT_FOOD_PLACES,
-        food_amount=FOOD_DEFAULT_AMOUNT,
-        start_temperature=None,
-        start_is_day=True,
-        region_name=None,
-        initial_food_positions=None,
-        rng_seed=None,
-    ):
+        species_config: Dict[str, Any],
+        population_overrides: Dict[str, int],
+        food_places: int = DEFAULT_FOOD_PLACES,
+        food_amount: float = FOOD_DEFAULT_AMOUNT,
+        start_temperature: Optional[float] = None,
+        start_is_day: bool = True,
+        region_name: Optional[str] = None,
+        initial_food_positions: Optional[List[Dict[str, float]]] = None,
+        rng_seed: Optional[int] = None,
+    ) -> None:
         """Initialisiere Simulation."""
 
         # Re-initialize SimPy environment for each setup
@@ -361,10 +366,10 @@ class SimulationModel:
             pass
         # Ensure time exists before any logging
         self.time = 0
-        self.groups = []
-        self.loners = []
+        self.groups: List[SpeciesGroup] = []
+        self.loners: List[Loner] = []
         # Recent random draws for visualization (kept as short lists)
-        self.rnd_history = {
+        self.rnd_history: Dict[str, List[Any]] = {
             "regen": [],  # food regeneration amounts
             "clan_growth": [],  # growth increments from friendly encounters
             "loner_spawn": [],  # spawn counts per spawn event
@@ -383,7 +388,7 @@ class SimulationModel:
         self.loner_speed_multiplier = 1.0
 
         # Re-initialize statistics to ensure temperature is included and avoid AttributeError
-        self.stats = {
+        self.stats: Dict[str, Any] = {
             "species_counts": {},  # Initial counts per species
             "deaths": {
                 "combat": {},  # Deaths by combat per species
@@ -493,7 +498,7 @@ class SimulationModel:
                 }
             },
         }
-        self._region_mods = region_modifiers.get(self.region_name, {})
+        self._region_mods: Dict[str, Any] = region_modifiers.get(self.region_name, {})
 
         # Baue Interaktionsmatrix aus species.json
         self.interaction_matrix = {}
@@ -643,7 +648,7 @@ class SimulationModel:
                 self.loners.append(loner)
 
         # Erstelle Nahrungsplätze
-        self.food_sources = []
+        self.food_sources: List[FoodSource] = []
         if initial_food_positions:
             # Use provided positions (list of dicts with 'x' and 'y') to ensure
             # preview matches backend initialization exactly.
@@ -708,8 +713,7 @@ class SimulationModel:
             self.stats["deaths"]["combat"][species_name] = 0
             self.stats["deaths"]["starvation"][species_name] = 0
             self.stats["deaths"]["temperature"][species_name] = 0
-
-    def _calculate_transition_progress(self):
+    def _calculate_transition_progress(self) -> float:
         """Calculate transition progress: 0.0 = full night, 1.0 = full day."""
         if not self.in_transition:
             # Not in transition - return stable value
@@ -726,7 +730,7 @@ class SimulationModel:
             return 1.0 - progress_ratio
 
     # --- Spatial grid helpers ---
-    def _build_spatial_grid(self):
+    def _build_spatial_grid(self) -> None:
         # Delegate grid building to SpatialGrid helper
         from backend.spatial import SpatialGrid
 
@@ -741,7 +745,7 @@ class SimulationModel:
         )
         self._grid = self._spatial.grid
 
-    def _nearby_candidates(self, x, y, radius, kinds=("clans", "loners", "food")):
+    def _nearby_candidates(self, x: float, y: float, radius: float, kinds: Tuple[str, ...] = ("clans", "loners", "food")) -> List[Any]:
         # Delegate nearby-candidate lookup to SpatialGrid
         if not hasattr(self, "_spatial"):
             from backend.spatial import SpatialGrid
@@ -753,17 +757,17 @@ class SimulationModel:
 
         return self._spatial.nearby_candidates(x, y, radius, kinds)
 
-    def _process_food_seeking(self):
+    def _process_food_seeking(self) -> None:
         from backend.processors import process_food_seeking
 
-        return process_food_seeking(self)
+        process_food_seeking(self)
 
-    def _process_interactions(self):
+    def _process_interactions(self) -> None:
         from backend.processors import process_interactions
 
-        return process_interactions(self)
+        process_interactions(self)
 
-    def step(self):
+    def step(self) -> Dict[str, Any]:
 
         # Spawn loners (delegated)
         try:
@@ -779,7 +783,7 @@ class SimulationModel:
         self.env.run(until=target)
         self.time = int(self.env.now)
         # Container for conversions (clan -> loner) collected during this step
-        self._pending_conversions = []
+        self._pending_conversions: List[Any] = []
 
         # Track population history every POP_HISTORY_STEP steps
         if self.time % POP_HISTORY_STEP == 0:
@@ -840,12 +844,12 @@ class SimulationModel:
             },
         }
 
-    def _process_loner_clan_formation(self):
+    def _process_loner_clan_formation(self) -> None:
         from backend.processors import process_loner_clan_formation
 
-        return process_loner_clan_formation(self)
+        process_loner_clan_formation(self)
 
-    def get_final_stats(self):
+    def get_final_stats(self) -> Dict[str, Any]:
         """Get final statistics for end of simulation."""
         # Update max clans count
         current_clans = sum(len(g.clans) for g in self.groups)
@@ -862,25 +866,25 @@ class SimulationModel:
             },
         }
 
-    def set_temperature(self, temp):
+    def set_temperature(self, temp: float) -> None:
         """Set temperature."""
         pass
 
-    def set_food_level(self, level):
+    def set_food_level(self, level: float) -> None:
         """Set food level."""
         pass
 
-    def set_day_night(self, is_day):
+    def set_day_night(self, is_day: bool) -> None:
         """Set day/night."""
         pass
 
-    def set_loner_speed(self, multiplier):
+    def set_loner_speed(self, multiplier: float) -> None:
         """Set loner speed multiplier (0.5 to 2.0)."""
         self.loner_speed_multiplier = max(
             SPEED_MULT_MIN, min(SPEED_MULT_MAX, multiplier)
         )
 
-    def set_clan_speed(self, multiplier):
+    def set_clan_speed(self, multiplier: float) -> None:
         """Set clan speed multiplier (0.5 to 2.0)."""
         self.clan_speed_multiplier = max(
             SPEED_MULT_MIN, min(SPEED_MULT_MAX, multiplier)

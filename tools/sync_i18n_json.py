@@ -6,12 +6,15 @@ Usage: python tools/sync_i18n_json.py
 from pathlib import Path
 import re
 import json
+import logging
 
 ROOT = Path(__file__).parent.parent
 I18N_DIR = ROOT / "i18n"
 
 # Match _('...') or_("...") simple occurrences
 pattern = re.compile(r"_\(\s*['\"](.*?)['\"]\s*\)")
+
+logger = logging.getLogger(__name__)
 
 
 def find_keys():
@@ -44,7 +47,7 @@ def write_json(p: Path, d: dict):
 
 def main():
     keys = find_keys()
-    print(f"Found {len(keys)} translatable keys")
+    logger.info(f"Found {len(keys)} translatable keys")
 
     en_path = I18N_DIR / "en.json"
     de_path = I18N_DIR / "de.json"
@@ -76,14 +79,15 @@ def main():
             if mo.exists():
                 mo.unlink()
                 removed += 1
-                print(f"Removed {mo}")
+                logger.info(f"Removed {mo}")
         except Exception as e:
-            print(f"Failed to remove {mo}: {e}")
+            logger.error(f"Failed to remove {mo}: {e}")
 
-    print(
+    logger.info(
         f"Wrote en.json (+{added_en}), de.json (+{added_de}), removed {removed} .mo files"
     )
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

@@ -2,7 +2,9 @@
 StartScreen - First screen with logo and buttons.
 """
 
+from __future__ import annotations
 from pathlib import Path
+from typing import Callable, Optional, Any
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -16,14 +18,23 @@ from PyQt6.QtGui import QPixmap, QFont, QColor, QMovie, QIcon
 from PyQt6.QtCore import Qt
 from utils import get_static_path
 from frontend.i18n import _, set_language, get_language
+from config import (
+    START_SCREEN_GIF_PATH,
+    FLAG_ICON_EN_CANDIDATES,
+    FLAG_ICON_DE_CANDIDATES,
+    UI_FONT_FAMILY,
+)
 
 
 class StartScreen(QWidget):
     """Start/intro screen with logo and navigation buttons."""
 
     def __init__(
-        self, go_to_simulation_callback, go_to_settings_callback, color_preset=None
-    ):
+        self,
+        go_to_simulation_callback: Callable[[], None],
+        go_to_settings_callback: Callable[[], None],
+        color_preset: Optional[Any] = None,
+    ) -> None:
         super().__init__()
         self.go_to_simulation = go_to_simulation_callback
         self.go_to_settings = go_to_settings_callback
@@ -31,13 +42,13 @@ class StartScreen(QWidget):
         self.center_container = None
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize UI."""
         # Animated background - fill entire widget
         self.bg_label = QLabel(self)
         self.bg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        gif_path = get_static_path("ui/astras.gif")
+        gif_path = get_static_path(START_SCREEN_GIF_PATH)
         if gif_path.exists():
             self.movie = QMovie(str(gif_path))
             self.bg_label.setMovie(self.movie)
@@ -52,12 +63,8 @@ class StartScreen(QWidget):
         top_row.addStretch()
 
         # Flag icons (try common names in static/icons)
-        possible_en = ["icons/flag_en.png", "icons/us_flag.png", "icons/flag_us.png"]
-        possible_de = [
-            "icons/flag_de.png",
-            "icons/german_flag.png",
-            "icons/flag_deutsch.png",
-        ]
+        possible_en = FLAG_ICON_EN_CANDIDATES
+        possible_de = FLAG_ICON_DE_CANDIDATES
 
         def find_first(paths):
             for p in paths:
@@ -88,7 +95,7 @@ class StartScreen(QWidget):
                 btn.setStyleSheet(
                     "border: none; background: transparent; color: #ffffff; font-weight: bold;"
                 )
-                btn.setFont(QFont("Minecraft", 12))
+                btn.setFont(QFont(UI_FONT_FAMILY, 12))
             btn.show()
             btn.clicked.connect(lambda _, c=code: self.change_language(c))
             return btn
@@ -199,7 +206,7 @@ class StartScreen(QWidget):
         except Exception:
             pass
 
-    def update_language(self):
+    def update_language(self) -> None:
         """Update UI texts when global language changes (do not call set_language here)."""
         try:
             # Update header and buttons
@@ -276,7 +283,7 @@ class StartScreen(QWidget):
 
         dlg.exec()
 
-    def change_language(self, code):
+    def change_language(self, code: str) -> None:
         try:
             set_language(code)
         except Exception:

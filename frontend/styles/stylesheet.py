@@ -3,8 +3,10 @@ Dynamic stylesheet generator using color presets.
 Supports easy theme switching without code changes.
 """
 
+from typing import Optional, Any, Dict
 
-def get_stylesheet(preset=None):
+
+def get_stylesheet(preset: Optional[Any] = None) -> str:
     """
     Generate stylesheet from a color preset.
 

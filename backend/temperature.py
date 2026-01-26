@@ -3,12 +3,20 @@ Temperature and transition helpers extracted from `model.py`.
 Provides update_and_apply(sim) to update temps, regen and apply survival damage.
 """
 
+from __future__ import annotations
 import random
 import math
+import logging
+from typing import TYPE_CHECKING
 from config import *
 
+if TYPE_CHECKING:
+    from backend.model import SimulationModel
 
-def update_and_apply(sim):
+logger = logging.getLogger(__name__)
+
+
+def update_and_apply(sim: SimulationModel) -> None:
     """Handle day/night transition, temp drift, regen and apply temperature effects."""
     # Transition progress handling
     if sim.in_transition:

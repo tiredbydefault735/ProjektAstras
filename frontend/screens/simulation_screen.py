@@ -2,15 +2,15 @@
 SimulationScreen - Main simulation view with map and controls.
 """
 
-# Log rendering constants
-LOG_FONT_FAMILY = "Consolas"
-LOG_FONT_SIZE = 12
-
+from __future__ import annotations
 import json
+import logging
 import copy
 import sys
 import math
 from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple, Union, Callable
+
 
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -34,6 +34,8 @@ from PyQt6.QtWidgets import (
     QSplitter,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, QRegularExpression
+
+logger = logging.getLogger(__name__)
 from PyQt6.QtGui import (
     QFont,
     QIcon,
@@ -58,6 +60,18 @@ from config import (
     CONTENT_MARGIN,
     BUTTON_FIXED_WIDTH,
     UPDATE_TIMER_INTERVAL_MS,
+    LOG_FONT_FAMILY,
+    LOG_FONT_SIZE,
+    LOG_COLOR_DEATH,
+    LOG_COLOR_COLD,
+    LOG_COLOR_COLD_DEATH,
+    LOG_COLOR_EAT,
+    LOG_COLOR_JOIN,
+    LOG_COLOR_LEAVE,
+    LOG_COLOR_COMBAT,
+    LOG_COLOR_TEMP,
+    LOG_COLOR_DAY,
+    LOG_COLOR_NIGHT,
 )
 
 
@@ -78,16 +92,19 @@ class LogHighlighter(QSyntaxHighlighter):
 
         # Use inline (?i) for case-insensitive matching to avoid enum differences
         self.rules = [
-            (QRegularExpression(r"(?i)☠️.*verhungert.*"), fmt("#cc3333")),
-            (QRegularExpression(r"(?i)❄️.*Temperatur.*"), fmt("#99ddff")),
-            (QRegularExpression(r"(?i)stirbt an Temperatur"), fmt("#ff9999")),
-            (QRegularExpression(r"(?i)🍽️|🍖|\bisst\b"), fmt("#cd853f")),
-            (QRegularExpression(r"(?i)👥.*tritt.*bei"), fmt("#bb88ff")),
-            (QRegularExpression(r"(?i)verlässt|verlassen"), fmt("#ff9944")),
-            (QRegularExpression(r"(?i)⚔️|💀"), fmt("#ff6666")),
-            (QRegularExpression(r"(?i)🌡️"), fmt("#66ccff")),
-            (QRegularExpression(r"(?i)☀️"), fmt("#ffdd44")),
-            (QRegularExpression(r"(?i)🌙"), fmt("#aa88ff")),
+            (QRegularExpression(r"(?i)☠️.*verhungert.*"), fmt(LOG_COLOR_DEATH)),
+            (QRegularExpression(r"(?i)❄️.*Temperatur.*"), fmt(LOG_COLOR_COLD)),
+            (
+                QRegularExpression(r"(?i)stirbt an Temperatur"),
+                fmt(LOG_COLOR_COLD_DEATH),
+            ),
+            (QRegularExpression(r"(?i)🍽️|🍖|\bisst\b"), fmt(LOG_COLOR_EAT)),
+            (QRegularExpression(r"(?i)👥.*tritt.*bei"), fmt(LOG_COLOR_JOIN)),
+            (QRegularExpression(r"(?i)verlässt|verlassen"), fmt(LOG_COLOR_LEAVE)),
+            (QRegularExpression(r"(?i)⚔️|💀"), fmt(LOG_COLOR_COMBAT)),
+            (QRegularExpression(r"(?i)🌡️"), fmt(LOG_COLOR_TEMP)),
+            (QRegularExpression(r"(?i)☀️"), fmt(LOG_COLOR_DAY)),
+            (QRegularExpression(r"(?i)🌙"), fmt(LOG_COLOR_NIGHT)),
         ]
 
     def highlightBlock(self, text: str | None) -> None:
@@ -1085,8 +1102,8 @@ class SpeciesPanel(QWidget):
             unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
             checked_path = str(get_static_path("ui/Checkbox_checked.png"))
             # Debug logging removed: debug_log does not exist
-            print(
-                f"DEBUG: Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
+            logger.debug(
+                f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
             )
 
             checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
@@ -1189,7 +1206,7 @@ class SpeciesPanel(QWidget):
 
     # Note: EnvironmentPanel handles its own language updates.
 
-    def update_language(self):
+    def update_language(self) -> None:
         """Update UI texts when language changes."""
         try:
             from frontend.i18n import _
@@ -1336,7 +1353,7 @@ class EnvironmentPanel(QWidget):
             with open(region_json_path, "r") as f:
                 self.region_config = json.load(f)
         except Exception as e:
-            print(f"Warning: Could not load region.json: {e}")
+            logger.warning(f"Could not load region.json: {e}")
 
         layout = QVBoxLayout()
         layout.setContentsMargins(10, 10, 10, 10)
@@ -1850,7 +1867,7 @@ class EnvironmentPanel(QWidget):
         except Exception:
             pass
 
-    def update_language(self):
+    def update_language(self) -> None:
         """Update UI texts for environment panel when language changes."""
         try:
             from frontend.i18n import _
@@ -1917,7 +1934,7 @@ class EnvironmentPanel(QWidget):
 
 
 class SimulationScreen(QWidget):
-    def show_final_stats(self):
+    def show_final_stats(self) -> None:
         """Show final statistics dialog and save stats for later viewing."""
         if self.sim_model:
             stats = self.sim_model.get_final_stats()
@@ -1940,7 +1957,7 @@ class SimulationScreen(QWidget):
             dialog = StatsDialog(stats, self)
             dialog.exec()
 
-    def show_previous_stats(self):
+    def show_previous_stats(self) -> None:
         """Show stats from the previous simulation if available."""
         if hasattr(self, "last_stats") and self.last_stats:
             dialog = StatsDialog(self.last_stats, self)
@@ -1965,7 +1982,11 @@ class SimulationScreen(QWidget):
 
     """Main simulation screen."""
 
-    def __init__(self, go_to_start_callback, color_preset=None):
+    def __init__(
+        self,
+        go_to_start_callback: Callable[[], None],
+        color_preset: Optional[Any] = None,
+    ) -> None:
         super().__init__()
         self.go_to_start = go_to_start_callback
         self.color_preset = color_preset
@@ -1997,15 +2018,15 @@ class SimulationScreen(QWidget):
         # Load species config
         json_path = get_static_path("data/species.json")
         # Debug logging removed: debug_log does not exist
-        print(f"DEBUG: species.json path: {json_path}")
-        print(f"DEBUG: species.json exists: {json_path.exists()}")
+        logger.debug(f"species.json path: {json_path}")
+        logger.debug(f"species.json exists: {json_path.exists()}")
         try:
             with open(json_path, "r") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
             # Debug logging removed: debug_log does not exist
-            print(f"Warning: Could not load species.json from {json_path}")
+            logger.warning(f"Could not load species.json from {json_path}")
 
         # Don't initialize simulation model here - will be created on first start
         # self.sim_model is already set to None above
@@ -2390,7 +2411,7 @@ class SimulationScreen(QWidget):
             self.btn_species_tab.setStyleSheet(tab_button_style)
             self.btn_region_tab.setStyleSheet(tab_button_style)
 
-    def toggle_simulation(self):
+    def toggle_simulation(self) -> None:
         """Start/resume simulation."""
         if not self.is_running:
             # Nur beim ersten Start initialisieren (wenn kein Model existiert)
@@ -2465,7 +2486,7 @@ class SimulationScreen(QWidget):
                 self.update_timer.timeout.connect(self.update_simulation_with_speed)
             self.update_timer.start(UPDATE_TIMER_INTERVAL_MS)
 
-    def toggle_play_pause(self):
+    def toggle_play_pause(self) -> None:
         """Toggle between play and pause."""
         if self.is_running:
             # Currently running, so pause
@@ -2485,7 +2506,7 @@ class SimulationScreen(QWidget):
             self.timer_label.setText(timer_text)
             self.toggle_simulation()
 
-    def stop_simulation(self):
+    def stop_simulation(self) -> None:
         """Stop and reset simulation."""
         show_stats = self.is_running and self.sim_model
 
@@ -2526,7 +2547,7 @@ class SimulationScreen(QWidget):
             dialog = StatsDialog(stats, self)
             dialog.exec()
 
-    def set_speed(self, speed):
+    def set_speed(self, speed: int) -> None:
         """Set simulation speed multiplier."""
         self.simulation_speed = speed
 
@@ -2535,7 +2556,7 @@ class SimulationScreen(QWidget):
         self.btn_speed_2x.setChecked(speed == 2)
         self.btn_speed_5x.setChecked(speed == 5)
 
-    def on_loner_speed_changed(self, value):
+    def on_loner_speed_changed(self, value: int) -> None:
         """Handle loner speed slider change."""
         # Convert slider value (5-20) to multiplier (0.5-2.0)
         multiplier = value / 10.0
@@ -2543,7 +2564,7 @@ class SimulationScreen(QWidget):
         if self.sim_model:
             self.sim_model.set_loner_speed(multiplier)
 
-    def on_clan_speed_changed(self, value):
+    def on_clan_speed_changed(self, value: int) -> None:
         """Handle clan speed slider change."""
         # Convert slider value (5-20) to multiplier (0.5-2.0)
         multiplier = value / 10.0
@@ -2551,13 +2572,13 @@ class SimulationScreen(QWidget):
         if self.sim_model:
             self.sim_model.set_clan_speed(multiplier)
 
-    def update_simulation_with_speed(self):
+    def update_simulation_with_speed(self) -> None:
         """Update simulation multiple times based on speed setting."""
         for i in range(self.simulation_speed):
             is_last = i == self.simulation_speed - 1
             self.update_simulation(update_ui=is_last)
 
-    def update_simulation(self, update_ui=True):
+    def update_simulation(self, update_ui: bool = True) -> None:
         """Step simulation und update display."""
         if self.sim_model and self.is_running:
             data = self.sim_model.step()
@@ -2962,7 +2983,7 @@ class SimulationScreen(QWidget):
             except Exception:
                 return ""
 
-    def update_language(self):
+    def update_language(self) -> None:
         """Refresh UI texts when the global language changes."""
         try:
             from frontend.i18n import _

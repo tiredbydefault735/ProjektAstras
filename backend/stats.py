@@ -3,12 +3,20 @@ Simulation snapshot and stats helpers.
 Extracted from `SimulationModel.step` to keep model small.
 """
 
+from __future__ import annotations
+import logging
 from copy import deepcopy
-from config import DEFAULT_COLOR
+from typing import TYPE_CHECKING, Dict, List, Any, Tuple, Union
 import re
+from config import DEFAULT_COLOR
+
+if TYPE_CHECKING:
+    from backend.model import SimulationModel
+
+logger = logging.getLogger(__name__)
 
 
-def _normalize_color(col):
+def _normalize_color(col: Any) -> Tuple[float, float, float, float]:
     """Normalize color to 4-tuple of floats (r,g,b,a) in 0..1.
 
     Accepts:
@@ -28,7 +36,7 @@ def _normalize_color(col):
             # pad to 4
             if len(vals) == 3:
                 vals.append(1.0)
-            return tuple(float(x) for x in vals[:4])
+            return tuple(float(x) for x in vals[:4])  # type: ignore
 
     # hex string
     if isinstance(col, str):
@@ -47,7 +55,7 @@ def _normalize_color(col):
     return DEFAULT_COLOR
 
 
-def collect_simulation_snapshot(sim):
+def collect_simulation_snapshot(sim: SimulationModel) -> Dict[str, Any]:
     """Collect groups/loners/food snapshot and update species_counts in sim.stats."""
     groups_data = []
     for group in sim.groups:

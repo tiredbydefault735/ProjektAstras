@@ -1,32 +1,28 @@
-import json
+"""
+Internationalization support.
+"""
+
+from __future__ import annotations
 import os
-import os
 import json
+import logging
 import gettext
 from pathlib import Path
-
-LOCALE_DIR = Path(__file__).parent.parent / "static" / "locale"
-
-_current_lang = "en"
-_po_catalog = {}
-_gettext_trans = None
-
-import json
-import gettext
-from pathlib import Path
+from typing import Callable, List, Dict, Optional, Any
 
 # Locale directory (project root)/i18n
 # Translations are stored under `i18n/<lang>/LC_MESSAGES/*.mo`
 LOCALE_DIR = Path(__file__).parent.parent / "i18n"
 
 # Current runtime state
-_current_lang = "de"
-_po_catalog = {}
-_gettext_trans = None
-_gettext_trans = None
+_current_lang: str = "de"
+_po_catalog: Dict[str, str] = {}
+_gettext_trans: Optional[gettext.NullTranslations] = None
+
+logger = logging.getLogger(__name__)
 
 
-def _parse_po(path: Path) -> dict:
+def _parse_po(path: Path) -> Dict[str, str]:
     """Very small PO parser that extracts msgid/msgstr pairs."""
     entries = {}
     msgid = None
@@ -64,7 +60,7 @@ def _parse_po(path: Path) -> dict:
     return entries
 
 
-def _load_translations(lang: str):
+def _load_translations(lang: str) -> None:
     """Load translations for `lang`.
 
     Preference order:
@@ -88,7 +84,7 @@ def _load_translations(lang: str):
             with open(json_top, "r", encoding="utf-8") as f:
                 _po_catalog = json.load(f)
                 if debug:
-                    print(f"i18n: loaded JSON top-level {json_top}")
+                    logger.debug(f"i18n: loaded JSON top-level {json_top}")
                 return
         except Exception:
             _po_catalog = {}
@@ -100,7 +96,7 @@ def _load_translations(lang: str):
             with open(json_inner, "r", encoding="utf-8") as f:
                 _po_catalog = json.load(f)
                 if debug:
-                    print(f"i18n: loaded JSON inner {json_inner}")
+                    logger.debug(f"i18n: loaded JSON inner {json_inner}")
                 return
         except Exception:
             _po_catalog = {}
@@ -113,7 +109,7 @@ def _load_translations(lang: str):
                 "projektas", localedir=str(LOCALE_DIR), languages=[lang]
             )
             if debug:
-                print(f"i18n: loaded MO {mo_path}")
+                logger.debug(f"i18n: loaded MO {mo_path}")
             return
         except Exception:
             _gettext_trans = None
@@ -124,7 +120,7 @@ def _load_translations(lang: str):
         try:
             _po_catalog = _parse_po(po_inner)
             if debug:
-                print(f"i18n: loaded PO inner {po_inner}")
+                logger.debug(f"i18n: loaded PO inner {po_inner}")
             return
         except Exception:
             _po_catalog = {}
@@ -135,7 +131,7 @@ def _load_translations(lang: str):
         try:
             _po_catalog = _parse_po(po_top)
             if debug:
-                print(f"i18n: loaded PO top {po_top}")
+                logger.debug(f"i18n: loaded PO top {po_top}")
             return
         except Exception:
             _po_catalog = {}
@@ -146,12 +142,12 @@ def _load_translations(lang: str):
             with open(json_top, "r", encoding="utf-8") as f:
                 _po_catalog = json.load(f)
                 if debug:
-                    print(f"i18n: fallback loaded JSON top {json_top}")
+                    logger.debug(f"i18n: fallback loaded JSON top {json_top}")
         except Exception:
             _po_catalog = {}
 
 
-def set_language(lang: str):
+def set_language(lang: str) -> bool:
     global _current_lang
     _current_lang = lang
     _load_translations(lang)
@@ -168,6 +164,7 @@ def set_language(lang: str):
 
         app = QApplication.instance()
         if app is not None:
+            # We assume app type here is generic enough to have topLevelWidgets
             for w in QApplication.topLevelWidgets():
                 try:
                     # common screen attribute names used in ArachfaraApp
@@ -181,12 +178,12 @@ def set_language(lang: str):
                             try:
                                 obj.update_language()
                                 if debug:
-                                    print(
+                                    logger.debug(
                                         f"i18n: forced update_language on {attr} of {w}"
                                     )
                             except Exception as e:
                                 if debug:
-                                    print(
+                                    logger.error(
                                         f"i18n: error forcing update_language on {attr}: {e}"
                                     )
                 except Exception:
@@ -198,10 +195,10 @@ def set_language(lang: str):
 
 
 # Language change listeners
-_lang_listeners: list = []
+_lang_listeners: List[Callable[[], None]] = []
 
 
-def register_language_listener(fn):
+def register_language_listener(fn: Callable[[], None]) -> None:
     """Register a callback to be invoked when the language changes.
 
     The callback will be called with no arguments.
@@ -211,7 +208,7 @@ def register_language_listener(fn):
         # If debugging enabled, print registration info
         try:
             if os.environ.get("I18N_DEBUG"):
-                print(f"i18n: registered listener {fn}")
+                logger.debug(f"i18n: registered listener {fn}")
         except Exception:
             pass
         # Call the listener once to ensure UI is in sync with current language
@@ -220,19 +217,19 @@ def register_language_listener(fn):
         except Exception:
             try:
                 if os.environ.get("I18N_DEBUG"):
-                    print(f"i18n: initial listener call failed for {fn}")
+                    logger.debug(f"i18n: initial listener call failed for {fn}")
             except Exception:
                 pass
     except Exception:
         pass
 
 
-def _notify_language_change():
+def _notify_language_change() -> None:
     # Optional debug logging controlled by environment variable `I18N_DEBUG`.
     debug = os.environ.get("I18N_DEBUG")
     try:
         if debug:
-            print(
+            logger.debug(
                 f"i18n: notifying {len(_lang_listeners)} listeners for lang {_current_lang}"
             )
     except Exception:
@@ -244,7 +241,7 @@ def _notify_language_change():
         except Exception as e:
             try:
                 if debug:
-                    print(f"i18n: listener {fn} raised: {e}")
+                    logger.error(f"i18n: listener {fn} raised: {e}")
             except Exception:
                 pass
 
@@ -253,21 +250,22 @@ def get_language() -> str:
     return _current_lang
 
 
-def available_languages() -> list:
+def available_languages() -> List[str]:
     """Return discovered language identifiers present in `LOCALE_DIR`."""
     langs = set()
     # top-level JSON/PO files: en.json, en.po
-    for p in LOCALE_DIR.glob("*.json"):
-        langs.add(p.stem)
-    for p in LOCALE_DIR.glob("*.po"):
-        langs.add(p.stem)
-    # directories like 'en', 'de'
-    for p in LOCALE_DIR.iterdir():
-        if p.is_dir():
-            langs.add(p.name)
-            # also consider json files inside the lang dir (e.g. i18n/en/projektas.json)
-            for j in p.glob("*.json"):
+    if LOCALE_DIR.exists():
+        for p in LOCALE_DIR.glob("*.json"):
+            langs.add(p.stem)
+        for p in LOCALE_DIR.glob("*.po"):
+            langs.add(p.stem)
+        # directories like 'en', 'de'
+        for p in LOCALE_DIR.iterdir():
+            if p.is_dir():
                 langs.add(p.name)
+                # also consider json files inside the lang dir (e.g. i18n/en/projektas.json)
+                for j in p.glob("*.json"):
+                    langs.add(p.name)
     return sorted(langs)
 
 
@@ -282,10 +280,6 @@ def _(text: str) -> str:
         return _po_catalog.get(text, text)
     except Exception:
         return text
-
-
-# initialize default language
-set_language(_current_lang)
 
 
 # Export shorthand
