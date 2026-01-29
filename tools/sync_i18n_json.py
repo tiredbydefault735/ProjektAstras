@@ -5,6 +5,10 @@ Usage: python tools/sync_i18n_json.py
 """
 import argparse
 import sys
+
+# Prevent .pyc files (__pycache__) from being generated
+sys.dont_write_bytecode = True
+
 from pathlib import Path
 import re
 import json

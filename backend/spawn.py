@@ -69,7 +69,9 @@ def spawn_loners(sim: SimulationModel) -> None:
                 sim.loners.append(loner)
 
             if hasattr(sim, "rnd_history"):
-                sim.rnd_history.setdefault("loner_spawn", []).append(spawn_count)
+                sim.rnd_history.setdefault("loner_spawn", []).append(
+                    (sim.time, spawn_count)
+                )
                 if len(sim.rnd_history["loner_spawn"]) > getattr(
                     sim, "RND_HISTORY_LIMIT", 100
                 ):

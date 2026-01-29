@@ -11,7 +11,6 @@ import math
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Union, Callable
 
-
 # Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -24,1978 +23,40 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QLabel,
-    QSlider,
     QFrame,
-    QCheckBox,
     QStackedWidget,
-    QDialog,
-    QTextEdit,
-    QPlainTextEdit,
     QSplitter,
+    QMessageBox,
+    QApplication,
+    QPlainTextEdit,
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QRegularExpression
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont, QColor
 
 logger = logging.getLogger(__name__)
-from PyQt6.QtGui import (
-    QFont,
-    QIcon,
-    QPixmap,
-    QSyntaxHighlighter,
-    QTextCharFormat,
-    QColor,
-)
 
 from backend.model import SimulationModel
 from screens.simulation_map import SimulationMapWidget
 from frontend.i18n import _
 from config import (
-    MIN_PANEL_HEIGHT,
     RIGHT_COLUMN_MIN_WIDTH,
     MAX_SIMULATION_TIME,
     MAP_MIN_WIDTH,
     MAP_MIN_HEIGHT,
     PANEL_STACK_MIN_HEIGHT,
-    LIVE_PLOT_MIN_HEIGHT,
-    LOG_MIN_HEIGHT,
-    CONTENT_MARGIN,
     BUTTON_FIXED_WIDTH,
     UPDATE_TIMER_INTERVAL_MS,
     LOG_FONT_FAMILY,
     LOG_FONT_SIZE,
-    LOG_COLOR_DEATH,
-    LOG_COLOR_COLD,
-    LOG_COLOR_COLD_DEATH,
-    LOG_COLOR_EAT,
-    LOG_COLOR_JOIN,
-    LOG_COLOR_LEAVE,
-    LOG_COLOR_COMBAT,
-    LOG_COLOR_TEMP,
-    LOG_COLOR_DAY,
-    LOG_COLOR_NIGHT,
 )
 
-
-class LogHighlighter(QSyntaxHighlighter):
-    """Simple syntax highlighter for log colorization using regex rules."""
-
-    def __init__(self, document):
-        super().__init__(document)
-
-        def fmt(color_hex, bold=False):
-            f = QTextCharFormat()
-            f.setForeground(QColor(color_hex))
-            f.setFontFamily(LOG_FONT_FAMILY)
-            f.setFontPointSize(LOG_FONT_SIZE)
-            if bold:
-                f.setFontWeight(QFont.Weight.Bold)
-            return f
-
-        # Use inline (?i) for case-insensitive matching to avoid enum differences
-        self.rules = [
-            (QRegularExpression(r"(?i)☠️.*verhungert.*"), fmt(LOG_COLOR_DEATH)),
-            (QRegularExpression(r"(?i)❄️.*Temperatur.*"), fmt(LOG_COLOR_COLD)),
-            (
-                QRegularExpression(r"(?i)stirbt an Temperatur"),
-                fmt(LOG_COLOR_COLD_DEATH),
-            ),
-            (QRegularExpression(r"(?i)🍽️|🍖|\bisst\b"), fmt(LOG_COLOR_EAT)),
-            (QRegularExpression(r"(?i)👥.*tritt.*bei"), fmt(LOG_COLOR_JOIN)),
-            (QRegularExpression(r"(?i)verlässt|verlassen"), fmt(LOG_COLOR_LEAVE)),
-            (QRegularExpression(r"(?i)⚔️|💀"), fmt(LOG_COLOR_COMBAT)),
-            (QRegularExpression(r"(?i)🌡️"), fmt(LOG_COLOR_TEMP)),
-            (QRegularExpression(r"(?i)☀️"), fmt(LOG_COLOR_DAY)),
-            (QRegularExpression(r"(?i)🌙"), fmt(LOG_COLOR_NIGHT)),
-        ]
-
-    def highlightBlock(self, text: str | None) -> None:
-        if not text:
-            return
-        for rx, fmt in self.rules:
-            it = rx.globalMatch(text)
-            while it.hasNext():
-                m = it.next()
-                start = m.capturedStart()
-                length = m.capturedLength()
-                self.setFormat(start, length, fmt)
-
-
-class CustomCheckBox(QCheckBox):
-    """Custom checkbox that draws image directly."""
-
-    def __init__(self, text, unchecked_path, checked_path, parent=None):
-        super().__init__(text, parent)
-        self.unchecked_pixmap = QPixmap(unchecked_path)
-        self.checked_pixmap = QPixmap(checked_path)
-
-        # Scale pixmaps to 20x20 if needed
-        if not self.unchecked_pixmap.isNull():
-            self.unchecked_pixmap = self.unchecked_pixmap.scaled(
-                20,
-                20,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        if not self.checked_pixmap.isNull():
-            self.checked_pixmap = self.checked_pixmap.scaled(
-                20,
-                20,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-
-        # Hide default indicator and add spacing for our custom image
-        self.setStyleSheet(
-            """
-            QCheckBox {
-                spacing: 30px;
-            }
-            QCheckBox::indicator {
-                width: 0px;
-                height: 0px;
-            }
-        """
-        )
-        self.setMinimumHeight(28)
-
-    def paintEvent(self, a0):
-        super().paintEvent(a0)
-        from PyQt6.QtGui import QPainter
-
-        painter = QPainter(self)
-
-        # Draw checkbox image at left position
-        pixmap = self.checked_pixmap if self.isChecked() else self.unchecked_pixmap
-        if not pixmap.isNull():
-            painter.drawPixmap(0, (self.height() - 20) // 2, pixmap)
-
-        painter.end()
-
-
-class CustomImageButton(QPushButton):
-    """Button that draws a centered image; supports checked state with optional alternate image."""
-
-    def __init__(self, image_path, checked_image_path=None, parent=None, size=36):
-        super().__init__(parent)
-        self.pixmap = QPixmap(image_path)
-        self.checked_pixmap = (
-            QPixmap(checked_image_path) if checked_image_path else None
-        )
-        self.setCheckable(True)
-        self.setFixedSize(size, size)
-        self.setStyleSheet("border: none; background: transparent;")
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        from PyQt6.QtGui import QPainter
-
-        painter = QPainter(self)
-        pix = (
-            self.checked_pixmap
-            if (self.isChecked() and self.checked_pixmap)
-            else self.pixmap
-        )
-        if not pix.isNull():
-            scaled = pix.scaled(
-                max(4, self.width() - 8),
-                max(4, self.height() - 8),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            x = (self.width() - scaled.width()) // 2
-            y = (self.height() - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
-
-        painter.end()
-
-
-class StatsDialog(QDialog):
-    """Popup dialog to display final simulation statistics."""
-
-    def __init__(self, stats, parent=None):
-        super().__init__(parent)
-        # initialize layout and widgets for stats dialog
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
-
-        # Title
-        title = QLabel(_("Simulations-Statistiken (5 Minuten)"))
-        title_font = QFont("Minecraft", 16, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #ffffff;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(title)
-
-        # Horizontal layout for text and graph
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(20)
-
-        # Left side: Stats text
-        stats_text = QLabel()
-        stats_font = QFont("Minecraft", 11)
-        stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        stats_text.setFont(stats_font)
-        stats_text.setWordWrap(True)
-        stats_text.setStyleSheet("color: #ffffff; padding: 10px;")
-        stats_text.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # Build stats string (each section added once, loops separate)
-        # Show final and peak populations so the text matches the plotted history
-        text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
-        species_counts = stats.get("species_counts", {}) or {}
-        population_history = stats.get("population_history", {}) or {}
-        all_species = set(list(species_counts.keys()) + list(population_history.keys()))
-        for species in sorted(all_species):
-            final_count = int(species_counts.get(species, 0))
-            hist = population_history.get(species, []) or []
-            try:
-                peak = int(max(hist)) if hist else final_count
-            except Exception:
-                try:
-                    peak = (
-                        int(max([int(round(float(v))) for v in hist]))
-                        if hist
-                        else final_count
-                    )
-                except Exception:
-                    logger.exception("Error calculating peak population")
-                    peak = final_count
-            text += f"• {species}: {final_count} / {peak}<br>"
-
-        # Totals: current total population and aggregated death counts
-        try:
-            total_current = (
-                sum(int(v) for v in species_counts.values()) if species_counts else 0
-            )
-        except Exception:
-            logger.exception("Error calculating total_current")
-            total_current = 0
-        deaths = stats.get("deaths", {}) or {}
-        try:
-            total_combat = sum(int(v) for v in deaths.get("combat", {}).values())
-        except Exception:
-            logger.exception("Error calculating total_combat")
-            total_combat = 0
-        try:
-            total_starvation = sum(
-                int(v) for v in deaths.get("starvation", {}).values()
-            )
-        except Exception:
-            logger.exception("Error calculating total_starvation")
-            total_starvation = 0
-        try:
-            total_temperature = sum(
-                int(v) for v in deaths.get("temperature", {}).values()
-            )
-        except Exception:
-            logger.exception("Error calculating total_temperature")
-            total_temperature = 0
-
-        text += f"<br><b>{_('Insgesamt im Spiel:')}</b> {total_current}<br>"
-        text += f"<br><b>{_('Todesfälle gesamt:')}</b><br>"
-        text += f"• {_('Kampf')}: {total_combat}<br>"
-        text += f"• {_('Verhungert')}: {total_starvation}<br>"
-        text += f"• {_('Temperatur')}: {total_temperature}<br>"
-
-        # Peak populations per species (explicit)
-        try:
-            text += f"<br><b>{_('Peak Populationen pro Spezies:')}</b><br>"
-            for species in sorted(all_species):
-                hist = population_history.get(species, []) or []
-                try:
-                    peak_val = (
-                        int(max(hist)) if hist else int(species_counts.get(species, 0))
-                    )
-                except Exception:
-                    try:
-                        peak_val = (
-                            int(max([int(round(float(v))) for v in hist]))
-                            if hist
-                            else int(species_counts.get(species, 0))
-                        )
-                    except Exception:
-                        logger.exception(f"Error calculating peak for {species}")
-                        peak_val = int(species_counts.get(species, 0))
-                text += f"• {species}: {peak_val}<br>"
-        except Exception:
-            logger.exception("Error in peak population section")
-            pass
-
-        # Combat deaths
-        text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("combat", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Starvation deaths
-        text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("starvation", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Temperature deaths
-        text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
-        for species, count in stats.get("deaths", {}).get("temperature", {}).items():
-            text += f"• {species}: {count}<br>"
-
-        # Summary numbers
-        text += f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
-        text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
-
-        # store stats reference and text widget for language refresh and summaries
-        try:
-            self._stats = stats
-        except Exception:
-            logger.exception("Error storing stats")
-            self._stats = {}
-
-        # Add a short summary of randomizer samples (helps debugging missing events)
-        try:
-            rnd = stats.get("rnd_samples", {}) or {}
-            regen_count = len(rnd.get("regen", []))
-            clan_count = len(rnd.get("clan_growth", []))
-            loner_count = len(rnd.get("loner_spawn", []))
-            try:
-                regen_sum = sum(int(v) for v in rnd.get("regen", []) if v is not None)
-            except Exception:
-                logger.exception("Error calculating regen_sum")
-                regen_sum = 0
-            try:
-                clan_sum = sum(
-                    int(v) for v in rnd.get("clan_growth", []) if v is not None
-                )
-            except Exception:
-                logger.exception("Error calculating clan_sum")
-                clan_sum = 0
-            try:
-                loner_sum = sum(
-                    int(v) for v in rnd.get("loner_spawn", []) if v is not None
-                )
-            except Exception:
-                logger.exception("Error calculating loner_sum")
-                loner_sum = 0
-
-            text += (
-                f"<br><b>{_('Randomizer (Samples):')}</b><br>"
-                f"• {_('Regeneration')}: {regen_count} ({regen_sum})<br>"
-                f"• {_('Clanwachstum')}: {clan_count} ({clan_sum})<br>"
-                f"• {_('Einzelgänger Spawn')}: {loner_count} ({loner_sum})<br>"
-            )
-        except Exception:
-            logger.exception("Error processing randomizer samples")
-            pass
-
-        stats_text.setText(text)
-        # store for language refresh
-        self._stats_text = stats_text
-        # Register listener so dialog updates if language changes while open
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self._refresh_texts)
-        except Exception:
-            pass
-        content_layout.addWidget(stats_text, 1)
-
-        # (no separate Y-label column; use axis labels on the plot)
-
-        # Right side: Population graph (use PyQtGraph for real-time performance)
-        try:
-            import pyqtgraph as pg
-
-            pg.setConfigOptions(antialias=True)
-
-            pw = pg.PlotWidget(background="#1a1a1a")
-            # Give final-stats graph more vertical room so curves aren't squished
-            pw.setMinimumHeight(MIN_PANEL_HEIGHT)
-            try:
-                pw.setMaximumHeight(16777215)
-            except Exception:
-                pass
-            try:
-                from PyQt6.QtWidgets import QSizePolicy
-
-                pw.setSizePolicy(
-                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-                )
-            except Exception:
-                pass
-            pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
-            pw.getAxis("left").setTextPen("#ffffff")
-            pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", _("Population"), color="#ffffff", size="10pt")
-            # remove explicit seconds unit to reduce clutter
-            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="10pt")
-
-            # Disable user interaction; do NOT lock aspect ratio so the plot
-            # can expand vertically to use available space.
-            try:
-                vb = pw.getPlotItem().getViewBox()
-                try:
-                    vb.setAspectLocked(False)
-                except Exception:
-                    pass
-                vb.setMouseEnabled(False, False)
-                try:
-                    vb.setMenuEnabled(False)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-            population_history = stats.get("population_history", {})
-            colors = {
-                "Icefang": "#cce6ff",
-                "Crushed_Critters": "#cc9966",
-                "Spores": "#66cc66",
-                "The_Corrupted": "#cc66cc",
-            }
-
-            for species, history in population_history.items():
-                if history:
-                    # Downsample final stats to 5-second steps for clarity
-                    # population_history entries are per second; take every 5th
-                    ds = 5
-                    sampled = history[::ds]
-                    # Force integer populations for final stats
-                    try:
-                        sampled = [int(round(float(v))) for v in sampled]
-                    except Exception:
-                        try:
-                            sampled = [int(v) for v in sampled]
-                        except Exception:
-                            pass
-                    time_points = [i * ds for i in range(len(sampled))]
-                    pen = pg.mkPen(colors.get(species, "#ffffff"), width=2)
-                    try:
-                        pw.plot(time_points, sampled, pen=pen, name=species)
-                    except Exception:
-                        pass
-
-            # Set Y-axis ticks for final stats: integers when max<10, else steps of 5
-            try:
-                # Axis styling and adaptive tick selection to avoid label crowding
-                left_axis = pw.getAxis("left")
-                bottom_axis = pw.getAxis("bottom")
-                try:
-                    left_axis.setStyle(tickFont=QFont("Minecraft", 10))
-                    bottom_axis.setStyle(tickFont=QFont("Minecraft", 10))
-                except Exception:
-                    pass
-                try:
-                    # Reduce reserved left axis width so the Y-label sits closer to axis
-                    left_axis.setWidth(60)
-                except Exception:
-                    pass
-                try:
-                    bottom_axis.setHeight(30)
-                except Exception:
-                    pass
-
-                overall_max = 0
-                max_len = 0
-                for history in population_history.values():
-                    if history:
-                        try:
-                            overall_max = max(overall_max, int(round(max(history))))
-                        except Exception:
-                            overall_max = max(overall_max, int(max(history)))
-                        try:
-                            max_len = max(max_len, len(history))
-                        except Exception:
-                            pass
-
-                # Y axis: add small headroom and choose step to keep ~6 ticks
-                padded = max(1.0, float(overall_max) * 1.10)
-                y_max = int(math.ceil(padded))
-                try:
-                    import math as _math
-
-                    # Choose a "nice" step so we have at most ~6 ticks
-                    nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
-                    y_step = None
-                    for s in nice:
-                        if float(y_max) / float(s) <= 6:
-                            y_step = s
-                            break
-                    if y_step is None:
-                        # fallback to ceil division
-                        y_step = max(1, int(_math.ceil(float(y_max) / 6.0)))
-
-                    # Ensure visible spacing: prefer steps of 10 or more when range is larger
-                    try:
-                        if y_max >= 20 and y_step < 10:
-                            y_step = 10
-                    except Exception:
-                        pass
-                except Exception:
-                    y_step = 1 if y_max < 10 else 2
-                y_ticks = [(i, str(i)) for i in range(0, y_max + 1, y_step)]
-                if y_ticks and y_ticks[-1][0] != y_max:
-                    y_ticks.append((y_max, str(y_max)))
-                # Show numeric Y-axis labels with the chosen ticks
-                try:
-                    left_axis.setTicks([y_ticks])
-                except Exception:
-                    pass
-                try:
-                    vb = pw.getPlotItem().getViewBox()
-                    vb.setYRange(0, y_max, padding=0.20)
-                except Exception:
-                    pass
-
-                # Bottom axis: compute total duration from population_history and ds
-                ds = 5
-                total_seconds = max_len * ds if max_len else 0
-                # Choose step to avoid overcrowding (seconds or minutes)
-                if total_seconds <= 60:
-                    step = 5
-                elif total_seconds <= 180:
-                    step = 30
-                elif total_seconds <= 600:
-                    step = 60
-                else:
-                    step = 60
-
-                bottom_ticks = []
-                for i in range(0, int(total_seconds) + 1, step):
-                    if step >= 60:
-                        # show minutes for coarse steps
-                        label = f"{int(i // 60)}m"
-                    else:
-                        label = str(i)
-                    bottom_ticks.append((i, label))
-                if not bottom_ticks:
-                    bottom_ticks = [(0, "0")]
-                try:
-                    bottom_axis.setTicks([bottom_ticks])
-                except Exception:
-                    pass
-
-                # no separate Y label widget to populate
-            except Exception:
-                pass
-
-            # Create a stacked area so we can switch between final population
-            # stats and Randomizers visualization using toggle buttons below.
-            try:
-                from PyQt6.QtWidgets import QStackedWidget, QWidget
-
-                right_stack = QStackedWidget()
-
-                # Page 0: final population plot
-                page_stats = QWidget()
-                p_stats_layout = QVBoxLayout(page_stats)
-                p_stats_layout.setContentsMargins(0, 0, 0, 0)
-                p_stats_layout.addWidget(pw)
-
-                # Randomizer toggles for final-stats overlay
-                try:
-                    rnd_toggle_layout = QHBoxLayout()
-                    rnd_toggle_layout.setSpacing(8)
-                    rnd_toggle_layout.setContentsMargins(0, 6, 0, 6)
-                    self._stats_rnd_toggles = {}
-                    cb = QCheckBox(_("Regeneration"))
-                    cb.setChecked(False)
-                    rnd_toggle_layout.addWidget(cb)
-                    self._stats_rnd_toggles["regen"] = cb
-                    cb = QCheckBox(_("Clanwachstum"))
-                    cb.setChecked(False)
-                    rnd_toggle_layout.addWidget(cb)
-                    self._stats_rnd_toggles["clan_growth"] = cb
-                    cb = QCheckBox(_("Einzelgänger Spawn"))
-                    cb.setChecked(False)
-                    rnd_toggle_layout.addWidget(cb)
-                    self._stats_rnd_toggles["loner_spawn"] = cb
-                    rnd_toggle_layout.addStretch()
-                    p_stats_layout.addLayout(rnd_toggle_layout)
-
-                    # overlay curves storage
-                    self._stats_rnd_curves = {}
-
-                    def _refresh_stats_overlays():
-                        try:
-                            samples = (self._stats or {}).get("rnd_samples", {}) or {}
-                            # compute y_max from population history similar to plot above
-                            pop_hist = (self._stats or {}).get(
-                                "population_history", {}
-                            ) or {}
-                            overall_max = 0
-                            for h in pop_hist.values():
-                                if h:
-                                    try:
-                                        overall_max = max(
-                                            overall_max, int(round(max(h)))
-                                        )
-                                    except Exception:
-                                        try:
-                                            overall_max = max(overall_max, int(max(h)))
-                                        except Exception:
-                                            pass
-                            padded = max(1.0, float(overall_max) * 1.10)
-                            y_max = int(math.ceil(padded))
-                            scale = float(y_max) / 100.0 if y_max > 0 else 1.0
-
-                            colors = {
-                                "regen": (102, 204, 102),
-                                "clan_growth": (102, 170, 255),
-                                "loner_spawn": (255, 204, 102),
-                            }
-
-                            for key, cb in self._stats_rnd_toggles.items():
-                                enabled = False
-                                try:
-                                    enabled = cb.isChecked()
-                                except Exception:
-                                    enabled = False
-                                vals = samples.get(key, []) or []
-                                if enabled and vals:
-                                    x = list(range(len(vals)))
-                                    try:
-                                        y = [float(v) for v in vals]
-                                    except Exception:
-                                        y = [0.0 for _ in vals]
-
-                                    # Scale each series to fit the population Y-range
-                                    # Use expected maxima per-randomizer so small-series
-                                    # (e.g. regen=1..3) don't get amplified to full height.
-                                    expected_max_map = {
-                                        "regen": 10.0,
-                                        "clan_growth": 10.0,
-                                        "loner_spawn": 5.0,
-                                    }
-                                    expected_max = expected_max_map.get(key, 10.0)
-                                    expected_max = max(1.0, float(expected_max))
-
-                                    # How strongly overlays should fill the population Y range
-                                    overlay_strength = 0.6
-
-                                    # Compute scaled y values clamped to [0, y_max*overlay_strength]
-                                    y_scaled = []
-                                    for yi in y:
-                                        try:
-                                            frac = float(yi) / expected_max
-                                        except Exception:
-                                            frac = 0.0
-                                        frac = max(0.0, min(frac, 1.0))
-                                        y_scaled.append(frac * y_max * overlay_strength)
-                                    if key not in self._stats_rnd_curves:
-                                        try:
-                                            pen = pg.mkPen(
-                                                color=colors.get(key, (200, 200, 200)),
-                                                width=1,
-                                                style=Qt.PenStyle.DashLine,
-                                            )
-                                            curve = pw.plot(x, y_scaled, pen=pen)
-                                            self._stats_rnd_curves[key] = curve
-                                        except Exception:
-                                            self._stats_rnd_curves[key] = None
-                                    else:
-                                        try:
-                                            if (
-                                                self._stats_rnd_curves.get(key)
-                                                is not None
-                                            ):
-                                                self._stats_rnd_curves[key].setData(
-                                                    x, y_scaled
-                                                )
-                                        except Exception:
-                                            pass
-                                else:
-                                    try:
-                                        if (
-                                            key in self._stats_rnd_curves
-                                            and self._stats_rnd_curves[key] is not None
-                                        ):
-                                            self._stats_rnd_curves[key].setData([], [])
-                                    except Exception:
-                                        pass
-
-                        except Exception:
-                            return
-
-                    # connect toggles
-                    for cb in self._stats_rnd_toggles.values():
-                        try:
-                            cb.stateChanged.connect(
-                                lambda _=None: _refresh_stats_overlays()
-                            )
-                        except Exception:
-                            pass
-
-                    # initial overlay pass
-                    try:
-                        _refresh_stats_overlays()
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
-
-                # Page 1: Randomizers graph (uses rnd_samples from stats)
-                page_rand = QWidget()
-                p_rand_layout = QVBoxLayout(page_rand)
-                p_rand_layout.setContentsMargins(0, 0, 0, 0)
-
-                try:
-                    import pyqtgraph as pg
-
-                    rpw = pg.PlotWidget(background="#151515")
-                    rpw.getPlotItem().showGrid(x=True, y=True, alpha=0.15)
-                    rpw.setMinimumHeight(MIN_PANEL_HEIGHT)
-                    rpw.setLabel("left", "Value", color="#ffffff", size="9pt")
-                    rpw.setLabel("bottom", "Samples", color="#ffffff", size="9pt")
-                    try:
-                        rpw.addLegend(offset=(8, 8))
-                    except Exception:
-                        pass
-
-                    # Plot rnd_samples as histograms for better distribution view
-                    rnd = stats.get("rnd_samples", {}) or {}
-                    colors = {
-                        "regen": (102, 204, 102),
-                        "clan_growth": (102, 170, 255),
-                        "loner_spawn": (255, 204, 102),
-                    }
-                    display_names = {
-                        "regen": "Nahrung (Regeneration)",
-                        "clan_growth": "Clanwachstum",
-                        "loner_spawn": "Einzelgänger Spawn",
-                    }
-
-                    # Collect histograms per series
-                    has_any = False
-                    max_bin = 0
-                    hist_data = {}
-                    for key, vals in rnd.items():
-                        try:
-                            nums = [int(v) for v in vals if v is not None]
-                        except Exception:
-                            nums = []
-                        if not nums:
-                            hist_data[key] = ([], [], None)
-                            continue
-                        has_any = True
-                        if key == "regen":
-                            # Aggregate regen into bins: 0-1, 2-4, 5-9, 10+
-                            ranges = [(0, 1), (2, 4), (5, 9), (10, 10**9)]
-                            counts = [0] * len(ranges)
-                            for n in nums:
-                                for i, (a, b) in enumerate(ranges):
-                                    if a <= n <= b:
-                                        counts[i] += 1
-                                        break
-                            bins = list(range(len(ranges)))
-                            # labels for bottom axis
-                            labels = ["0-1", "2-4", "5-9", "10+"]
-                            # normalize to percentages so axis isn't dominated by outliers
-                            total = sum(counts)
-                            if total > 0:
-                                counts = [c / total * 100.0 for c in counts]
-                            hist_data[key] = (bins, counts, labels)
-                            max_bin = max(max_bin, len(bins) - 1)
-                        else:
-                            mx = max(nums)
-                            max_bin = max(max_bin, mx)
-                            # build simple count histogram bins 0..mx
-                            counts = [0] * (mx + 1)
-                            for n in nums:
-                                counts[n] += 1
-                            bins = list(range(0, mx + 1))
-                            # normalize to percentages so axis isn't dominated by outliers
-                            total = sum(counts)
-                            if total > 0:
-                                counts = [c / total * 100.0 for c in counts]
-                            hist_data[key] = (bins, counts, None)
-
-                    if not has_any:
-                        # nothing to show
-                        placeholder = QLabel(_("Keine Randomizer-Daten verfügbar"))
-                        placeholder.setStyleSheet("color: #999999;")
-                        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        p_rand_layout.addWidget(placeholder)
-                    else:
-                        # Create grouped bar chart: shift bars slightly per series
-                        try:
-                            from pyqtgraph import BarGraphItem
-
-                            group_keys = [
-                                k
-                                for k in ("regen", "clan_growth", "loner_spawn")
-                                if k in hist_data
-                            ]
-                            # width per bar
-                            bw = 0.2
-                            offsets = {
-                                "regen": -bw,
-                                "clan_growth": 0.0,
-                                "loner_spawn": bw,
-                            }
-                            for key in group_keys:
-                                bins, counts = hist_data.get(key, ([], []))
-                                if not bins:
-                                    continue
-                                x = [b + offsets.get(key, 0) for b in bins]
-                                bg = BarGraphItem(
-                                    x=x,
-                                    height=counts,
-                                    width=bw,
-                                    brush=pg.mkBrush(colors.get(key, (200, 200, 200))),
-                                )
-                                rpw.addItem(bg)
-                                try:
-                                    # add legend symbol
-                                    rpw.plot(
-                                        [],
-                                        [],
-                                        pen=pg.mkPen((0, 0, 0, 0)),
-                                        name=display_names.get(key, key),
-                                    )
-                                except Exception:
-                                    pass
-                        except Exception:
-                            # fallback to time-series if BarGraphItem not available
-                            for key, vals in rnd.items():
-                                try:
-                                    x = list(range(len(vals)))
-                                    y = [float(v) for v in vals]
-                                    # normalize time-series to percentage of max to avoid extreme spikes
-                                    maxy = max(y) if y else 0.0
-                                    if maxy > 0:
-                                        y = [yi / maxy * 100.0 for yi in y]
-                                    pen = pg.mkPen(
-                                        colors.get(key, (200, 200, 200)), width=2
-                                    )
-                                    rpw.plot(
-                                        x, y, pen=pen, name=display_names.get(key, key)
-                                    )
-                                except Exception:
-                                    pass
-
-                    p_rand_layout.addWidget(rpw)
-                except Exception:
-                    # If pyqtgraph missing, show a placeholder
-                    placeholder = QLabel(
-                        _("Randomizers graph nicht verfügbar (pyqtgraph benötigt)")
-                    )
-                    placeholder.setStyleSheet("color: #999999;")
-                    placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    p_rand_layout.addWidget(placeholder)
-
-                right_stack.addWidget(page_stats)
-                right_stack.addWidget(page_rand)
-
-                # expose stack to dialog for button callbacks
-                self._right_stack = right_stack
-
-                content_layout.addWidget(right_stack, 2)
-            except Exception:
-                # fallback: add the population plot directly
-                content_layout.addWidget(pw, 2)
-        except Exception:
-            no_graph_label = QLabel(_("Graph nicht verfügbar\n(pyqtgraph benötigt)"))
-            no_graph_label.setStyleSheet("color: #999999;")
-            no_graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            content_layout.addWidget(no_graph_label, 2)
-
-        main_layout.addLayout(content_layout)
-
-        # Toggle buttons to switch between Stats and Randomizers graph
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self.btn_view_stats = QPushButton(_("Stats"))
-        self.btn_view_stats.setCheckable(True)
-        self.btn_view_stats.setChecked(True)
-        self.btn_view_stats.clicked.connect(lambda: self._switch_stats_page(0))
-        btn_row.addWidget(self.btn_view_stats)
-
-        self.btn_view_random = QPushButton(_("Randomizers"))
-        self.btn_view_random.setCheckable(True)
-        self.btn_view_random.setChecked(False)
-        self.btn_view_random.clicked.connect(lambda: self._switch_stats_page(1))
-        btn_row.addWidget(self.btn_view_random)
-
-        btn_row.addStretch()
-        main_layout.addLayout(btn_row)
-
-        # Close button
-        close_btn = QPushButton(_("Schließen"))
-        close_btn_font = QFont("Minecraft", 12)
-        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        close_btn.setFont(close_btn_font)
-        close_btn.setFixedHeight(40)
-        close_btn.setStyleSheet(
-            "background-color: #444444; color: #ffffff; "
-            "border: 2px solid #666666; padding: 5px;"
-        )
-        close_btn.clicked.connect(self.close)
-        main_layout.addWidget(close_btn)
-
-    def _refresh_texts(self):
-        """Rebuild localized strings for the dialog when language changes."""
-        try:
-            from frontend.i18n import _
-
-            # window title
-            try:
-                self.setWindowTitle(_("Simulations-Statistiken"))
-            except Exception:
-                pass
-            # title (first QLabel added in layout)
-            try:
-                # title is the first widget in the main layout
-                title_widget = self.findChild(QLabel)
-                if title_widget is not None:
-                    title_widget.setText(_("Simulations-Statistiken (5 Minuten)"))
-            except Exception:
-                pass
-            # rebuild the main text area using stored stats
-            try:
-                stats = getattr(self, "_stats", {})
-                # Build stats string (match logic from __init__ to show peaks)
-                text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
-                species_counts = stats.get("species_counts", {}) or {}
-                population_history = stats.get("population_history", {}) or {}
-                all_species = set(
-                    list(species_counts.keys()) + list(population_history.keys())
-                )
-                for species in sorted(all_species):
-                    final_count = int(species_counts.get(species, 0))
-                    hist = population_history.get(species, []) or []
-                    try:
-                        peak = int(max(hist)) if hist else final_count
-                    except Exception:
-                        try:
-                            peak = (
-                                int(max([int(round(float(v))) for v in hist]))
-                                if hist
-                                else final_count
-                            )
-                        except Exception:
-                            peak = final_count
-                    text += f"• {species}: {final_count} / {peak}<br>"
-                text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
-                for species, count in stats.get("deaths", {}).get("combat", {}).items():
-                    text += f"• {species}: {count}<br>"
-                text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
-                for species, count in (
-                    stats.get("deaths", {}).get("starvation", {}).items()
-                ):
-                    text += f"• {species}: {count}<br>"
-                text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
-                for species, count in (
-                    stats.get("deaths", {}).get("temperature", {}).items()
-                ):
-                    text += f"• {species}: {count}<br>"
-                text += (
-                    f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
-                )
-                text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
-                if hasattr(self, "_stats_text") and self._stats_text is not None:
-                    try:
-                        self._stats_text.setText(text)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-        except Exception:
-            pass
-
-    def _switch_stats_page(self, idx: int):
-        """Switch the right-side stacked widget between Stats and Randomizers."""
-        try:
-            if hasattr(self, "_right_stack") and self._right_stack is not None:
-                self._right_stack.setCurrentIndex(int(idx))
-            # update button checked states
-            self.btn_view_stats.setChecked(idx == 0)
-            self.btn_view_random.setChecked(idx == 1)
-        except Exception:
-            pass
-
-
-class LogDialog(QDialog):
-    """Popup dialog to display simulation logs."""
-
-    def __init__(self, log_text, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(_("Simulation Logs"))
-        self.setModal(False)
-        self.resize(600, 400)
-
-        # Set dark theme
-        self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        # Title
-        title = QLabel(_("Simulation Logs"))
-        title_font = QFont("Minecraft", 14)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #ffffff; font-weight: bold;")
-        layout.addWidget(title)
-
-        # Text area with scroll (use QPlainTextEdit for performance)
-        self.text_edit = QPlainTextEdit()
-        self.text_edit.setReadOnly(True)
-        text_font = QFont(LOG_FONT_FAMILY, LOG_FONT_SIZE)
-        text_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.text_edit.setFont(text_font)
-        self.text_edit.setStyleSheet(
-            f"background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px;"
-        )
-        # Enable word wrapping and scrolling
-        self.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        # Populate plain text and attach highlighter for colorization
-        self.text_edit.setPlainText(log_text)
-        LogHighlighter(self.text_edit.document())
-        layout.addWidget(self.text_edit)
-
-        # Close button
-        close_btn = QPushButton(_("Schließen"))
-        close_btn_font = QFont("Minecraft", 12)
-        close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        close_btn.setFont(close_btn_font)
-        close_btn.setStyleSheet(
-            "background-color: #444444; color: #ffffff; "
-            "border: 2px solid #666666; padding: 5px;"
-        )
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
-
-    def colorize_logs(self, log_text):
-        """Return plain log text. Coloring is handled by QSyntaxHighlighter."""
-        if not log_text:
-            return ""
-
-        # Keep as plain text; LogHighlighter applies formats to the document.
-        return log_text
-
-    def update_log(self, log_text):
-        """Update the log text in the dialog."""
-        scrollbar = self.text_edit.verticalScrollBar()
-        was_at_bottom = False
-        if scrollbar is not None:
-            was_at_bottom = (
-                scrollbar.value() >= scrollbar.maximum() - 10
-            )  # 10px threshold
-
-        # Replace plain text; highlighter will reformat visually
-        self.text_edit.setPlainText(self.colorize_logs(log_text))
-
-        # Force scrollbar update
-        self.text_edit.ensureCursorVisible()
-
-        # Only auto-scroll if user was already at the bottom
-        if scrollbar is not None and was_at_bottom:
-            scrollbar.setValue(scrollbar.maximum())
-
-
-class SpeciesPanel(QWidget):
-    """Subspecies controls panel.
-
-    @ivar color_preset: Active color preset
-    @ivar species_config: Configuration dictionary for species
-    @ivar species_checkboxes: Checkboxes for enabling/disabling species
-    @ivar loner_speed_sliders: Sliders for loner speed
-    @ivar clan_speed_sliders: Sliders for clan speed
-    @ivar member_sliders: Sliders for initial member count
-    @ivar member_value_labels: Labels displaying slider values
-    """
-
-    def __init__(self, species_config, color_preset=None):
-        """Initialize the species panel.
-
-        @param species_config: Dictionary containing species configuration
-        @param color_preset: Optional color preset to apply
-        """
-        super().__init__()
-        self.color_preset = color_preset
-        self.species_config = species_config
-        self.species_checkboxes = {}
-        self.loner_speed_sliders = {}
-        self.clan_speed_sliders = {}
-        self.member_sliders = {}
-        self.member_value_labels = {}
-        # Keep label widgets so we can update their text on language change
-        self.loner_speed_labels = {}
-        self.clan_speed_labels = {}
-        self.member_labels = {}
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 15, 10, 10)
-        layout.setSpacing(12)
-
-        # Title
-        self.title = QLabel(_("Spezies"))
-        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.title.setFont(title_font)
-        layout.addWidget(self.title)
-
-        # Create entry for each species
-        species_names = {
-            "Icefang": "Icefang",
-            "Crushed_Critters": "Crushed Critters",
-            "Spores": "Spores",
-            "The_Corrupted": "The Corrupted",
-        }
-
-        for species_id, display_name in species_names.items():
-            # Checkbox for enable/disable with custom icons
-            unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
-            checked_path = str(get_static_path("ui/Checkbox_checked.png"))
-            # Debug logging removed: debug_log does not exist
-            logger.debug(
-                f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
-            )
-
-            checkbox = CustomCheckBox(display_name, unchecked_path, checked_path)
-            checkbox_font = QFont("Minecraft", 12)
-            checkbox_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            checkbox.setFont(checkbox_font)
-            checkbox.setChecked(True)
-            self.species_checkboxes[species_id] = checkbox
-            layout.addWidget(checkbox)
-
-            # Loner speed slider
-            loner_speed_layout = QHBoxLayout()
-            loner_speed_layout.setSpacing(5)
-
-            loner_speed_label = QLabel(_("Loner Speed:"))
-            loner_speed_label_font = QFont("Minecraft", 11)
-            loner_speed_label_font.setLetterSpacing(
-                QFont.SpacingType.AbsoluteSpacing, 1
-            )
-            loner_speed_label.setFont(loner_speed_label_font)
-            loner_speed_label.setFixedWidth(110)
-            self.loner_speed_labels[species_id] = loner_speed_label
-            loner_speed_layout.addWidget(loner_speed_label)
-
-            loner_slider = QSlider(Qt.Orientation.Horizontal)
-            loner_slider.setMinimum(1)
-            loner_slider.setMaximum(10)
-            loner_slider.setValue(5)
-            self.loner_speed_sliders[species_id] = loner_slider
-            loner_speed_layout.addWidget(loner_slider)
-
-            layout.addLayout(loner_speed_layout)
-
-            # Clan speed slider
-            clan_speed_layout = QHBoxLayout()
-            clan_speed_layout.setSpacing(5)
-
-            clan_speed_label = QLabel(_("Clan Speed:"))
-            clan_speed_label_font = QFont("Minecraft", 11)
-            clan_speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            clan_speed_label.setFont(clan_speed_label_font)
-            clan_speed_label.setFixedWidth(110)
-            self.clan_speed_labels[species_id] = clan_speed_label
-            clan_speed_layout.addWidget(clan_speed_label)
-
-            clan_slider = QSlider(Qt.Orientation.Horizontal)
-            clan_slider.setMinimum(1)
-            clan_slider.setMaximum(10)
-            clan_slider.setValue(5)
-            self.clan_speed_sliders[species_id] = clan_slider
-            clan_speed_layout.addWidget(clan_slider)
-
-            layout.addLayout(clan_speed_layout)
-
-            # Member slider with value display
-            member_layout = QHBoxLayout()
-            member_layout.setSpacing(5)
-
-            member_label = QLabel(_("Mitglieder:"))
-            member_label_font = QFont("Minecraft", 11)
-            member_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            member_label.setFont(member_label_font)
-            member_label.setFixedWidth(110)
-            self.member_labels[species_id] = member_label
-            member_layout.addWidget(member_label)
-
-            member_value_label = QLabel("5")
-            member_value_font = QFont("Minecraft", 11)
-            member_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-            member_value_label.setFont(member_value_font)
-            member_value_label.setFixedWidth(30)
-            member_value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            self.member_value_labels[species_id] = member_value_label
-            member_layout.addWidget(member_value_label)
-
-            member_slider = QSlider(Qt.Orientation.Horizontal)
-            member_slider.setMinimum(0)
-            member_slider.setMaximum(30)
-            member_slider.setValue(5)
-            member_slider.valueChanged.connect(
-                lambda value, sid=species_id: self.update_member_value(sid, value)
-            )
-            self.member_sliders[species_id] = member_slider
-            member_layout.addWidget(member_slider)
-
-            layout.addLayout(member_layout)
-
-            # Add spacing between species
-            layout.addSpacing(25)
-
-        layout.addStretch()
-        self.setLayout(layout)
-        self.update_theme(self.color_preset)
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self.update_language)
-        except Exception:
-            pass
-
-    # Note: EnvironmentPanel handles its own language updates.
-
-    def update_language(self) -> None:
-        """Update UI texts when language changes."""
-        try:
-            from frontend.i18n import _
-
-            if hasattr(self, "title"):
-                self.title.setText(_("Spezies"))
-            # species subtitle removed
-            # Update per-species labels (loner/clan/member)
-            try:
-                for sid in self.species_checkboxes.keys():
-                    if sid in self.loner_speed_labels:
-                        self.loner_speed_labels[sid].setText(_("Loner Speed:"))
-                    if sid in self.clan_speed_labels:
-                        self.clan_speed_labels[sid].setText(_("Clan Speed:"))
-                    if sid in self.member_labels:
-                        self.member_labels[sid].setText(_("Mitglieder:"))
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def update_member_value(self, species_id, value):
-        """Update the member value label when slider changes."""
-        if species_id in self.member_value_labels:
-            self.member_value_labels[species_id].setText(str(value))
-
-    def get_enabled_species_populations(self):
-        """Get populations for enabled species based on member sliders."""
-        populations = {}
-        for species_id, checkbox in self.species_checkboxes.items():
-            if checkbox.isChecked():
-                populations[species_id] = self.member_sliders[species_id].value()
-        return populations
-
-    def update_theme(self, preset):
-        """Update inline styles for the species panel."""
-        self.color_preset = preset
-        bg = preset.get_color("bg_primary") if preset else "#1a1a1a"
-        border = preset.get_color("border_light") if preset else "#666666"
-        text = preset.get_color("text_primary") if preset else "#ffffff"
-        accent = preset.get_color("accent_primary") if preset else "#cc0000"
-        # Additional fallbacks used below to avoid calling preset.get_color when preset is None
-        bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
-        text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
-
-        # Panel background (no border for cleaner look)
-        self.setStyleSheet(f"background-color: {bg}; border: none;")
-
-        # Text elements
-        self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # species subtitle removed; no styling required
-
-        # Style checkboxes and sliders
-        for checkbox in self.species_checkboxes.values():
-            checkbox.setStyleSheet(
-                f"""
-                QCheckBox {{
-                    color: {text};
-                    background: transparent;
-                    spacing: 8px;
-                }}
-                QCheckBox::indicator {{
-                    width: 18px;
-                    height: 18px;
-                    border: none;
-                    background: transparent;
-                }}
-                QCheckBox::indicator:checked {{
-                    background: transparent;
-                }}
-            """
-            )
-
-        # Keep the slider groove visible (thin line) but transparent container backgrounds
-        slider_style = f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-
-        for slider in self.loner_speed_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-        for slider in self.clan_speed_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-        for slider in self.member_sliders.values():
-            slider.setStyleSheet(slider_style)
-
-        # Make sure labels and value boxes have transparent backgrounds
-        try:
-            for sid, lbl in self.loner_speed_labels.items():
-                lbl.setStyleSheet(f"color: {text}; background: transparent;")
-            for sid, lbl in self.clan_speed_labels.items():
-                lbl.setStyleSheet(f"color: {text}; background: transparent;")
-            for sid, lbl in self.member_labels.items():
-                lbl.setStyleSheet(f"color: {text}; background: transparent;")
-            for sid, val in self.member_value_labels.items():
-                val.setStyleSheet(f"color: {text}; background: transparent;")
-        except Exception:
-            pass
-
-
-class EnvironmentPanel(QWidget):
-    """Region environment controls panel.
-
-    @ivar color_preset: Active color preset
-    @ivar map_widget: Reference to the map widget
-    @ivar species_config: Species configuration
-    @ivar species_panel: Reference to species panel
-    @ivar current_food_level: Current food level setting
-    @ivar region_config: Loaded region configuration data
-    """
-
-    def __init__(
-        self,
-        color_preset=None,
-        map_widget=None,
-        species_config=None,
-        species_panel=None,
-    ):
-        """Initialize the environment panel.
-
-        @param color_preset: Optional color preset
-        @param map_widget: Optional reference to simulation map widget
-        @param species_config: Optional species configuration dict
-        @param species_panel: Optional reference to species panel
-        """
-        super().__init__()
-        self.color_preset = color_preset
-        self.map_widget = map_widget  # Reference to map widget for updating background
-        self.species_config = species_config  # Reference to species config
-        self.species_panel = (
-            species_panel  # Reference to species panel for checkbox control
-        )
-        self.current_food_level = 5  # Default food level (1-10)
-
-        # Load region config for temperature ranges
-        self.region_config = {}
-        try:
-            region_json_path = get_static_path("data/region.json")
-            with open(region_json_path, "r", encoding="utf-8") as f:
-                self.region_config = json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load region.json: {e}")
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(15)
-
-        # Title
-        self.title = QLabel(_("Region"))
-        title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
-        title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.title.setFont(title_font)
-        layout.addWidget(self.title)
-
-        # Region Selection (subtitle removed; only title + combo)
-
-        from PyQt6.QtWidgets import QComboBox
-
-        self.region_combo = QComboBox()
-        self.region_combo.addItems(
-            ["Snowy Abyss", "Wasteland", "Evergreen Forest", "Corrupted Caves"]
-        )
-        self.region_combo.setFixedHeight(30)
-        self.region_combo.currentTextChanged.connect(self.on_region_changed)
-        layout.addWidget(self.region_combo)
-
-        # Store region name to key mapping
-        self.region_name_to_key = {
-            "Snowy Abyss": "Snowy_Abyss",
-            "Wasteland": "Wasteland",
-            "Evergreen Forest": "Evergreen_Forest",
-            "Corrupted Caves": "Corrupted_Caves",
-        }
-
-        # Temperature Section
-        self.temp_label = QLabel(_("Temperatur:"))
-        temp_label_font = QFont("Minecraft", 12)
-        temp_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.temp_label.setFont(temp_label_font)
-        layout.addWidget(self.temp_label)
-
-        self.temp_slider = QSlider(Qt.Orientation.Horizontal)
-        self.temp_slider.setMinimum(-50)
-        self.temp_slider.setMaximum(50)
-        self.temp_slider.setValue(20)
-        layout.addWidget(self.temp_slider)
-
-        self.temp_value_label = QLabel(_("Temp: 20 C°"))
-        temp_value_font = QFont("Minecraft", 11)
-        temp_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.temp_value_label.setFont(temp_value_font)
-        self.temp_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.temp_slider.valueChanged.connect(self.on_temp_value_changed)
-        layout.addWidget(self.temp_value_label)
-
-        # Set initial temperature range based on default region (Snowy Abyss)
-        self.update_temperature_range("Snowy Abyss")
-
-        # Food Section
-        self.food_label_title = QLabel(_("Nahrung:"))
-        food_title_font = QFont("Minecraft", 12)
-        food_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_label_title.setFont(food_title_font)
-        layout.addWidget(self.food_label_title)
-
-        # Anzahl Nahrungsplätze
-        # Food Level Label (missing initialization fix)
-        self.food_label = QLabel("1/10")
-        food_label_font = QFont("Minecraft", 11)
-        food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_label.setFont(food_label_font)
-        layout.addWidget(self.food_label)
-        self.food_places_label = QLabel(_("Nahrungsplätze: 5"))
-        food_places_font = QFont("Minecraft", 11)
-        food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_places_label.setFont(food_places_font)
-        layout.addWidget(self.food_places_label)
-
-        self.food_places_slider = QSlider(Qt.Orientation.Horizontal)
-        self.food_places_slider.setMinimum(1)
-        self.food_places_slider.setMaximum(10)
-        self.food_places_slider.setValue(5)
-        self.food_places_slider.valueChanged.connect(self.on_food_places_changed)
-        layout.addWidget(self.food_places_slider)
-
-        # Nahrungsmenge pro Platz
-        self.food_amount_label = QLabel(_("Nahrungsmenge: 50"))
-        food_amount_font = QFont("Minecraft", 11)
-        food_amount_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_amount_label.setFont(food_amount_font)
-        layout.addWidget(self.food_amount_label)
-
-        self.food_amount_slider = QSlider(Qt.Orientation.Horizontal)
-        self.food_amount_slider.setMinimum(10)
-        self.food_amount_slider.setMaximum(200)
-        self.food_amount_slider.setValue(50)
-        self.food_amount_slider.valueChanged.connect(
-            lambda v: self.food_amount_label.setText(
-                _("Nahrungsmenge: {v}").format(v=v)
-            )
-        )
-        layout.addWidget(self.food_amount_slider)
-
-        # Day/Night Section
-        self.day_night_label = QLabel(_("Tag - Nacht:"))
-        day_night_label_font = QFont("Minecraft", 12)
-        day_night_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.day_night_label.setFont(day_night_label_font)
-        layout.addWidget(self.day_night_label)
-
-        day_night_layout = QHBoxLayout()
-        day_night_layout.setSpacing(5)
-
-        day_btn = QPushButton(_("Tag"))
-        day_btn_font = QFont("Minecraft", 11)
-        day_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        day_btn.setFont(day_btn_font)
-        day_btn.setFixedHeight(30)
-        day_btn.setCheckable(True)
-        day_btn.setChecked(True)
-        day_btn.clicked.connect(lambda: self.on_day_night_toggle(True))
-        day_night_layout.addWidget(day_btn)
-
-        night_btn = QPushButton(_("Nacht"))
-        night_btn_font = QFont("Minecraft", 11)
-        night_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        night_btn.setFont(night_btn_font)
-        night_btn.setFixedHeight(30)
-        night_btn.setCheckable(True)
-        night_btn.clicked.connect(lambda: self.on_day_night_toggle(False))
-        day_night_layout.addWidget(night_btn)
-
-        self.day_btn = day_btn
-        self.night_btn = night_btn
-        self.start_is_day = True  # Default: Start bei Tag
-
-        layout.addLayout(day_night_layout)
-
-        layout.addStretch()
-
-        self.setLayout(layout)
-        self.update_theme(self.color_preset)
-        try:
-            from frontend.i18n import register_language_listener
-
-            register_language_listener(self.update_language)
-        except Exception:
-            pass
-
-    def on_day_night_toggle(self, is_day):
-        """Toggle between day and night mode."""
-        self.start_is_day = is_day
-        if is_day:
-            self.day_btn.setChecked(True)
-            self.night_btn.setChecked(False)
-        else:
-            self.day_btn.setChecked(False)
-            self.night_btn.setChecked(True)
-
-    def on_region_changed(self, region_name):
-        """Called when region selection changes."""
-        if self.map_widget:
-            self.map_widget.set_region(region_name)
-        # Update temperature slider range based on region
-        self.update_temperature_range(region_name)
-        # Update species checkboxes based on region temperature compatibility
-        self.update_species_compatibility(region_name)
-
-    def update_temperature_range(self, region_name):
-        """Update temperature slider min/max based on selected region."""
-        # Convert display name to JSON key
-        region_key = self.region_name_to_key.get(region_name, "Wasteland")
-
-        if region_key in self.region_config:
-            region_data = self.region_config[region_key]
-            min_temp = region_data.get("min_temp", -50)
-            max_temp = region_data.get("max_temp", 50)
-
-            # Update slider range
-            self.temp_slider.setMinimum(min_temp)
-            self.temp_slider.setMaximum(max_temp)
-
-            # Set value to middle of range
-            mid_temp = (min_temp + max_temp) // 2
-            self.temp_slider.setValue(mid_temp)
-
-            # Update label with range info
-            # Use translatable template for temperature display
-            try:
-                from frontend.i18n import _
-
-                self.temp_value_label.setText(
-                    _("Temp: {value} C° ({min} bis {max})").format(
-                        value=mid_temp, min=min_temp, max=max_temp
-                    )
-                )
-            except Exception:
-                self.temp_value_label.setText(
-                    f"Temp: {mid_temp} C° ({min_temp} bis {max_temp})"
-                )
-
-    def on_temp_value_changed(self, value):
-        """Update label when temperature slider value changes."""
-        min_temp = self.temp_slider.minimum()
-        max_temp = self.temp_slider.maximum()
-        try:
-            from frontend.i18n import _
-
-            self.temp_value_label.setText(
-                _("Temp: {value} C° ({min} bis {max})").format(
-                    value=value, min=min_temp, max=max_temp
-                )
-            )
-        except Exception:
-            self.temp_value_label.setText(
-                f"Temp: {value} C° ({min_temp} bis {max_temp})"
-            )
-        # Update species compatibility based on selected temperature
-        self.update_species_compatibility_by_temp(value)
-
-    def update_species_compatibility(self, region_name):
-        """Enable/disable species checkboxes based on region temperature compatibility."""
-        if not self.species_panel or not self.species_config:
-            return
-
-        # Get region temperature range
-        region_key = self.region_name_to_key.get(region_name, "Wasteland")
-        if region_key not in self.region_config:
-            return
-
-        region_data = self.region_config[region_key]
-        region_min_temp = region_data.get("min_temp", -50)
-        region_max_temp = region_data.get("max_temp", 50)
-
-        # Check each species
-        for species_id, checkbox in self.species_panel.species_checkboxes.items():
-            if species_id in self.species_config:
-                species_data = self.species_config[species_id]
-                species_min_temp = species_data.get("min_survival_temp", -100)
-                species_max_temp = species_data.get("max_survival_temp", 100)
-
-                # Check if species can survive in this region's temperature range
-                # Species can survive if there's ANY overlap between region temp and survival temp
-                can_survive = not (
-                    region_max_temp < species_min_temp
-                    or region_min_temp > species_max_temp
-                )
-
-                if not can_survive:
-                    # Disable and uncheck species that can't survive
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
-                else:
-                    # Enable species that can survive
-                    checkbox.setEnabled(True)
-                    # Reset style (will be updated by update_theme)
-
-    def update_species_compatibility_by_temp(self, temperature):
-        """Enable/disable species checkboxes based on specific temperature."""
-        if not self.species_panel or not self.species_config:
-            return
-
-        # Check each species
-        for species_id, checkbox in self.species_panel.species_checkboxes.items():
-            if species_id in self.species_config:
-                species_data = self.species_config[species_id]
-                species_min_temp = species_data.get("min_survival_temp", -100)
-                species_max_temp = species_data.get("max_survival_temp", 100)
-
-                # Check if species can survive at this specific temperature
-                can_survive = species_min_temp <= temperature <= species_max_temp
-
-                if not can_survive:
-                    # Disable and uncheck species that can't survive
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
-                else:
-                    # Enable and auto-check species that can survive
-                    checkbox.setEnabled(True)
-                    checkbox.setChecked(True)
-                    # Reset style (will be updated by update_theme)
-
-    def set_species_panel(self, species_panel):
-        """Set reference to species panel after it's created."""
-        self.species_panel = species_panel
-
-    def on_food_places_changed(self, v):
-        """Handler for food places slider: update label and preview food on map."""
-        try:
-            # update label
-            self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
-        except Exception:
-            try:
-                self.food_places_label.setText(f"Nahrungsplätze: {v}")
-            except Exception:
-                pass
-
-        # preview on map if available
-        try:
-            amount = (
-                self.food_amount_slider.value()
-                if hasattr(self, "food_amount_slider")
-                else 0
-            )
-            max_amount = (
-                self.food_amount_slider.maximum()
-                if hasattr(self, "food_amount_slider")
-                else 100
-            )
-            if hasattr(self, "map_widget") and self.map_widget is not None:
-                try:
-                    # create a deterministic seed for preview so positions
-                    # remain consistent when the simulation starts
-                    import random
-
-                    random_modifier = random.randint(0, 999999)
-                    self._pending_food_seed = (
-                        hash((v, amount)) ^ random_modifier
-                    ) & 0xFFFFFFFF
-                    self.map_widget.preview_food_sources(
-                        v,
-                        amount,
-                        amount,
-                        transition_progress=1.0,
-                        seed=self._pending_food_seed,
-                    )
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    def increase_food(self):
-        """Increase food level."""
-        self.current_food_level = min(10, self.current_food_level + 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
-
-    def decrease_food(self):
-        """Decrease food level."""
-        self.current_food_level = max(1, self.current_food_level - 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
-
-    def get_selected_region(self):
-        """Get currently selected region."""
-        return self.region_combo.currentText()
-
-    def get_temperature(self):
-        """Get current temperature value."""
-        return self.temp_slider.value()
-
-    def get_food_places(self):
-        """Get number of food places."""
-        return self.food_places_slider.value()
-
-    def get_food_amount(self):
-        """Get food amount per place."""
-        return self.food_amount_slider.value()
-
-    def get_is_day(self):
-        """Get day/night state."""
-        return self.day_btn.isChecked()
-
-    def set_controls_enabled(self, enabled):
-        """Enable/disable region selection (only before simulation starts)."""
-        self.region_combo.setEnabled(enabled)
-
-    def update_theme(self, preset):
-        """Update inline styles for the environment panel."""
-        self.color_preset = preset
-        bg = preset.get_color("bg_primary") if preset else "#1a1a1a"
-        border = preset.get_color("border_light") if preset else "#666666"
-        text = preset.get_color("text_primary") if preset else "#ffffff"
-        accent = preset.get_color("accent_primary") if preset else "#cc0000"
-        bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
-        text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
-
-        # Panel background (no border for cleaner look)
-        self.setStyleSheet(f"background-color: {bg}; border: none;")
-
-        # Text elements
-        self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # region subtitle removed; no styling required
-        self.temp_label.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-        self.temp_value_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.food_label_title.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-        self.food_places_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.food_amount_label.setStyleSheet(f"color: {text}; background: transparent;")
-        self.day_night_label.setStyleSheet(
-            f"color: {text_secondary}; background: transparent;"
-        )
-
-        # Style sliders (temp, food_places, food_amount)
-        slider_style = f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-        self.temp_slider.setStyleSheet(slider_style)
-        self.food_places_slider.setStyleSheet(slider_style)
-        self.food_amount_slider.setStyleSheet(
-            f"""
-            QSlider {{
-                background: transparent;
-            }}
-            QSlider::groove:horizontal {{
-                border: 1px solid {border};
-                height: 2px;
-                background: transparent;
-                border-radius: 1px;
-            }}
-            QSlider::sub-page:horizontal, QSlider::add-page:horizontal {{
-                background: transparent;
-            }}
-            QSlider::handle:horizontal {{
-                background: {accent};
-                border: none;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 2px;
-            }}
-        """
-        )
-
-        # Style combobox
-        combo_style = f"""
-            QComboBox {{
-                background-color: {bg_tertiary};
-                color: {text};
-                border: 1px solid {border};
-                padding: 5px;
-            }}
-            QComboBox::drop-down {{
-                border: none;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid {text};
-                margin-right: 5px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {bg_tertiary};
-                color: {text};
-                selection-background-color: {accent};
-            }}
-        """
-        self.region_combo.setStyleSheet(combo_style)
-
-        # Style buttons
-        button_style = f"""
-            QPushButton {{
-                background-color: {bg_tertiary};
-                color: {text};
-                border: none;
-                padding: 5px;
-            }}
-            QPushButton:hover {{
-                background-color: {accent};
-            }}
-            QPushButton:checked {{
-                background-color: {accent};
-            }}
-        """
-        self.day_btn.setStyleSheet(button_style)
-        self.night_btn.setStyleSheet(button_style)
-        # Ensure labels and small display boxes are transparent to avoid dark boxes
-        try:
-            if hasattr(self, "temp_label") and self.temp_label is not None:
-                self.temp_label.setStyleSheet(
-                    f"color: {text_secondary}; background: transparent;"
-                )
-            if hasattr(self, "temp_value_label") and self.temp_value_label is not None:
-                self.temp_value_label.setStyleSheet(
-                    f"color: {text}; background: transparent;"
-                )
-            if hasattr(self, "food_label") and self.food_label is not None:
-                self.food_label.setStyleSheet(
-                    f"color: {text}; background: transparent;"
-                )
-            if (
-                hasattr(self, "food_places_label")
-                and self.food_places_label is not None
-            ):
-                self.food_places_label.setStyleSheet(
-                    f"color: {text}; background: transparent;"
-                )
-            if (
-                hasattr(self, "food_amount_label")
-                and self.food_amount_label is not None
-            ):
-                self.food_amount_label.setStyleSheet(
-                    f"color: {text}; background: transparent;"
-                )
-        except Exception:
-            pass
-
-    def update_language(self) -> None:
-        """Update UI texts for environment panel when language changes."""
-        try:
-            from frontend.i18n import _
-
-            if hasattr(self, "title"):
-                self.title.setText(_("Region"))
-            # Region subtitle removed; nothing to update here
-            if hasattr(self, "temp_label"):
-                self.temp_label.setText(_("Temperatur:"))
-            if hasattr(self, "food_label_title"):
-                self.food_label_title.setText(_("Nahrung:"))
-            # Update dynamic numeric labels to use translated templates
-            try:
-                if hasattr(self, "temp_slider") and hasattr(self, "temp_value_label"):
-                    # Recompute temp display based on current slider value
-                    min_temp = self.temp_slider.minimum()
-                    max_temp = self.temp_slider.maximum()
-                    cur = self.temp_slider.value()
-                    self.temp_value_label.setText(
-                        _("Temp: {value} C° ({min} bis {max})").format(
-                            value=cur, min=min_temp, max=max_temp
-                        )
-                    )
-            except Exception:
-                pass
-            try:
-                if hasattr(self, "food_places_label") and hasattr(
-                    self, "food_places_slider"
-                ):
-                    v = self.food_places_slider.value()
-                    self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
-            except Exception:
-                pass
-            try:
-                if hasattr(self, "food_amount_label") and hasattr(
-                    self, "food_amount_slider"
-                ):
-                    v = self.food_amount_slider.value()
-                    self.food_amount_label.setText(_("Nahrungsmenge: {v}").format(v=v))
-            except Exception:
-                pass
-            if hasattr(self, "day_night_label"):
-                self.day_night_label.setText(_("Tag - Nacht:"))
-            # Update the individual day/night buttons if they exist
-            try:
-                if hasattr(self, "day_btn"):
-                    self.day_btn.setText(_("Tag"))
-                if hasattr(self, "night_btn"):
-                    self.night_btn.setText(_("Nacht"))
-            except Exception:
-                pass
-            # Update day/night buttons in EnvironmentPanel if present
-            try:
-                if hasattr(self, "environment_panel"):
-                    if hasattr(self.environment_panel, "day_btn"):
-                        self.environment_panel.day_btn.setText(_("Tag"))
-                    if hasattr(self.environment_panel, "night_btn"):
-                        self.environment_panel.night_btn.setText(_("Nacht"))
-            except Exception:
-                pass
-
-        except Exception:
-            pass
+from .simulation_components.custom_widgets import CustomImageButton
+from .simulation_components.stats_dialog import StatsDialog
+from .simulation_components.log_dialog import LogDialog, LogHighlighter
+from .simulation_components.species_panel import SpeciesPanel
+from .simulation_components.environment_panel import EnvironmentPanel
+from .simulation_components.live_graph_view import LiveGraphView
+from .simulation_components.control_bar import ControlBar
 
 
 class SimulationScreen(QWidget):
@@ -2027,7 +88,7 @@ class SimulationScreen(QWidget):
             stats = self.sim_model.get_final_stats()
 
         if stats:
-            # If backend snapshot somehow contains all-zero counts, compute live counts as a fallback
+            # Fallbacks for empty stats
             if self.sim_model:
                 try:
                     sc = stats.get("species_counts", {}) or {}
@@ -2059,8 +120,6 @@ class SimulationScreen(QWidget):
                     logger.exception("Failed to save stats output")
 
                 if self.auto_options.get("auto_quit"):
-                    from PyQt6.QtWidgets import QApplication
-
                     QApplication.quit()
                     return
 
@@ -2073,22 +132,11 @@ class SimulationScreen(QWidget):
             dialog = StatsDialog(self.last_stats, self)
             dialog.exec()
         else:
-            from PyQt6.QtWidgets import QMessageBox
-
-            try:
-                from frontend.i18n import _
-
-                QMessageBox.information(
-                    self,
-                    _("Keine Statistik"),
-                    _("Es sind keine Statistiken der vorherigen Simulation verfügbar."),
-                )
-            except Exception:
-                QMessageBox.information(
-                    self,
-                    "Keine Statistik",
-                    "Es sind keine Statistiken der vorherigen Simulation verfügbar.",
-                )
+            QMessageBox.information(
+                self,
+                _("Keine Statistik"),
+                _("Es sind keine Statistiken der vorherigen Simulation verfügbar."),
+            )
 
     def __init__(
         self,
@@ -2105,13 +153,7 @@ class SimulationScreen(QWidget):
         self.color_preset = color_preset
         self.auto_options = {}  # Initialize to empty dict
         self.is_running = False
-        # Add missing speed value labels
-        self.loner_speed_value_label = QLabel("1.0x")
-        self.clan_speed_value_label = QLabel("1.0x")
-        speed_value_font = QFont("Minecraft", 10)
-        speed_value_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.loner_speed_value_label.setFont(speed_value_font)
-        self.clan_speed_value_label.setFont(speed_value_font)
+
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
@@ -2119,31 +161,19 @@ class SimulationScreen(QWidget):
 
         self.log_dialog = None
         self.time_step = 0
-        self.log_expanded = False  # Track log expansion state
         self.simulation_time = 0  # Time in seconds
         self.max_simulation_time = MAX_SIMULATION_TIME  # seconds
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
         self.population_data = {}  # Store population history for live graph
-        self.live_graph_widget = None  # Widget for live graph, initialized later
-        # Throttle live graph updates to avoid UI overwork (seconds)
-        self._last_graph_update = 0.0
-        self._graph_update_interval = 0.5
 
         # Load species config
         json_path = get_static_path("data/species.json")
-        # Debug logging removed: debug_log does not exist
-        logger.debug(f"species.json path: {json_path}")
-        logger.debug(f"species.json exists: {json_path.exists()}")
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
-            # Debug logging removed: debug_log does not exist
             logger.warning(f"Could not load species.json from {json_path}")
-
-        # Don't initialize simulation model here - will be created on first start
-        # self.sim_model is already set to None above
 
         self.init_ui()
         try:
@@ -2155,7 +185,7 @@ class SimulationScreen(QWidget):
 
     def init_ui(self):
         """Initialize UI."""
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
@@ -2201,9 +231,7 @@ class SimulationScreen(QWidget):
         map_layout.setContentsMargins(0, 0, 0, 0)
 
         self.map_widget = SimulationMapWidget()
-        self.map_widget.setMinimumSize(
-            MAP_MIN_WIDTH, MAP_MIN_HEIGHT
-        )  # Minimum size for usability
+        self.map_widget.setMinimumSize(MAP_MIN_WIDTH, MAP_MIN_HEIGHT)
         map_layout.addWidget(self.map_widget)
 
         left_layout.addWidget(self.map_frame)
@@ -2255,71 +283,22 @@ class SimulationScreen(QWidget):
         )
         self.panel_stack.addWidget(self.environment_panel)  # Index 1
 
-        # Initialize species compatibility for default region and temperature
+        # Initialize species compatibility
         self.environment_panel.update_species_compatibility("Snowy Abyss")
-        # Also check with initial temperature value
         initial_temp = self.environment_panel.get_temperature()
         self.environment_panel.update_species_compatibility_by_temp(initial_temp)
-
-        # Connect Temperature slider to live update
         self.environment_panel.temp_slider.valueChanged.connect(
             self.on_live_temp_change
         )
 
-        # Show region/environment panel by default
         self.panel_stack.setCurrentIndex(1)
-
         right_layout.addWidget(self.panel_stack)
 
-        # Render default food preview after a short delay so the map viewport
-        # has a valid size; show the default number of food places as full.
-        try:
-            if (
-                hasattr(self, "environment_panel")
-                and self.environment_panel is not None
-            ):
+        # Render default food preview
+        self.preview_startup()
 
-                def _preview_startup():
-                    try:
-                        num = self.environment_panel.food_places_slider.value()
-                        amt = (
-                            self.environment_panel.food_amount_slider.value()
-                            if hasattr(self.environment_panel, "food_amount_slider")
-                            else 100
-                        )
-                        try:
-                            # set pending seed so startup preview can be reused
-                            # Use random number mixed with hash to ensure different previews on revisit
-                            import random
-
-                            random_modifier = random.randint(0, 999999)
-                            self._pending_food_seed = (
-                                hash((num, amt)) ^ random_modifier
-                            ) & 0xFFFFFFFF
-                            # pass same value for amount and max_amount so preview
-                            # matches backend initial max_amount behavior
-                            self.map_widget.preview_food_sources(
-                                num, amt, amt, seed=self._pending_food_seed
-                            )
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
-
-                try:
-                    from PyQt6.QtCore import QTimer
-
-                    QTimer.singleShot(120, _preview_startup)
-                except Exception:
-                    _preview_startup()
-        except Exception:
-            pass
-
-        # Store log text in variable instead of label (use module-level `_`)
-        try:
-            self.log_text = _("Simulation bereit.")
-        except Exception:
-            self.log_text = "Simulation bereit."
+        # Store log text
+        self.log_text = _("Simulation bereit.")
 
         # Control section at bottom of right column
         right_layout.addSpacing(40)
@@ -2348,180 +327,109 @@ class SimulationScreen(QWidget):
 
         right_layout.addWidget(self.stats_log_widget)
 
-        # Live graph area (shown during simulation)
-        control_section = QWidget()
-        control_layout = QVBoxLayout(control_section)
-        control_layout.setContentsMargins(0, 0, 0, 0)
-        control_layout.setSpacing(10)
-        # (All matplotlib axis configuration and plotting is handled in update_live_graph after the axis is created)
-        # (spine styling for live_graph_ax is handled after creation in initialize_live_graph or update_live_graph)
+        # New Control Bar
+        self.control_bar = ControlBar()
+        self.control_bar.playPauseClicked.connect(self.toggle_play_pause)
+        self.control_bar.stopClicked.connect(self.stop_simulation)
+        self.control_bar.speedChanged.connect(self.set_speed)
+        self.control_bar.chaosClicked.connect(self.on_inject_chaos)
+        right_layout.addWidget(self.control_bar)
 
-        # (All grid configuration for live_graph_ax is handled after creation in initialize_live_graph or update_live_graph)
-
-        # (Live graph widget and axis are initialized only when simulation starts)
-        # (Do not reference self.live_graph_widget or self.live_graph_ax here)
-
-        # Play/Pause and Stop Buttons
-        play_controls_layout = QHBoxLayout()
-        self.btn_play_pause = QPushButton("▶")
-        play_font = QFont("Minecraft", 16)
-        play_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_play_pause.setFont(play_font)
-        self.btn_play_pause.setFixedHeight(40)
-        self.btn_play_pause.clicked.connect(self.toggle_play_pause)
-        play_controls_layout.addWidget(self.btn_play_pause)
-
-        self.btn_stop = QPushButton(_("Reset/Stop"))
-        stop_font = QFont("Minecraft", 16)
-        stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_stop.setFont(stop_font)
-        self.btn_stop.setFixedHeight(40)
-        self.btn_stop.clicked.connect(self.stop_simulation)
-        play_controls_layout.addWidget(self.btn_stop)
-        play_controls_layout.addStretch()
-        control_layout.addLayout(play_controls_layout)
-
-        # Info display row with timer, day/night, and speed controls
-        info_layout = QHBoxLayout()
-        info_layout.setSpacing(10)
-
-        # Timer display
-        self.timer_label = QLabel("00:00")
-        timer_font = QFont("Minecraft", 14)
-        timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.timer_label.setFont(timer_font)
-        self.timer_label.setStyleSheet("color: #ffffff;")
-        info_layout.addWidget(self.timer_label)
-
-        # Day/Night indicator
-        self.day_night_label = QLabel("☀️")
-        day_night_font = QFont("Minecraft", 16)
-        day_night_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.day_night_label.setFont(day_night_font)
-        self.day_night_label.setStyleSheet("color: #ffffff;")
-        info_layout.addWidget(self.day_night_label)
-
-        # Speed control buttons next to time
-        speed_label = QLabel("Sim Speed:")
-        speed_label_font = QFont("Minecraft", 9)
-        speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        speed_label.setFont(speed_label_font)
-        speed_label.setStyleSheet("color: #ffffff;")
-        info_layout.addWidget(speed_label)
-
-        # Replace text speed buttons with image buttons from static/ui
-        one_img = str(get_static_path("ui/one_times.png"))
-        two_img = str(get_static_path("ui/two_times.png"))
-        five_img = str(get_static_path("ui/five_times.png"))
-
-        self.btn_speed_1x = CustomImageButton(one_img)
-        self.btn_speed_1x.setChecked(True)
-        self.btn_speed_1x.clicked.connect(lambda: self.set_speed(1))
-        info_layout.addWidget(self.btn_speed_1x)
-
-        self.btn_speed_2x = CustomImageButton(two_img)
-        self.btn_speed_2x.clicked.connect(lambda: self.set_speed(2))
-        info_layout.addWidget(self.btn_speed_2x)
-
-        self.btn_speed_5x = CustomImageButton(five_img)
-        self.btn_speed_5x.clicked.connect(lambda: self.set_speed(5))
-        info_layout.addWidget(self.btn_speed_5x)
-
-        # Chaos/Randomize Button
-        self.btn_chaos = QPushButton("🎲")
-        chaos_font = QFont("Segoe UI Emoji", 14)
-        self.btn_chaos.setFont(chaos_font)
-        self.btn_chaos.setFixedWidth(40)
-        self.btn_chaos.setToolTip(_("Inject Randomness"))
-        self.btn_chaos.clicked.connect(self.on_inject_chaos)
-        info_layout.addWidget(self.btn_chaos)
-
-        info_layout.addStretch()
-        control_layout.addLayout(info_layout)
-
-        # Live info row
-        live_info_layout = QHBoxLayout()
-        live_info_layout.setSpacing(10)
-
-        # Temperature display (live)
-        self.live_temp_label = QLabel("🌡️ 0°C")
-        live_temp_font = QFont("Minecraft", 11)
-        live_temp_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.live_temp_label.setFont(live_temp_font)
-        self.live_temp_label.setStyleSheet("color: #88ccff;")
-        live_info_layout.addWidget(self.live_temp_label)
-
-        # Day/Night indicator (live)
-        self.live_day_night_label = QLabel(_("☀️ Tag"))
-        live_dn_font = QFont("Minecraft", 11)
-        live_dn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.live_day_night_label.setFont(live_dn_font)
-        self.live_day_night_label.setStyleSheet("color: #ffcc44;")
-        live_info_layout.addWidget(self.live_day_night_label)
-        live_info_layout.addStretch()
-        control_layout.addLayout(live_info_layout)
-
-        # Add control section to right column
-        right_layout.addWidget(control_section)
-
-        # Add graph container (for live graph)
+        # Graph Container for Live Graph
         self.graph_container = QFrame()
         self.graph_container.setVisible(False)
-        right_layout.addWidget(self.graph_container)
+        graph_layout = QVBoxLayout(self.graph_container)
+        graph_layout.setContentsMargins(0, 0, 0, 0)
 
+        self.live_graph_view = LiveGraphView()
+        graph_layout.addWidget(self.live_graph_view)
+
+        # Log display under graph
+        self.log_display = QPlainTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_display.setStyleSheet(
+            f"background-color: #222; color: #fff; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px; margin-top: 6px; border: none;"
+        )
+        self.log_display.setMinimumHeight(100)
+        LogHighlighter(self.log_display.document())
+        graph_layout.addWidget(self.log_display)
+
+        right_layout.addWidget(self.graph_container)
         right_layout.addStretch()
 
-        # Add right column to splitter
         content_splitter.addWidget(right_column)
-
-        # Set initial splitter sizes (75% / 25%)
         content_splitter.setSizes([7500, 2500])
 
         main_layout.addWidget(content_splitter)
 
-        self.setLayout(main_layout)
-        # Apply initial theme to inline-styled widgets
         self.update_theme(self.color_preset)
+
+    def preview_startup(self):
+        try:
+            if (
+                hasattr(self, "environment_panel")
+                and self.environment_panel is not None
+            ):
+
+                def _preview_startup():
+                    try:
+                        num = self.environment_panel.food_places_slider.value()
+                        amt = (
+                            self.environment_panel.food_amount_slider.value()
+                            if hasattr(self.environment_panel, "food_amount_slider")
+                            else 100
+                        )
+                        try:
+                            # set pending seed so startup preview can be reused
+                            # Use random number mixed with hash to ensure different previews on revisit
+                            import random
+
+                            random_modifier = random.randint(0, 999999)
+                            self._pending_food_seed = (
+                                hash((num, amt)) ^ random_modifier
+                            ) & 0xFFFFFFFF
+                            self.map_widget.preview_food_sources(
+                                num, amt, amt, seed=self._pending_food_seed
+                            )
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                try:
+                    QTimer.singleShot(120, _preview_startup)
+                except Exception:
+                    _preview_startup()
+        except Exception:
+            pass
 
     def switch_sidebar_tab(self, tab_name):
         """Switch between Species and Region tabs."""
         if tab_name == "species":
             self.btn_species_tab.setChecked(True)
             self.btn_region_tab.setChecked(False)
-            self.panel_stack.setCurrentIndex(0)  # Show species panel
+            self.panel_stack.setCurrentIndex(0)
         elif tab_name == "region":
             self.btn_species_tab.setChecked(False)
             self.btn_region_tab.setChecked(True)
-            self.panel_stack.setCurrentIndex(1)  # Show region panel
+            self.panel_stack.setCurrentIndex(1)
 
     def update_theme(self, preset):
-        """Update inline styles for the simulation screen and child panels."""
+        """Update inline styles."""
         self.color_preset = preset
         if not preset:
             return
 
-        # Map frame: keep map background white but update border color
         map_border = preset.get_color("map_border")
         self.map_frame.setStyleSheet(
             f"background-color: #ffffff; border: 2px solid {map_border};"
         )
 
-        # Species panel updates itself
-        if hasattr(self, "species_panel") and self.species_panel:
-            try:
-                self.species_panel.update_theme(preset)
-            except Exception:
-                # Ignore theme update errors silently
-                pass
+        if hasattr(self, "species_panel"):
+            self.species_panel.update_theme(preset)
+        if hasattr(self, "environment_panel"):
+            self.environment_panel.update_theme(preset)
 
-        # Environment panel updates itself
-        if hasattr(self, "environment_panel") and self.environment_panel:
-            try:
-                self.environment_panel.update_theme(preset)
-            except Exception:
-                pass
-
-        # Style tab buttons
         if hasattr(self, "btn_species_tab") and hasattr(self, "btn_region_tab"):
             text = preset.get_color("text_primary")
             bg_tertiary = preset.get_color("bg_tertiary")
@@ -2550,10 +458,9 @@ class SimulationScreen(QWidget):
         if not self.is_running:
             # Nur beim ersten Start initialisieren (wenn kein Model existiert)
             if self.sim_model is None:
-                # Deaktiviere Region-Auswahl
                 self.environment_panel.set_controls_enabled(False)
 
-                # Initialisiere Simulation
+                # Initialize Simulation
                 self.sim_model = SimulationModel()
                 populations = self.species_panel.get_enabled_species_populations()
                 food_places = self.environment_panel.get_food_places()
@@ -2562,7 +469,7 @@ class SimulationScreen(QWidget):
                 start_is_day = self.environment_panel.get_is_day()
                 region_display = self.environment_panel.get_selected_region()
 
-                # Override from auto_options if present (for batch runs)
+                # Override from auto_options if present
                 if self.auto_options:
                     if self.auto_options.get("food_places") is not None:
                         food_places = self.auto_options["food_places"]
@@ -2571,30 +478,23 @@ class SimulationScreen(QWidget):
                     if self.auto_options.get("temperature") is not None:
                         start_temp = self.auto_options["temperature"]
                     if self.auto_options.get("region"):
-                        # Only override if backend region keys match or we map it
                         region_display = self.auto_options["region"]
 
-                # Map display name to region key for backend
                 region_key = self.environment_panel.region_name_to_key.get(
                     region_display, "Wasteland"
                 )
-                # If the passed region is already a key (like 'Evergreen_Forest') but not in display map
-                # we might want to check against keys directly or just fallback to what was passed if it looks like a key
                 if (
                     region_display not in self.environment_panel.region_name_to_key
                     and "_" in region_display
                 ):
                     region_key = region_display
 
-                # Override populations if auto-running to ensure all species active
+                # Override populations if auto-running
                 if self.auto_options:
                     for s_name in self.species_config.keys():
                         if s_name not in populations:
-                            # Default population for auto-enabled species
                             populations[s_name] = 20
 
-                # Apply UI member slider values as per-species max_clan_members so
-                # spawned / split behavior respects what the user configured.
                 adj_species_config = copy.deepcopy(self.species_config or {})
                 try:
                     for sname, val in populations.items():
@@ -2605,7 +505,6 @@ class SimulationScreen(QWidget):
                 except Exception:
                     pass
 
-                # Use seed from auto_options if present, otherwise fallback to UI seed
                 seed_val = (
                     self.auto_options.get("seed")
                     if self.auto_options and self.auto_options.get("seed") is not None
@@ -2626,35 +525,32 @@ class SimulationScreen(QWidget):
                     rng_seed=seed_val,
                 )
 
-                # Set region background (still use display name for UI)
                 self.map_widget.set_region(region_display)
 
-                # Initialize population data for live graph
+                # Initialize population data
                 self.population_data = {}
                 for species_name in populations.keys():
                     self.population_data[species_name] = []
 
-                # Hide tabs and stats/log buttons, show graph
+                # UI Visibility
                 self.btn_region_tab.setVisible(False)
                 self.btn_species_tab.setVisible(False)
                 self.panel_stack.setVisible(False)
                 self.stats_log_widget.setVisible(False)
+                self.control_bar.setVisible(True)
                 self.graph_container.setVisible(True)
 
-                # Initialize graph if not already created
-                if self.live_graph_widget is None:
-                    self.initialize_live_graph()
+                # Reset graph
+                self.live_graph_view.reset()
 
-            # Resume (oder Start)
+            # Resume
             self.is_running = True
 
-            # Apply speed override if auto-running
             if self.auto_options and self.auto_options.get("speed"):
                 self.set_speed(self.auto_options["speed"])
 
-            self.btn_play_pause.setText("⏸")
+            self.control_bar.set_running_state(True)
 
-            # Start Update-Timer with speed multiplier
             if not self.update_timer:
                 self.update_timer = QTimer()
                 self.update_timer.timeout.connect(self.update_simulation_with_speed)
@@ -2663,21 +559,18 @@ class SimulationScreen(QWidget):
     def toggle_play_pause(self) -> None:
         """Toggle between play and pause."""
         if self.is_running:
-            # Currently running, so pause
             if self.update_timer:
                 self.update_timer.stop()
             self.is_running = False
-            self.btn_play_pause.setText("▶")
-            self.btn_play_pause.setStyleSheet(
-                "background-color: #4CAF50; color: white;"
+            self.control_bar.set_running_state(False)
+            self.control_bar.timer_label.setText(
+                self.control_bar.timer_label.text() + " ⏸"
             )
-            self.timer_label.setText(self.timer_label.text() + " ⏸")
         else:
-            # Currently paused or not started, so play/start
-            self.btn_play_pause.setStyleSheet("")
-            # Remove pause symbol from timer if present
-            timer_text = self.timer_label.text().replace(" ⏸", "")
-            self.timer_label.setText(timer_text)
+            # currently paused, resume
+            # remove pause symbol
+            t = self.control_bar.timer_label.text().replace(" ⏸", "")
+            self.control_bar.timer_label.setText(t)
             self.toggle_simulation()
 
     def stop_simulation(self) -> None:
@@ -2691,18 +584,13 @@ class SimulationScreen(QWidget):
             self.update_timer = None
 
         self.is_running = False
-        self.btn_play_pause.setText("▶")
-        self.btn_play_pause.setStyleSheet("")
+        self.control_bar.set_running_state(False)
         self.time_step = 0
         self.simulation_time = 0
 
-        # Save model reference for stats before clearing
         sim_model_for_stats = self.sim_model
-
-        # Reset Model to None so it will be recreated on next start
         self.sim_model = None
 
-        # Reset pending seed to ensure diversity if user just restarts
         import random
 
         random_modifier = random.randint(0, 999999)
@@ -2711,19 +599,17 @@ class SimulationScreen(QWidget):
                 self._pending_food_seed ^ random_modifier
             ) & 0xFFFFFFFF
 
-        # Clear population data for live graph
         self.population_data = {}
-        if self.live_graph_widget:
-            self.update_live_graph()
+        self.live_graph_view.reset()
 
-        # Show tabs and stats/log buttons, hide graph
+        # UI Visibility
         self.btn_region_tab.setVisible(True)
         self.btn_species_tab.setVisible(True)
         self.panel_stack.setVisible(True)
         self.stats_log_widget.setVisible(True)
+        self.control_bar.setVisible(True)
         self.graph_container.setVisible(False)
 
-        # Show stats popup after everything is stopped/reset
         if show_stats and sim_model_for_stats:
             stats = sim_model_for_stats.get_final_stats()
             self.last_stats = stats
@@ -2732,46 +618,24 @@ class SimulationScreen(QWidget):
     def set_speed(self, speed: int) -> None:
         """Set simulation speed multiplier."""
         self.simulation_speed = speed
-
-        # Update button checked states
-        self.btn_speed_1x.setChecked(speed == 1)
-        self.btn_speed_2x.setChecked(speed == 2)
-        self.btn_speed_5x.setChecked(speed == 5)
+        self.control_bar.update_speed_buttons(speed)
 
     def on_live_temp_change(self, value):
         """Update simulation temperature in real-time."""
         if self.sim_model and self.is_running:
             self.sim_model.set_temperature(float(value))
 
-    def on_loner_speed_changed(self, value: int) -> None:
-        """Handle loner speed slider change."""
-        # Convert slider value (5-20) to multiplier (0.5-2.0)
-        multiplier = value / 10.0
-        self.loner_speed_value_label.setText(f"{multiplier:.1f}x")
-        if self.sim_model:
-            self.sim_model.set_loner_speed(multiplier)
-
-    def on_clan_speed_changed(self, value: int) -> None:
-        """Handle clan speed slider change."""
-        # Convert slider value (5-20) to multiplier (0.5-2.0)
-        multiplier = value / 10.0
-        self.clan_speed_value_label.setText(f"{multiplier:.1f}x")
-        if self.sim_model:
-            self.sim_model.set_clan_speed(multiplier)
-
     def on_inject_chaos(self):
-        """Inject randomness into the running simulation."""
+        """Inject randomness."""
         if self.sim_model and self.is_running:
             self.sim_model.inject_chaos()
 
     def update_simulation_with_speed(self) -> None:
-        """Update simulation multiple times based on speed setting."""
         for i in range(self.simulation_speed):
             is_last = i == self.simulation_speed - 1
             self.update_simulation(update_ui=is_last)
 
     def update_simulation(self, update_ui: bool = True) -> None:
-        """Step simulation und update display."""
         if self.sim_model and self.is_running:
             data = self.sim_model.step()
             stats = data.get("stats", {})
@@ -2782,140 +646,73 @@ class SimulationScreen(QWidget):
                 data.get("transition_progress", 1.0),
             )
             self.time_step = data["time"]
-
-            # Track simulation time (each step = 0.1 seconds)
             self.simulation_time = self.time_step * 0.1
 
-            # Hard stop at max_simulation_time (5 minutes = 300s)
             if self.simulation_time >= self.max_simulation_time:
-                try:
-                    entry = {
-                        "msgid": "⏹️ Simulation endet nach {secs} Sekunden.",
-                        "params": {"secs": self.max_simulation_time},
-                    }
-                    self.add_log(self._format_log_entry(entry))
-                except Exception:
-                    self.add_log(
-                        f"⏹️ Simulation endet nach {self.max_simulation_time} Sekunden."
-                    )
-
+                self.add_log(
+                    f"⏹️ Simulation endet nach {self.max_simulation_time} Sekunden."
+                )
                 self.stop_simulation()
                 self.stop_simulation()
 
-            # Stop if all species extinct (no population left)
+            # Extinction Check
             try:
                 species_counts = stats.get("species_counts", {})
                 total_pop = sum(species_counts.values()) if species_counts else 0
                 if total_pop == 0:
-                    # Log extinction and stop
-                    try:
-                        entry = {
-                            "msgid": "⏹️ Simulation beendet — alle Spezies ausgestorben.",
-                            "params": {},
-                        }
-                        self.add_log(self._format_log_entry(entry))
-                    except Exception:
-                        self.add_log(
-                            "⏹️ Simulation beendet — alle Spezies ausgestorben."
-                        )
+                    self.add_log("⏹️ Simulation beendet — alle Spezies ausgestorben.")
                     self.stop_simulation()
                     return
             except Exception:
                 pass
 
-            # --- Live graph and log update ---
-            # Always use backend's population_history for up-to-date graph
+            # Update Data
             population_history = stats.get("population_history", {})
             if population_history:
                 self.population_data = {
                     k: list(v) for k, v in population_history.items()
                 }
-            # Capture recent random draw samples from backend for distribution graph
-            try:
-                self.rnd_samples = data.get("rnd_samples", {})
-            except Exception:
-                self.rnd_samples = {}
-            # Keep the latest instantaneous species counts for smoother live plotting
-            try:
-                self._latest_species_counts = stats.get("species_counts", {})
-            except Exception:
-                self._latest_species_counts = {}
-            self.update_live_graph()
 
-            # Backend logs are handled below; skip earlier append attempt.
+            # Live Graph Update calling View
+            self.live_graph_view.update_graph(
+                self.population_data,
+                self.species_panel.get_enabled_species_populations().keys(),
+                stats.get("species_counts", {}),
+                data.get("rnd_samples", {}),
+            )
 
-            # Update log text from backend logs (support structured entries)
+            # Logs
             logs = data.get("logs", [])
             if logs:
-                try:
-                    rendered = []
-                    for e in logs:
-                        try:
-                            rendered.append(self._format_log_entry(e))
-                        except Exception:
-                            try:
-                                rendered.append(str(e))
-                            except Exception:
-                                rendered.append("")
-                    self.log_text = "\n".join(rendered)
-                except Exception:
-                    try:
-                        self.log_text = "\n".join(str(l) for l in logs)
-                    except Exception:
-                        self.log_text = ""
-                if self.log_dialog is not None and self.log_dialog.isVisible():
+                parsed = []
+                for l in logs:
+                    parsed.append(self._format_log_entry(l))
+                self.log_text += "\n" + "\n".join(parsed)
+                # truncate
+                parts = self.log_text.split("\n")
+                if len(parts) > 1000:
+                    self.log_text = "\n".join(parts[-1000:])
+
+                # update log widgets
+                if self.log_dialog and self.log_dialog.isVisible():
                     self.log_dialog.update_log(self.log_text)
+                if self.log_display:
+                    self.log_display.setPlainText(
+                        "\n".join(self.log_text.split("\n")[-15:])
+                    )
 
             if update_ui:
-                # Update timer display
-                minutes = int(self.simulation_time // 60)
-                seconds = int(self.simulation_time % 60)
-                # Timer display (MM:SS) - same in all languages
-                self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
-
-                # Update day/night indicator
+                # Update Control Bar Info
+                self.control_bar.update_time(self.simulation_time)
                 is_day = data.get("is_day", True)
-                self.day_night_label.setText("☀️" if is_day else "🌙")
-
-                # Update live temperature display
+                self.control_bar.update_day_night_icon(is_day)
                 current_temp = stats.get("temperature", 0)
-                temp_color = (
-                    "#88ccff"
-                    if current_temp < 0
-                    else "#ffcc44" if current_temp > 25 else "#ffffff"
-                )
-                try:
-                    from frontend.i18n import _
+                self.control_bar.update_live_info(current_temp, is_day)
 
-                    self.live_temp_label.setText(
-                        _("🌡️ {val}°C").format(val=current_temp)
-                    )
-                except Exception:
-                    self.live_temp_label.setText(f"🌡️ {current_temp}°C")
-                self.live_temp_label.setStyleSheet(
-                    f"color: {temp_color}; padding: 0 10px;"
-                )
-
-                # Update live day/night display
-                is_day = stats.get("is_day", True)
-                if is_day:
-                    self.live_day_night_label.setText(_("☀️ Tag"))
-                    self.live_day_night_label.setStyleSheet(
-                        "color: #ffcc44; padding: 0 10px;"
-                    )
-                else:
-                    self.live_day_night_label.setText(_("🌙 Nacht"))
-                    self.live_day_night_label.setStyleSheet(
-                        "color: #8888ff; padding: 0 10px;"
-                    )
-
-            # --- Stop simulation if all arach are dead ---
-            # Check if all populations are zero
             if all(count == 0 for count in stats.get("species_counts", {}).values()):
                 self.stop_simulation()
 
     def open_log_dialog(self):
-        """Open log popup dialog."""
         if self.log_dialog is None or not self.log_dialog.isVisible():
             self.log_dialog = LogDialog(self.log_text, self)
             self.log_dialog.show()
@@ -2924,654 +721,67 @@ class SimulationScreen(QWidget):
             self.log_dialog.activateWindow()
 
     def on_stats(self):
-        """Show previous simulation statistics if available."""
         self.show_previous_stats()
 
-    def initialize_live_graph(self):
-        """Initialize the live graph widget."""
-        try:
-            import pyqtgraph as pg
-
-            # Prefer speed for live updates: disable antialiasing by default
-            pg.setConfigOptions(antialias=False)
-
-            # Create PlotWidget
-            pw = pg.PlotWidget(background="#1a1a1a")
-            pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
-            pw.getAxis("left").setTextPen("#ffffff")
-            pw.getAxis("bottom").setTextPen("#ffffff")
-            pw.setLabel("left", _("Population"), color="#ffffff", size="9pt")
-            pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="9pt")
-
-            # Lock aspect ratio to square and disable interactions
-            try:
-                vb = pw.getPlotItem().getViewBox()
-                # Do not lock aspect ratio for the live plot to avoid widget
-                # resizing jitter when axis labels/ticks change.
-                # vb.setAspectLocked(True, ratio=1)
-                vb.setMouseEnabled(False, False)
-                try:
-                    vb.setMenuEnabled(False)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-            # Allow live plot to grow taller (fixes vertically squished graphs)
-            try:
-                from PyQt6.QtWidgets import QSizePolicy
-
-                # Give a reasonable minimum height but allow expansion so the
-                # plot can use more vertical space instead of being compressed.
-                # Make live graph slightly smaller to give room for distribution graph
-                pw.setMinimumHeight(LIVE_PLOT_MIN_HEIGHT)
-                try:
-                    # Remove any strict maximum so layouts may expand vertically
-                    pw.setMaximumHeight(16777215)
-                except Exception:
-                    pass
-                pw.setSizePolicy(
-                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-                )
-            except Exception:
-                pass
-
-            # Prepare storage for curves (line style)
-            # ensure curves dict exists
-            self.live_graph_widget = pw
-            self.live_graph_ax = None
-            self.live_curves = {}
-            # Cache last tick/max values to avoid updating axis layout every frame
-            self._live_last_overall_max = None
-            self._live_last_latest_time = None
-
-            # Try to set pixel/font styling for axes and reserve axis sizes
-            try:
-                from PyQt6.QtGui import QFont
-
-                left_axis = pw.getAxis("left")
-                bottom_axis = pw.getAxis("bottom")
-                left_axis.setStyle(tickFont=QFont("Minecraft", 9))
-                bottom_axis.setStyle(tickFont=QFont("Minecraft", 9))
-                # Reserve larger axis sizes so labels have room and the plot
-                # area can expand vertically instead of compressing ticks.
-                try:
-                    # Reduce reserved left axis width for the live graph
-                    left_axis.setWidth(60)
-                except Exception:
-                    pass
-                try:
-                    bottom_axis.setHeight(30)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-            # Ensure graph_container has a layout
-            if self.graph_container.layout() is None:
-                self.graph_container.setLayout(QVBoxLayout())
-            layout = self.graph_container.layout()
-
-            if layout is not None:
-                layout.addWidget(self.live_graph_widget)
-
-                if (
-                    not hasattr(self, "graph_legend_label")
-                    or self.graph_legend_label is None
-                ):
-                    from PyQt6.QtWidgets import QLabel
-
-                    self.graph_legend_label = QLabel()
-                    self.graph_legend_label.setStyleSheet(
-                        "color: #ffffff; font-size: 11px; padding: 4px 0 0 0;"
-                    )
-                    self.graph_legend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    layout.addWidget(self.graph_legend_label)
-
-                if not hasattr(self, "log_display") or self.log_display is None:
-                    from PyQt6.QtWidgets import QPlainTextEdit
-
-                    self.log_display = QPlainTextEdit()
-                    self.log_display.setReadOnly(True)
-                    self.log_display.setStyleSheet(
-                        f"background-color: #222; color: #fff; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px; margin-top: 6px; border: none;"
-                    )
-                    self.log_display.setMinimumHeight(LOG_MIN_HEIGHT)
-                    LogHighlighter(self.log_display.document())
-                    layout.addWidget(self.log_display)
-
-                # (randomizer toggles removed from live graph — moved to final-stats dialog)
-
-            # Update graph immediately
-            self.update_live_graph()
-
-        except Exception:
-            from PyQt6.QtWidgets import QLabel
-
-            label = QLabel("Graph nicht verfügbar (pyqtgraph benötigt)")
-            label.setStyleSheet("color: #ffffff; font-size: 12px;")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout = self.graph_container.layout()
-            if layout is not None:
-                layout.addWidget(label)
-
-    def update_graph_legend(self):
-        """Update the text legend below the graph."""
-        colors = {
-            "Icefang": "#cce6ff",
-            "Crushed_Critters": "#cc9966",
-            "Spores": "#66cc66",
-            "The_Corrupted": "#cc66cc",
-        }
-
-        # Create colored text for each species
-        legend_parts = []
-        for species_name in sorted(self.population_data.keys()):
-            color = colors.get(species_name, "#ffffff")
-            # Replace underscores with spaces for display
-            display_name = species_name.replace("_", " ")
-            legend_parts.append(
-                f'<span style="color: {color}; font-weight: bold;">{display_name}</span>'
-            )
-
-        if legend_parts:
-            self.graph_legend_label.setText(" | ".join(legend_parts))
-        else:
-            self.graph_legend_label.setText("")
-
-    def add_log(self, text: str):
-        """Append a line to the centralized log buffer and update displays.
-
-        Keeps the buffer reasonably sized and updates open log widgets.
-        """
-        try:
-            if not hasattr(self, "log_text") or self.log_text is None:
-                self.log_text = ""
-            # keep single-line entries
-            if text is None:
-                return
-            # append with newline
-            if self.log_text:
-                self.log_text = self.log_text + "\n" + str(text)
-            else:
-                self.log_text = str(text)
-
-            # trim to last 1000 lines
-            parts = self.log_text.split("\n")
-            if len(parts) > 1000:
-                parts = parts[-1000:]
-                self.log_text = "\n".join(parts)
-
-            # update live log display (if present)
-            try:
-                if hasattr(self, "log_display") and self.log_display is not None:
-                    # show last 15 lines
-                    self.log_display.setPlainText("\n".join(parts[-15:]))
-                if self.log_dialog is not None and self.log_dialog.isVisible():
-                    try:
-                        self.log_dialog.update_log(self.log_text)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def _format_log_entry(self, entry):
-        """Return a translated, formatted string for a stored log entry.
-
-        Supports structured entries saved by the backend ({time,msgid,params})
-        and legacy raw strings.
-        """
-        try:
-            from frontend.i18n import _
-
-            class SafeDict(dict):
-                def __missing__(self, key):
-                    return "{" + key + "}"
-
-            # structured entry
-            if isinstance(entry, dict):
-                t = entry.get("time")
-                if "msgid" in entry:
-                    msgid = entry.get("msgid", "")
-                    params = entry.get("params", {}) or {}
-                    try:
-                        text = _(msgid).format_map(SafeDict(params))
-                    except Exception:
-                        # formatting failed; fall back to concatenation
-                        try:
-                            text = _(msgid) + " " + str(params)
-                        except Exception:
-                            text = str(msgid)
-                else:
-                    # raw legacy string
-                    raw = entry.get("raw", "")
-                    try:
-                        text = _(raw)
-                    except Exception:
-                        text = raw
-                # prefix time if available
-                try:
-                    if t is not None:
-                        return f"[t={t}] {text}"
-                except Exception:
-                    pass
-                return text
-            else:
-                # plain string fallback
-                try:
-                    return _(str(entry))
-                except Exception:
-                    return str(entry)
-        except Exception:
-            # absolute fallback: plain representation
-            try:
-                if isinstance(entry, dict) and "raw" in entry:
-                    return str(entry["raw"])
-                if isinstance(entry, dict) and "msgid" in entry:
-                    return str(entry.get("msgid"))
-                return str(entry)
-            except Exception:
-                return ""
-
-    def update_language(self) -> None:
-        """Refresh UI texts when the global language changes."""
-        try:
-            from frontend.i18n import _
-
-            # Main right-side tabs and controls
-            if hasattr(self, "btn_region_tab"):
-                self.btn_region_tab.setText(_("Region"))
-            if hasattr(self, "btn_species_tab"):
-                self.btn_species_tab.setText(_("Spezies"))
-            if hasattr(self, "btn_stats"):
-                self.btn_stats.setText(_("Stats"))
-            if hasattr(self, "btn_log"):
-                self.btn_log.setText(_("Log"))
-            if hasattr(self, "btn_stop"):
-                self.btn_stop.setText(_("Reset/Stop"))
-            # Update top-bar navigation buttons
-            if hasattr(self, "btn_back"):
-                self.btn_back.setText(_("← Back"))
-            if hasattr(self, "btn_exit"):
-                self.btn_exit.setText(_("Exit"))
-
-            # Day/night label: preserve icon and set localized text
-            if hasattr(self, "live_day_night_label"):
-                txt = self.live_day_night_label.text()
-                if "☀️" in txt:
-                    self.live_day_night_label.setText(_("☀️ Tag"))
-                elif "🌙" in txt:
-                    self.live_day_night_label.setText(_("🌙 Nacht"))
-
-            # Notify nested panels
-            if hasattr(self, "species_panel") and hasattr(
-                self.species_panel, "update_language"
-            ):
-                try:
-                    self.species_panel.update_language()
-                except Exception:
-                    pass
-            if hasattr(self, "environment_panel") and hasattr(
-                self.environment_panel, "update_language"
-            ):
-                try:
-                    self.environment_panel.update_language()
-                except Exception:
-                    pass
-            # Re-render backend logs using current language catalog so
-            # previously emitted messages are translated on-the-fly.
-            try:
-                if hasattr(self, "sim_model") and self.sim_model is not None:
-                    logs = getattr(self.sim_model, "logs", []) or []
-                    try:
-                        rendered = []
-                        for entry in logs:
-                            try:
-                                rendered.append(self._format_log_entry(entry))
-                            except Exception:
-                                rendered.append(str(entry))
-                        self.log_text = "\n".join(rendered)
-                    except Exception:
-                        self.log_text = "\n".join(str(l) for l in logs)
-
-                    # update live log display (if present)
-                    try:
-                        parts = self.log_text.split("\n") if self.log_text else []
-                        if (
-                            hasattr(self, "log_display")
-                            and self.log_display is not None
-                        ):
-                            self.log_display.setPlainText("\n".join(parts[-15:]))
-                        if self.log_dialog is not None and self.log_dialog.isVisible():
-                            try:
-                                self.log_dialog.update_log(self.log_text)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def update_live_graph(self):
-        """Update the live population graph with current data using matplotlib."""
-        # Ensure PyQtGraph widget available
-        if not hasattr(self, "live_graph_widget") or self.live_graph_widget is None:
-            return
-
-        # Throttle frequent calls to avoid UI lag; allow forced immediate by bypassing interval
-        try:
-            import time
-
-            now = time.monotonic()
-            if getattr(self, "_last_graph_update", 0.0) and (
-                now - self._last_graph_update
-                < getattr(self, "_graph_update_interval", 0.5)
-            ):
-                return
-            self._last_graph_update = now
-        except Exception:
-            pass
-
-        try:
-            import pyqtgraph as pg
-
-            colors = {
-                "Icefang": "#cce6ff",
-                "Crushed_Critters": "#cc9966",
-                "Spores": "#66cc66",
-                "The_Corrupted": "#cc66cc",
-            }
-
-            enabled_species = set()
-            if hasattr(self, "species_panel") and hasattr(
-                self.species_panel, "get_enabled_species_populations"
-            ):
-                enabled_species = set(
-                    self.species_panel.get_enabled_species_populations().keys()
-                )
-
-            # Ensure live_curves dict exists
-            if not hasattr(self, "live_curves"):
-                self.live_curves = {}
-
-            # Live window length in seconds
-            LIVE_WINDOW = 10
-
-            # Fast-skip: if the population lengths haven't changed since last update,
-            # avoid re-plotting full curves (only update X range).
-            try:
-                snapshot = tuple(
-                    (name, len(self.population_data.get(name, [])))
-                    for name in sorted(self.population_data.keys())
-                )
-                if getattr(self, "_last_pop_snapshot", None) == snapshot:
-                    # update X range quickly (no heavy redraw)
-                    try:
-                        vb = self.live_graph_widget.getPlotItem().getViewBox()
-                        latest = 0
-                        for h in self.population_data.values():
-                            if h:
-                                latest = max(latest, len(h) - 1)
-                        start = max(0, latest - (LIVE_WINDOW - 1))
-                        vb.setXRange(start, latest, padding=0)
-                    except Exception:
-                        pass
-                    return
-                self._last_pop_snapshot = snapshot
-            except Exception:
-                pass
-
-            for species_name, history in self.population_data.items():
-                if enabled_species and species_name not in enabled_species:
-                    # hide curve if exists
-                    if species_name in self.live_curves:
-                        self.live_curves[species_name].setData([], [])
-                    continue
-
-                if not history:
-                    continue
-
-                # population_data is taken from backend population_history (1 entry = 1s)
-                # For live plotting we only draw the most recent LIVE_WINDOW seconds
-                # Use a local copy and append latest instantaneous count (if available)
-                local_hist = list(history)
-                try:
-                    latest_counts = getattr(self, "_latest_species_counts", {}) or {}
-                    if species_name in latest_counts and (
-                        not local_hist
-                        or int(local_hist[-1])
-                        != int(latest_counts.get(species_name, 0))
-                    ):
-                        # append current instantaneous count so the graph reflects current state
-                        local_hist.append(int(latest_counts.get(species_name, 0)))
-                except Exception:
-                    pass
-
-                last_n = min(len(local_hist), LIVE_WINDOW)
-                time_points = [
-                    i for i in range(len(local_hist) - last_n, len(local_hist))
-                ]
-                display_history = local_hist[-last_n:]
-                # Force integer populations for display (round then int)
-                try:
-                    display_history = [int(round(float(v))) for v in display_history]
-                except Exception:
-                    try:
-                        display_history = [int(v) for v in display_history]
-                    except Exception:
-                        pass
-                color = colors.get(species_name, "#ffffff")
-
-                if species_name not in self.live_curves:
-                    try:
-                        pen = pg.mkPen(color=color, width=2)
-                        curve = self.live_graph_widget.plot(
-                            time_points, display_history, pen=pen
-                        )
-                        # Improve performance for streaming data
-                        try:
-                            curve.setClipToView(True)
-                        except Exception:
-                            pass
-                        self.live_curves[species_name] = curve
-                    except Exception:
-                        pass
-                else:
-                    # Update existing curve/scatter with new data
-                    try:
-                        self.live_curves[species_name].setData(
-                            time_points, display_history
-                        )
-                    except Exception:
-                        pass
-
-            # Ensure viewbox aspect lock and set moving window range
-            try:
-                vb = self.live_graph_widget.getPlotItem().getViewBox()
-                # Moving window: show last LIVE_WINDOW seconds
-                try:
-                    latest = 0
-                    for h in self.population_data.values():
-                        if h:
-                            latest = max(latest, len(h) - 1)
-                    start = max(0, latest - (LIVE_WINDOW - 1))
-                    vb.setXRange(start, latest, padding=0)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-            # Update Y-axis ticks/range only when max changes to avoid layout jitter
-            try:
-                left_axis = self.live_graph_widget.getAxis("left")
-                overall_max = 0
-                for h in self.population_data.values():
-                    if h:
-                        try:
-                            overall_max = max(overall_max, int(round(max(h))))
-                        except Exception:
-                            overall_max = max(overall_max, int(max(h)))
-
-                if overall_max != getattr(self, "_live_last_overall_max", None):
-                    # Add 5 population units of headroom above current max
-                    y_max = max(1, overall_max + 5)
-                    # Limit number of Y ticks to avoid vertical crowding
-                    try:
-                        import math
-
-                        step = max(1, int(math.ceil(y_max / 6.0)))
-                    except Exception:
-                        step = 1 if y_max < 10 else 2
-                    ticks = [(i, str(i)) for i in range(0, y_max + 1, step)]
-                    if ticks and ticks[-1][0] != y_max:
-                        ticks.append((y_max, str(y_max)))
-                    try:
-                        left_axis.setTicks([ticks])
-                    except Exception:
-                        pass
-                    try:
-                        vb = self.live_graph_widget.getPlotItem().getViewBox()
-                        vb.setYRange(0, max(1, y_max), padding=0)
-                    except Exception:
-                        pass
-                    self._live_last_overall_max = overall_max
-            except Exception:
-                pass
-
-            # Update bottom-axis ticks only when latest time changes
-            try:
-                bottom_axis = self.live_graph_widget.getAxis("bottom")
-                latest = 0
-                for h in self.population_data.values():
-                    if h:
-                        latest = max(latest, len(h) - 1)
-                if latest != getattr(self, "_live_last_latest_time", None):
-                    # Choose tick spacing based on overall time length so labels
-                    # are not overcrowded. Use minutes for long runs.
-                    if latest <= 20:
-                        step = 1
-                    elif latest <= 60:
-                        step = 5
-                    elif latest <= 180:
-                        step = 30
-                    else:
-                        step = 60
-
-                    ticks = []
-                    for i in range(0, latest + 1, step):
-                        if latest >= 60:
-                            # show minutes only for long timelines
-                            label = f"{int(i // 60)}m"
-                        else:
-                            label = str(i)
-                        ticks.append((i, label))
-                    if not ticks:
-                        ticks = [(0, "0")]
-                    try:
-                        bottom_axis.setTicks([ticks])
-                    except Exception:
-                        pass
-                    self._live_last_latest_time = latest
-            except Exception:
-                pass
-
-            # (randomizer overlay removed from live graph — overlays shown on final-stats dialog)
-
-            self.update_graph_legend()
-
-        except Exception:
-            # If pyqtgraph not available or fails, silently skip graph update
-            return
-
-        # Update log display under the graph
-        if hasattr(self, "log_display") and self.log_display is not None:
-            # Show the last 15 log lines (adjust as needed)
-            log_lines = self.log_text.split("\n")[-15:]
-            # Use plain text; LogHighlighter handles coloring
-            self.log_display.setPlainText("\n".join(log_lines))
-
-        # Update distribution graph (recent random draws)
-        try:
-            if (
-                hasattr(self, "dist_graph_widget")
-                and self.dist_graph_widget is not None
-            ):
-                samples = getattr(self, "rnd_samples", {}) or {}
-                colors = {
-                    "regen": "#66cc66",
-                    "clan_growth": "#66aaff",
-                    "loner_spawn": "#ffcc66",
-                }
-
-                # Ensure curves dict exists
-                if not hasattr(self, "dist_curves"):
-                    self.dist_curves = {}
-
-                for key in ["regen", "clan_growth", "loner_spawn"]:
-                    vals = samples.get(key, [])
-                    if not vals:
-                        # clear existing curve if any
-                        if key in self.dist_curves:
-                            try:
-                                self.dist_curves[key].setData([], [])
-                            except Exception:
-                                pass
-                        continue
-
-                    x = list(range(len(vals)))
-                    y = [float(v) for v in vals]
-                    color = colors.get(key, "#ffffff")
-                    display_names = {
-                        "regen": "Nahrung (Regeneration)",
-                        "clan_growth": "Clanwachstum",
-                        "loner_spawn": "Einzelgänger Spawn",
-                    }
-                    if key not in self.dist_curves:
-                        try:
-                            pen = pg.mkPen(color=color, width=2)
-                            name = display_names.get(key, key)
-                            curve = self.dist_graph_widget.plot(
-                                x, y, pen=pen, name=name
-                            )
-                            try:
-                                curve.setClipToView(True)
-                            except Exception:
-                                pass
-                            self.dist_curves[key] = curve
-                        except Exception:
-                            pass
-                    else:
-                        try:
-                            self.dist_curves[key].setData(x, y)
-                        except Exception:
-                            pass
-
-                # Adjust view range to latest samples
-                try:
-                    vb = self.dist_graph_widget.getPlotItem().getViewBox()
-                    latest = 0
-                    for v in samples.values():
-                        if v:
-                            latest = max(latest, len(v) - 1)
-                    start = max(0, latest - MAX_SIMULATION_TIME)
-                    vb.setXRange(start, latest, padding=0)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
     def on_back(self):
-        """Go back to start screen."""
         self.stop_simulation()
         self.go_to_start()
 
     def on_exit(self):
-        """Exit application."""
-        from PyQt6.QtWidgets import QApplication
-
         self.stop_simulation()
         QApplication.quit()
+
+    def add_log(self, text):
+        if not text:
+            return
+        self.log_text += "\n" + str(text)
+        parts = self.log_text.split("\n")
+        if len(parts) > 1000:
+            self.log_text = "\n".join(parts[-1000:])
+        if self.log_display:
+            self.log_display.setPlainText("\n".join(parts[-15:]))
+        if self.log_dialog and self.log_dialog.isVisible():
+            self.log_dialog.update_log(self.log_text)
+
+    def _format_log_entry(self, entry):
+        # Simplified handling
+        try:
+            if isinstance(entry, dict):
+                t = entry.get("time")
+                msgid = entry.get("msgid", "")
+                params = entry.get("params", {}) or {}
+                # safe format
+                try:
+                    from frontend.i18n import _
+
+                    # Custom format logic if needed or just .format
+                    text = _(msgid).format(**params)
+                except:
+                    text = str(msgid)
+                if t is not None:
+                    return f"[t={t}] {text}"
+                return text
+            return str(entry)
+        except:
+            return str(entry)
+
+    def update_language(self):
+        if hasattr(self, "btn_back"):
+            self.btn_back.setText(_("← Back"))
+        if hasattr(self, "btn_exit"):
+            self.btn_exit.setText(_("Exit"))
+        if hasattr(self, "btn_region_tab"):
+            self.btn_region_tab.setText(_("Region"))
+        if hasattr(self, "btn_species_tab"):
+            self.btn_species_tab.setText(_("Spezies"))
+        if hasattr(self, "btn_stats"):
+            self.btn_stats.setText(_("Stats"))
+        if hasattr(self, "btn_log"):
+            self.btn_log.setText(_("Log"))
+
+        if hasattr(self, "species_panel"):
+            self.species_panel.update_language()
+        if hasattr(self, "environment_panel"):
+            self.environment_panel.update_language()
+        if hasattr(self, "control_bar"):
+            self.control_bar.update_language()

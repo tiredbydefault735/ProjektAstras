@@ -32,8 +32,8 @@ class SimulationMapWidget(QGraphicsView):
         super().__init__()
 
         # Create graphics scene (will resize with viewport)
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
+        self.map_scene = QGraphicsScene()
+        self.setScene(self.map_scene)
 
         # Disable scrollbars
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -165,10 +165,15 @@ class SimulationMapWidget(QGraphicsView):
     def update_background(self) -> None:
         # Remove any previous background pixmap item
         if hasattr(self, "_bg_item") and self._bg_item:
-            self.scene.removeItem(self._bg_item)
+            self.map_scene.removeItem(self._bg_item)
             self._bg_item = None
-        width = self.viewport().width()
-        height = self.viewport().height()
+
+        viewport = self.viewport()
+        if not viewport:
+            return
+
+        width = viewport.width()
+        height = viewport.height()
         if self.bg_pixmap:
             scaled = self.bg_pixmap.scaled(
                 width,
@@ -183,9 +188,9 @@ class SimulationMapWidget(QGraphicsView):
             # the viewport so items use (0,0) origin consistently.
             self._bg_item.setZValue(-100)
             self._bg_item.setPos(0, 0)
-            self.scene.addItem(self._bg_item)
+            self.map_scene.addItem(self._bg_item)
             try:
-                self.scene.setSceneRect(0, 0, width, height)
+                self.map_scene.setSceneRect(0, 0, width, height)
             except Exception:
                 pass
         else:
@@ -197,10 +202,10 @@ class SimulationMapWidget(QGraphicsView):
             rect.setBrush(QColor(255, 255, 255))
             rect.setPen(QPen(Qt.PenStyle.NoPen))
             rect.setZValue(-100)
-            self.scene.addItem(rect)
+            self.map_scene.addItem(rect)
             self._bg_item = rect
             try:
-                self.scene.setSceneRect(0, 0, width, height)
+                self.map_scene.setSceneRect(0, 0, width, height)
             except Exception:
                 pass
 
@@ -285,20 +290,24 @@ class SimulationMapWidget(QGraphicsView):
             return QColor(200, 200, 200, fallback_alpha)
 
         # Remove all items except the background
-        for item in self.scene.items():
+        for item in self.map_scene.items():
             if getattr(self, "_bg_item", None) and item is self._bg_item:
                 continue
-            self.scene.removeItem(item)
+            self.map_scene.removeItem(item)
 
         # Get viewport dimensions (actual display size)
-        width = self.viewport().width()
-        height = self.viewport().height()
+        viewport = self.viewport()
+        if not viewport:
+            return
+
+        width = viewport.width()
+        height = viewport.height()
 
         if width <= 0 or height <= 0:
             return
 
         # Update scene rect to match viewport
-        self.scene.setSceneRect(0, 0, width, height)
+        self.map_scene.setSceneRect(0, 0, width, height)
 
         # Scale from logical coordinates (1200x600) to actual display size
         scale_x = width / 1200.0
@@ -337,11 +346,12 @@ class SimulationMapWidget(QGraphicsView):
                                 Qt.AspectRatioMode.KeepAspectRatio,
                                 Qt.TransformationMode.SmoothTransformation,
                             )
-                            pix = self.scene.addPixmap(scaled)
-                            pix.setOffset(
-                                x - scaled.width() / 2, y - scaled.height() / 2
-                            )
-                            pix.setZValue(0)
+                            pix = self.map_scene.addPixmap(scaled)
+                            if pix:
+                                pix.setOffset(
+                                    x - scaled.width() / 2, y - scaled.height() / 2
+                                )
+                                pix.setZValue(0)
                             continue
                 except Exception:
                     # fall through to circle drawing
@@ -359,7 +369,7 @@ class SimulationMapWidget(QGraphicsView):
 
                 # Kreis für Nahrung (scale up by 2.5)
                 draw_size = max(1, int(size * 2.5))
-                food_circle = self.scene.addEllipse(
+                food_circle = self.map_scene.addEllipse(
                     x - draw_size / 2,
                     y - draw_size / 2,
                     draw_size,
@@ -367,7 +377,8 @@ class SimulationMapWidget(QGraphicsView):
                     pen=QPen(border_color, 2),
                     brush=QBrush(food_color),
                 )
-                food_circle.setZValue(0)  # Hinter allem
+                if food_circle:
+                    food_circle.setZValue(0)  # Hinter allem
 
         # Zeichne Clans (Quadrate mit Population-Text)
         for group in groups_data:
@@ -424,18 +435,19 @@ class SimulationMapWidget(QGraphicsView):
                                 Qt.AspectRatioMode.KeepAspectRatio,
                                 Qt.TransformationMode.SmoothTransformation,
                             )
-                            pix = self.scene.addPixmap(scaled)
-                            pix.setOffset(
-                                x - scaled.width() / 2, y - scaled.height() / 2
-                            )
-                            pix.setZValue(0)
+                            pix = self.map_scene.addPixmap(scaled)
+                            if pix:
+                                pix.setOffset(
+                                    x - scaled.width() / 2, y - scaled.height() / 2
+                                )
+                                pix.setZValue(0)
                             drawn_with_icon = True
                 except Exception:
                     drawn_with_icon = False
 
                 if not drawn_with_icon:
                     # Quadrat
-                    rect = self.scene.addRect(
+                    rect = self.map_scene.addRect(
                         x - size / 2,
                         y - size / 2,
                         size,
@@ -443,7 +455,8 @@ class SimulationMapWidget(QGraphicsView):
                         pen=QPen(border_color, 2),
                         brush=QBrush(rgb_color),
                     )
-                    rect.setZValue(0)
+                    if rect:
+                        rect.setZValue(0)
 
                 # Population als Text (overlay)
                 text = QGraphicsTextItem(str(pop))
@@ -457,7 +470,7 @@ class SimulationMapWidget(QGraphicsView):
                 text_height = text.boundingRect().height()
                 text.setPos(x - text_width / 2, y - text_height / 2)
                 text.setZValue(1)
-                self.scene.addItem(text)
+                self.map_scene.addItem(text)
 
                 # record display size for species so loners can be sized relative to clan
                 try:
@@ -528,18 +541,19 @@ class SimulationMapWidget(QGraphicsView):
                                 Qt.AspectRatioMode.KeepAspectRatio,
                                 Qt.TransformationMode.SmoothTransformation,
                             )
-                            pix = self.scene.addPixmap(scaled)
-                            pix.setOffset(
-                                x - scaled.width() / 2, y - scaled.height() / 2
-                            )
-                            pix.setZValue(2)
+                            pix = self.map_scene.addPixmap(scaled)
+                            if pix:
+                                pix.setOffset(
+                                    x - scaled.width() / 2, y - scaled.height() / 2
+                                )
+                                pix.setZValue(2)
                             drawn_icon = True
                 except Exception:
                     drawn_icon = False
 
                 if not drawn_icon:
                     border_color = QColor(50, 50, 50, 255)
-                    circle = self.scene.addEllipse(
+                    circle = self.map_scene.addEllipse(
                         x - display_size / 2,
                         y - display_size / 2,
                         display_size,
@@ -547,7 +561,8 @@ class SimulationMapWidget(QGraphicsView):
                         pen=QPen(border_color, 2),
                         brush=QBrush(rgb_color),
                     )
-                    circle.setZValue(2)
+                    if circle:
+                        circle.setZValue(2)
 
         # Fließender Dunkelheitseffekt basierend auf Tageszeit
         # transition_progress: 0.0 = Nacht, 1.0 = Tag
@@ -556,7 +571,7 @@ class SimulationMapWidget(QGraphicsView):
 
         if darkness > 0:
             # Use width and height from scene rect (1200x600) for consistent coverage
-            overlay = self.scene.addRect(
+            overlay = self.map_scene.addRect(
                 0,
                 0,
                 width,
@@ -564,11 +579,12 @@ class SimulationMapWidget(QGraphicsView):
                 pen=QPen(Qt.PenStyle.NoPen),
                 brush=QBrush(QColor(0, 0, 0, darkness)),
             )
-            overlay.setZValue(10)  # Über allem
+            if overlay:
+                overlay.setZValue(10)  # Über allem
 
     def clear_map(self) -> None:
         """Lösche Map."""
-        self.scene.clear()
+        self.map_scene.clear()
 
     def preview_food_sources(
         self,
@@ -589,8 +605,11 @@ class SimulationMapWidget(QGraphicsView):
             # If viewport not yet laid out or still very small, retry shortly
             # to avoid preview items clustering at the top-left due to
             # incorrect scaling while the widget is still being laid out.
-            width = self.viewport().width()
-            height = self.viewport().height()
+            viewport = self.viewport()
+            if not viewport:
+                return
+            width = viewport.width()
+            height = viewport.height()
             if width <= 0 or height <= 0 or width < 200 or height < 120:
                 QTimer.singleShot(
                     80,

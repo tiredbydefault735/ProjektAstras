@@ -147,7 +147,7 @@ def process_food_seeking(sim: SimulationModel) -> None:
                                 if hasattr(sim, "rnd_history"):
                                     sim.rnd_history.setdefault(
                                         "clan_growth", []
-                                    ).append(actual)
+                                    ).append((sim.time, actual))
                                     if (
                                         len(sim.rnd_history["clan_growth"])
                                         > RND_HISTORY_LIMIT
@@ -443,7 +443,7 @@ def process_interactions(sim: SimulationModel) -> None:
                                             if hasattr(sim, "rnd_history"):
                                                 sim.rnd_history.setdefault(
                                                     "clan_growth", []
-                                                ).append(actual)
+                                                ).append((sim.time, actual))
                                                 if (
                                                     len(sim.rnd_history["clan_growth"])
                                                     > RND_HISTORY_TRIM_THRESHOLD

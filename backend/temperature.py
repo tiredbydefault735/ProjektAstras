@@ -75,7 +75,7 @@ def update_and_apply(sim: SimulationModel) -> None:
     for food_source in sim.food_sources:
         regen = food_source.regenerate()
         if regen and hasattr(sim, "rnd_history"):
-            sim.rnd_history.setdefault("regen", []).append(regen)
+            sim.rnd_history.setdefault("regen", []).append((sim.time, regen))
             if len(sim.rnd_history["regen"]) > RND_HISTORY_LIMIT:
                 sim.rnd_history["regen"] = sim.rnd_history["regen"][-RND_HISTORY_LIMIT:]
 

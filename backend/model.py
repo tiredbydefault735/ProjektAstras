@@ -431,9 +431,9 @@ class SimulationModel:
         self.loners: List[Loner] = []
         # Recent random draws for visualization (kept as short lists)
         self.rnd_history: Dict[str, List[Any]] = {
-            "regen": [],  # food regeneration amounts
-            "clan_growth": [],  # growth increments from friendly encounters
-            "loner_spawn": [],  # spawn counts per spawn event
+            "regen": [],  # list of (time, amount)
+            "clan_growth": [],  # list of (time, amount)
+            "loner_spawn": [],  # list of (time, count)
         }
 
         # Ensure map dimensions are always set before use

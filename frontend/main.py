@@ -5,6 +5,10 @@ Main application entry point.
 
 from __future__ import annotations
 import sys
+
+# Prevent .pyc files (__pycache__) from being generated
+sys.dont_write_bytecode = True
+
 import logging
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Any
@@ -172,16 +176,16 @@ class ArachfaraApp(QMainWindow):
         except Exception:
             pass
 
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def closeEvent(self, a0: Optional[QCloseEvent]) -> None:
         """Handle window close event.
 
         Stops the simulation if it is running.
 
-        @param event: The close event
+        @param a0: The close event
         """
         if self.simulation_screen.is_running:
             self.simulation_screen.stop_simulation()
-        super().closeEvent(event)
+        super().closeEvent(a0)
 
     def _on_screen_changed(self, index: int) -> None:
         """Called when the stacked widget changes visible screen.
@@ -197,7 +201,7 @@ class ArachfaraApp(QMainWindow):
                 return
             if hasattr(widget, "update_language"):
                 try:
-                    widget.update_language()
+                    getattr(widget, "update_language")()
                 except Exception:
                     pass
             # Also refresh known child panels on SimulationScreen for immediate update
