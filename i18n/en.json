@@ -75,7 +75,6 @@
     "🌡️ Temperatur: {val}°C": "🌡️ Temperature: {val}°C",
     "❄️ {species} Einzelgänger stirbt an Temperatur ({val}°C)!": "❄️ {species} loner dies from temperature ({val}°C)!",
     "☠️ {species} Einzelgänger verhungert!": "☠️ {species} loner starved to death!",
-    "🍽️ {species} Clan #{clan_id} isst {consumed} Food (+{hp_gain} HP)": "🍽️ {species} clan #{clan_id} eats {consumed} food (+{hp_gain} HP)",
     "🌱 {species} Clan #{clan_id} wächst nach Essen (+{increase} Mitglieder)": "🌱 {species} clan #{clan_id} grows after eating (+{increase} members)",
     "🍽️ {species} Einzelgänger isst {consumed} Food (+{hp_gain} HP)": "🍽️ {species} loner eats {consumed} food (+{hp_gain} HP)"
     ,

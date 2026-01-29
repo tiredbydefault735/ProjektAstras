@@ -145,7 +145,21 @@ from backend.entities import FoodSource, Loner, Clan
 
 
 class SpeciesGroup:
-    """Verwaltet alle Clans einer Spezies."""
+    """Manages all clans of a specific species.
+
+    @ivar env: The SimPy environment
+    @ivar name: Name of the species
+    @ivar color: Color representation
+    @ivar max_members: Max members per clan
+    @ivar hp_per_member: HP per clan member
+    @ivar food_intake: Food intake per member
+    @ivar can_cannibalize: Whether species can cannibalize
+    @ivar map_width: Width of the map
+    @ivar map_height: Height of the map
+    @ivar max_clans: Maximum number of clans allowed
+    @ivar clans: List of active clans
+    @ivar next_clan_id: Counter for generating clan IDs
+    """
 
     def __init__(
         self,
@@ -160,6 +174,19 @@ class SpeciesGroup:
         map_width: float,
         map_height: float,
     ) -> None:
+        """Initialize the species group.
+
+        @param env: SimPy environment
+        @param name: Species name
+        @param start_population: Initial population count
+        @param color: Species color
+        @param max_members: Max clan size
+        @param hp_per_member: Health per member
+        @param food_intake: Food consumption rate
+        @param can_cannibalize: Cannibalism flag
+        @param map_width: Map width
+        @param map_height: Map height
+        """
         self.env: simpy.Environment = env
         self.name: str = name
         self.color: str = color
@@ -196,6 +223,12 @@ class SpeciesGroup:
         self.process = env.process(self.live())
 
     def live(self) -> Generator[simpy.events.Event, None, None]:
+        """Lifecycle process for the species group.
+
+        Updates all clans in the group at each simulation step.
+
+        @return: A generator for SimPy events
+        """
         while True:
             yield self.env.timeout(SIM_STEP_TIMEOUT)
             is_day = getattr(self.env, "sim_model", None) and getattr(
@@ -293,20 +326,35 @@ class SpeciesGroup:
                             )
                         )
                     except Exception:
+                        logger.exception("Failed to log clan split")
                         pass
 
+
 class SimulationModel:
-    def add_log(self, message: Union[str, Tuple[str, Dict[str, Any]], Dict[str, Any]]) -> None:
-        """Log-Nachricht hinzufügen.
+    """Main model controlling the simulation state and logic.
 
-        Accepts either:
-          - a plain string (legacy), or
-          - a tuple/list (msgid, params_dict) where msgid is a translation key
-            present in the JSON catalog and params_dict contains simple values
-            for formatting.
+    @ivar env: SimPy environment
+    @ivar time: Current simulation time
+    @ivar groups: List of species groups
+    @ivar loners: List of independent loner entities
+    @ivar food_sources: List of food sources
+    @ivar rnd_history: History of random values for analysis
+    @ivar map_width: Width of the simulation area
+    @ivar map_height: Height of the simulation area
+    @ivar grid_cell_size: Size of spatial grid cells
+    @ivar stats: Statistics dictionary
+    @ivar base_temperature: Base environmental temperature
+    @ivar current_temperature: Current effective temperature
+    @ivar is_day: Day/Night flag
+    """
 
-        Stored log entries are structured dicts so the frontend can translate
-        and format them at display time using the JSON translations.
+    def add_log(
+        self, message: Union[str, Tuple[str, Dict[str, Any]], Dict[str, Any]]
+    ) -> None:
+        """Add a log entry to the simulation logs.
+
+        @param message: The message to log. Can be a string, a tuple (msgid, params),
+                        or a dict with 'msgid' and 'params'.
         """
         t = getattr(self, "time", 0)
         # ensure logs container exists
@@ -336,6 +384,7 @@ class SimulationModel:
                 # fallback: store raw string (legacy behavior)
                 entry = {"time": t, "raw": str(message)}
         except Exception:
+            logger.exception("Error processing log message")
             # absolute fallback
             entry = {"time": t, "raw": str(message)}
 
@@ -355,7 +404,18 @@ class SimulationModel:
         initial_food_positions: Optional[List[Dict[str, float]]] = None,
         rng_seed: Optional[int] = None,
     ) -> None:
-        """Initialisiere Simulation."""
+        """Initialize simulation environment and entities.
+
+        @param species_config: Configuration dictionary for species
+        @param population_overrides: Dictionary mapping species names to initial population counts
+        @param food_places: Number of food sources to generate
+        @param food_amount: Amount of food per source
+        @param start_temperature: Initial temperature (optional)
+        @param start_is_day: Initial time of day (True for day)
+        @param region_name: Name of the region for modifiers
+        @param initial_food_positions: Optional list of fixed food positions
+        @param rng_seed: Random number generator seed
+        """
 
         # Re-initialize SimPy environment for each setup
         self.env = simpy.Environment()
@@ -363,6 +423,7 @@ class SimulationModel:
         try:
             setattr(self.env, "sim_model", self)
         except Exception:
+            logger.exception("Failed to set sim_model on environment")
             pass
         # Ensure time exists before any logging
         self.time = 0
@@ -431,7 +492,12 @@ class SimulationModel:
             try:
                 random.seed(rng_seed)
             except Exception:
+                logger.exception(f"Failed to set random seed: {rng_seed}")
                 pass
+        else:
+            # Explicitly reset RNG to system entropy to avoid inheriting
+            # a fixed seed state from a previous run within the same process.
+            random.seed()
 
         # Farben für Spezies
         color_map = {
@@ -713,8 +779,12 @@ class SimulationModel:
             self.stats["deaths"]["combat"][species_name] = 0
             self.stats["deaths"]["starvation"][species_name] = 0
             self.stats["deaths"]["temperature"][species_name] = 0
+
     def _calculate_transition_progress(self) -> float:
-        """Calculate transition progress: 0.0 = full night, 1.0 = full day."""
+        """Calculate transition progress between day and night.
+
+        @return: Progress value (0.0 = full night, 1.0 = full day)
+        """
         if not self.in_transition:
             # Not in transition - return stable value
             return 1.0 if self.is_day else 0.0
@@ -731,6 +801,10 @@ class SimulationModel:
 
     # --- Spatial grid helpers ---
     def _build_spatial_grid(self) -> None:
+        """Rebuild the spatial grid with current entity positions.
+
+        Delegates to backend.spatial.SpatialGrid.
+        """
         # Delegate grid building to SpatialGrid helper
         from backend.spatial import SpatialGrid
 
@@ -745,7 +819,21 @@ class SimulationModel:
         )
         self._grid = self._spatial.grid
 
-    def _nearby_candidates(self, x: float, y: float, radius: float, kinds: Tuple[str, ...] = ("clans", "loners", "food")) -> List[Any]:
+    def _nearby_candidates(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+        kinds: Tuple[str, ...] = ("clans", "loners", "food"),
+    ) -> List[Any]:
+        """Find candidates near a given position.
+
+        @param x: Center X coordinate
+        @param y: Center Y coordinate
+        @param radius: Search radius
+        @param kinds: Tuple of strings specifying what to look for ("clans", "loners", "food")
+        @return: List of found entities
+        """
         # Delegate nearby-candidate lookup to SpatialGrid
         if not hasattr(self, "_spatial"):
             from backend.spatial import SpatialGrid
@@ -758,16 +846,31 @@ class SimulationModel:
         return self._spatial.nearby_candidates(x, y, radius, kinds)
 
     def _process_food_seeking(self) -> None:
+        """Execute food seeking behavior for clans.
+
+        Delegates to backend.processors.process_food_seeking.
+        """
         from backend.processors import process_food_seeking
 
         process_food_seeking(self)
 
     def _process_interactions(self) -> None:
+        """Execute interaction logic between entities.
+
+        Delegates to backend.processors.process_interactions.
+        """
         from backend.processors import process_interactions
 
         process_interactions(self)
 
     def step(self) -> Dict[str, Any]:
+        """Execute one simulation step.
+
+        Advanced the SimPy environment, updates entities, processes interactions,
+        and collects statistics.
+
+        @return: Dictionary containing the current state snapshot and statistics
+        """
 
         # Spawn loners (delegated)
         try:
@@ -775,6 +878,7 @@ class SimulationModel:
 
             spawn_loners(self)
         except Exception:
+            logger.exception("Error during loner spawning")
             # fallback: no-op but avoid breaking step
             pass
         """Simulationsschritt."""
@@ -806,6 +910,7 @@ class SimulationModel:
 
             update_and_apply(self)
         except Exception:
+            logger.exception("Error during temperature update")
             # keep step robust on delegate failures
             pass
 
@@ -823,6 +928,7 @@ class SimulationModel:
 
             snapshot = collect_simulation_snapshot(self)
         except Exception:
+            logger.exception("Error collecting simulation snapshot")
             snapshot = {
                 "groups": [],
                 "loners": [],
@@ -845,15 +951,31 @@ class SimulationModel:
         }
 
     def _process_loner_clan_formation(self) -> None:
+        """Process logic for loners forming new clans.
+
+        Delegates to backend.processors.process_loner_clan_formation.
+        """
         from backend.processors import process_loner_clan_formation
 
         process_loner_clan_formation(self)
 
     def get_final_stats(self) -> Dict[str, Any]:
-        """Get final statistics for end of simulation."""
+        """Retrieve final statistics at the end of simulation.
+
+        @return: Dictionary of simulation statistics including species counts,
+                 deaths, max clans, etc.
+        """
         # Update max clans count
         current_clans = sum(len(g.clans) for g in self.groups)
         self.stats["max_clans"] = max(self.stats["max_clans"], current_clans)
+
+        # Update final species population counts
+        if hasattr(self, "groups") and hasattr(self, "loners"):
+            for group in self.groups:
+                species_name = group.name
+                clan_pop = sum(c.population for c in group.clans)
+                loner_pop = sum(1 for l in self.loners if l.species == species_name)
+                self.stats["species_counts"][species_name] = clan_pop + loner_pop
 
         return {
             "species_counts": self.stats["species_counts"],
@@ -867,25 +989,69 @@ class SimulationModel:
         }
 
     def set_temperature(self, temp: float) -> None:
-        """Set temperature."""
-        pass
+        """Set the simulation base temperature.
+
+        @param temp: New temperature value
+        """
+        self.base_temperature = temp
+        # Update current immediately to reflect choice
+        self.current_temperature = self.base_temperature + self.day_night_temp_offset
+        self.stats["temperature"] = round(
+            self.current_temperature, TEMPERATURE_PRECISION
+        )
+
+    def inject_chaos(self) -> None:
+        """Inject entropy into the random number generator.
+
+        This breaks the deterministic chain of the initial seed, allowing
+        the simulation to diverge into a new random path.
+        """
+        import random
+
+        random.seed()  # Re-seed with system time/entropy
+
+        # Also force a small immediate event to give feedback
+        # e.g. Randomize all loner directions immediately
+        for loner in self.loners:
+            import math
+
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(*LONER_SPEED_INIT_RANGE)
+            loner.vx = math.cos(angle) * speed
+            loner.vy = math.sin(angle) * speed
+
+        self.add_log(
+            ("🎲 Zufalls-Impuls aktiviert! Das Schicksal wurde neu gewürfelt.", {})
+        )
 
     def set_food_level(self, level: float) -> None:
-        """Set food level."""
+        """Set the food level.
+
+        @param level: New food level
+        """
         pass
 
     def set_day_night(self, is_day: bool) -> None:
-        """Set day/night."""
+        """Set the time of day.
+
+        @param is_day: True for day, False for night
+        """
         pass
 
     def set_loner_speed(self, multiplier: float) -> None:
-        """Set loner speed multiplier (0.5 to 2.0)."""
+        """Set loner speed multiplier.
+
+        @param multiplier: Speed multiplier (clamped between limits)
+        """
         self.loner_speed_multiplier = max(
             SPEED_MULT_MIN, min(SPEED_MULT_MAX, multiplier)
         )
 
     def set_clan_speed(self, multiplier: float) -> None:
-        """Set clan speed multiplier (0.5 to 2.0)."""
+        """Set clan speed multiplier.
+
+        @param multiplier: Speed multiplier (clamped between limits)
+        """
         self.clan_speed_multiplier = max(
             SPEED_MULT_MIN, min(SPEED_MULT_MAX, multiplier)
         )

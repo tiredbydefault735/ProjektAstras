@@ -20,7 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def process_food_seeking(sim: SimulationModel) -> None:
-    """Nahrungssuche und Essen (extracted)."""
+    """Implement food seeking behavior for clans and loners.
+
+    Handles movement towards food or prey, consumption, and hunger updates.
+
+    @param sim: The simulation model instance
+    """
     # Clans suchen und essen Nahrung
     for group in sim.groups:
         for clan in group.clans:
@@ -110,17 +115,8 @@ def process_food_seeking(sim: SimulationModel) -> None:
                     clan.hp_per_member = min(
                         clan.hp_per_member + (consumed * HP_PER_FOOD), max_hp
                     )
-                    sim.add_log(
-                        (
-                            "🍽️ {species} Clan #{clan_id} isst {consumed} Food (+{hp_gain} HP)",
-                            {
-                                "species": group.name,
-                                "clan_id": clan.clan_id,
-                                "consumed": consumed,
-                                "hp_gain": int(clan.hp_per_member - old_hp),
-                            },
-                        )
-                    )
+                    # Log removed per user request
+                    pass
 
                     try:
                         growth_chance = FRIENDLY_GROWTH_CHANCE_DEFAULT
@@ -258,20 +254,17 @@ def process_food_seeking(sim: SimulationModel) -> None:
                 )
                 old_hp = loner.hp
                 loner.hp = min(loner.hp + (consumed * HP_PER_FOOD), loner.max_hp)
-                sim.add_log(
-                    (
-                        "🍽️ {species} Einzelgänger isst {consumed} Food (+{hp_gain} HP)",
-                        {
-                            "species": loner.species,
-                            "consumed": consumed,
-                            "hp_gain": int(loner.hp - old_hp),
-                        },
-                    )
-                )
+                # Log removed per user request
+                pass
 
 
 def process_interactions(sim: SimulationModel) -> None:
-    """Prozessiere alle Interaktionen zwischen Clans und Loners (extracted)."""
+    """Process interactions between entities (clans and loners).
+
+    Handles movement (combat/fleeing/friendly), damage dealing, and recruiting.
+
+    @param sim: The simulation model instance
+    """
     if not hasattr(sim, "hunt_log_timer"):
         sim.hunt_log_timer = {}
 
@@ -329,18 +322,18 @@ def process_interactions(sim: SimulationModel) -> None:
                             >= HUNT_LOG_COOLDOWN
                         ):
                             sim.hunt_log_timer[hunt_key] = sim.time
-                            sim.add_log(
-                                (
-                                    "🎯 {attacker} Clan #{att_id} jagt {target} Clan #{tgt_id}! (Distanz: {dist}px)",
-                                    {
-                                        "attacker": group1.name,
-                                        "att_id": clan1.clan_id,
-                                        "target": group2.name,
-                                        "tgt_id": clan2.clan_id,
-                                        "dist": int(math.sqrt(dist_sq)),
-                                    },
-                                )
-                            )
+                            # sim.add_log(
+                            #     (
+                            #         "🎯 {attacker} Clan #{att_id} jagt {target} Clan #{tgt_id}! (Distanz: {dist}px)",
+                            #         {
+                            #             "attacker": group1.name,
+                            #             "att_id": clan1.clan_id,
+                            #             "target": group2.name,
+                            #             "tgt_id": clan2.clan_id,
+                            #             "dist": int(math.sqrt(dist_sq)),
+                            #         },
+                            #     )
+                            # )
 
                     if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
                         if interaction == "Aggressiv":
@@ -502,17 +495,17 @@ def process_interactions(sim: SimulationModel) -> None:
                         or sim.time - sim.hunt_log_timer[hunt_key] >= HUNT_LOG_COOLDOWN
                     ):
                         sim.hunt_log_timer[hunt_key] = sim.time
-                        sim.add_log(
-                            (
-                                "🎯 {attacker} Clan #{att_id} jagt {loner_species} Einzelgänger! (Distanz: {dist}px)",
-                                {
-                                    "attacker": group.name,
-                                    "att_id": clan.clan_id,
-                                    "loner_species": loner.species,
-                                    "dist": int(math.sqrt(dist_sq)),
-                                },
-                            )
-                        )
+                        # sim.add_log(
+                        #     (
+                        #         "🎯 {attacker} Clan #{att_id} jagt {loner_species} Einzelgänger! (Distanz: {dist}px)",
+                        #         {
+                        #             "attacker": group.name,
+                        #             "att_id": clan.clan_id,
+                        #             "loner_species": loner.species,
+                        #             "dist": int(math.sqrt(dist_sq)),
+                        #         },
+                        #     )
+                        # )
 
                 if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
                     if interaction == "Aggressiv":
@@ -635,7 +628,12 @@ def process_interactions(sim: SimulationModel) -> None:
 
 
 def process_loner_clan_formation(sim: SimulationModel) -> None:
-    """Einzelgänger können sich zu einem neuen Clan zusammenschließen (extracted)."""
+    """Check for and execute formation of new clans from loners.
+
+    If enough loners of the same species are close to each other, they may form a new clan.
+
+    @param sim: The simulation model instance
+    """
     species_loners = {}
     for loner in sim.loners:
         species_loners.setdefault(loner.species, []).append(loner)
@@ -669,7 +667,7 @@ def process_loner_clan_formation(sim: SimulationModel) -> None:
                 center_x = sum(l.x for l in nearby_loners) / len(nearby_loners)
                 center_y = sum(l.y for l in nearby_loners) / len(nearby_loners)
                 new_clan = Clan(
-                    group.next_clan_id,
+                    str(group.next_clan_id),
                     species_name,
                     center_x,
                     center_y,

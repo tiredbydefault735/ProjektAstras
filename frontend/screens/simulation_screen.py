@@ -259,6 +259,7 @@ class StatsDialog(QDialog):
                         else final_count
                     )
                 except Exception:
+                    logger.exception("Error calculating peak population")
                     peak = final_count
             text += f"• {species}: {final_count} / {peak}<br>"
 
@@ -268,23 +269,27 @@ class StatsDialog(QDialog):
                 sum(int(v) for v in species_counts.values()) if species_counts else 0
             )
         except Exception:
+            logger.exception("Error calculating total_current")
             total_current = 0
         deaths = stats.get("deaths", {}) or {}
         try:
             total_combat = sum(int(v) for v in deaths.get("combat", {}).values())
         except Exception:
+            logger.exception("Error calculating total_combat")
             total_combat = 0
         try:
             total_starvation = sum(
                 int(v) for v in deaths.get("starvation", {}).values()
             )
         except Exception:
+            logger.exception("Error calculating total_starvation")
             total_starvation = 0
         try:
             total_temperature = sum(
                 int(v) for v in deaths.get("temperature", {}).values()
             )
         except Exception:
+            logger.exception("Error calculating total_temperature")
             total_temperature = 0
 
         text += f"<br><b>{_('Insgesamt im Spiel:')}</b> {total_current}<br>"
@@ -310,9 +315,11 @@ class StatsDialog(QDialog):
                             else int(species_counts.get(species, 0))
                         )
                     except Exception:
+                        logger.exception(f"Error calculating peak for {species}")
                         peak_val = int(species_counts.get(species, 0))
                 text += f"• {species}: {peak_val}<br>"
         except Exception:
+            logger.exception("Error in peak population section")
             pass
 
         # Combat deaths
@@ -338,6 +345,7 @@ class StatsDialog(QDialog):
         try:
             self._stats = stats
         except Exception:
+            logger.exception("Error storing stats")
             self._stats = {}
 
         # Add a short summary of randomizer samples (helps debugging missing events)
@@ -349,18 +357,21 @@ class StatsDialog(QDialog):
             try:
                 regen_sum = sum(int(v) for v in rnd.get("regen", []) if v is not None)
             except Exception:
+                logger.exception("Error calculating regen_sum")
                 regen_sum = 0
             try:
                 clan_sum = sum(
                     int(v) for v in rnd.get("clan_growth", []) if v is not None
                 )
             except Exception:
+                logger.exception("Error calculating clan_sum")
                 clan_sum = 0
             try:
                 loner_sum = sum(
                     int(v) for v in rnd.get("loner_spawn", []) if v is not None
                 )
             except Exception:
+                logger.exception("Error calculating loner_sum")
                 loner_sum = 0
 
             text += (
@@ -370,6 +381,7 @@ class StatsDialog(QDialog):
                 f"• {_('Einzelgänger Spawn')}: {loner_count} ({loner_sum})<br>"
             )
         except Exception:
+            logger.exception("Error processing randomizer samples")
             pass
 
         stats_text.setText(text)
@@ -938,9 +950,28 @@ class StatsDialog(QDialog):
             # rebuild the main text area using stored stats
             try:
                 stats = getattr(self, "_stats", {})
-                text = "<b>" + _("Spezies im Spiel:") + "</b><br>"
-                for species, count in stats.get("species_counts", {}).items():
-                    text += f"• {species}: {count}<br>"
+                # Build stats string (match logic from __init__ to show peaks)
+                text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
+                species_counts = stats.get("species_counts", {}) or {}
+                population_history = stats.get("population_history", {}) or {}
+                all_species = set(
+                    list(species_counts.keys()) + list(population_history.keys())
+                )
+                for species in sorted(all_species):
+                    final_count = int(species_counts.get(species, 0))
+                    hist = population_history.get(species, []) or []
+                    try:
+                        peak = int(max(hist)) if hist else final_count
+                    except Exception:
+                        try:
+                            peak = (
+                                int(max([int(round(float(v))) for v in hist]))
+                                if hist
+                                else final_count
+                            )
+                        except Exception:
+                            peak = final_count
+                    text += f"• {species}: {final_count} / {peak}<br>"
                 text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
                 for species, count in stats.get("deaths", {}).get("combat", {}).items():
                     text += f"• {species}: {count}<br>"
@@ -1062,9 +1093,23 @@ class LogDialog(QDialog):
 
 
 class SpeciesPanel(QWidget):
-    """Species panel: subspecies controls."""
+    """Subspecies controls panel.
+
+    @ivar color_preset: Active color preset
+    @ivar species_config: Configuration dictionary for species
+    @ivar species_checkboxes: Checkboxes for enabling/disabling species
+    @ivar loner_speed_sliders: Sliders for loner speed
+    @ivar clan_speed_sliders: Sliders for clan speed
+    @ivar member_sliders: Sliders for initial member count
+    @ivar member_value_labels: Labels displaying slider values
+    """
 
     def __init__(self, species_config, color_preset=None):
+        """Initialize the species panel.
+
+        @param species_config: Dictionary containing species configuration
+        @param color_preset: Optional color preset to apply
+        """
         super().__init__()
         self.color_preset = color_preset
         self.species_config = species_config
@@ -1328,7 +1373,15 @@ class SpeciesPanel(QWidget):
 
 
 class EnvironmentPanel(QWidget):
-    """Region panel: environment controls."""
+    """Region environment controls panel.
+
+    @ivar color_preset: Active color preset
+    @ivar map_widget: Reference to the map widget
+    @ivar species_config: Species configuration
+    @ivar species_panel: Reference to species panel
+    @ivar current_food_level: Current food level setting
+    @ivar region_config: Loaded region configuration data
+    """
 
     def __init__(
         self,
@@ -1337,6 +1390,13 @@ class EnvironmentPanel(QWidget):
         species_config=None,
         species_panel=None,
     ):
+        """Initialize the environment panel.
+
+        @param color_preset: Optional color preset
+        @param map_widget: Optional reference to simulation map widget
+        @param species_config: Optional species configuration dict
+        @param species_panel: Optional reference to species panel
+        """
         super().__init__()
         self.color_preset = color_preset
         self.map_widget = map_widget  # Reference to map widget for updating background
@@ -1350,7 +1410,7 @@ class EnvironmentPanel(QWidget):
         self.region_config = {}
         try:
             region_json_path = get_static_path("data/region.json")
-            with open(region_json_path, "r") as f:
+            with open(region_json_path, "r", encoding="utf-8") as f:
                 self.region_config = json.load(f)
         except Exception as e:
             logger.warning(f"Could not load region.json: {e}")
@@ -1667,7 +1727,12 @@ class EnvironmentPanel(QWidget):
                 try:
                     # create a deterministic seed for preview so positions
                     # remain consistent when the simulation starts
-                    self._pending_food_seed = hash((v, amount)) & 0xFFFFFFFF
+                    import random
+
+                    random_modifier = random.randint(0, 999999)
+                    self._pending_food_seed = (
+                        hash((v, amount)) ^ random_modifier
+                    ) & 0xFFFFFFFF
                     self.map_widget.preview_food_sources(
                         v,
                         amount,
@@ -1934,26 +1999,71 @@ class EnvironmentPanel(QWidget):
 
 
 class SimulationScreen(QWidget):
-    def show_final_stats(self) -> None:
-        """Show final statistics dialog and save stats for later viewing."""
-        if self.sim_model:
+    """Main simulation screen view with map and controls.
+
+    @ivar go_to_start: Callback to return to start screen
+    @ivar color_preset: Active color preset
+    @ivar is_running: Boolean flag indicating if simulation is active
+    @ivar sim_model: The simulation backend model instance
+    @ivar last_stats: Stores statistics from the last finished simulation
+    """
+
+    def set_auto_run_config(self, options: Dict[str, Any]) -> None:
+        """Set configuration for automated run."""
+        self.auto_options = options
+        if self.auto_options.get("steps"):
+            # Convert steps to seconds (0.1s per step)
+            self.max_simulation_time = self.auto_options["steps"] * 0.1
+
+    def show_final_stats(self, external_stats: Optional[Dict[str, Any]] = None) -> None:
+        """Show final statistics dialog and save stats for later viewing.
+
+        @param external_stats: Optional stats dictionary to use instead of querying sim_model (e.g. if model destroyed)
+        """
+        stats = None
+        if external_stats:
+            stats = external_stats
+        elif self.sim_model:
             stats = self.sim_model.get_final_stats()
+
+        if stats:
             # If backend snapshot somehow contains all-zero counts, compute live counts as a fallback
-            try:
-                sc = stats.get("species_counts", {}) or {}
-                if sc and all(int(v) == 0 for v in sc.values()):
-                    live_counts = {}
-                    try:
-                        for g in self.sim_model.groups:
-                            live_counts[g.name] = sum(c.population for c in g.clans)
-                        for l in getattr(self.sim_model, "loners", []):
-                            live_counts[l.species] = live_counts.get(l.species, 0) + 1
-                    except Exception:
-                        live_counts = sc
-                    stats["species_counts"] = live_counts
-            except Exception:
-                pass
+            if self.sim_model:
+                try:
+                    sc = stats.get("species_counts", {}) or {}
+                    if sc and all(int(v) == 0 for v in sc.values()):
+                        live_counts = {}
+                        try:
+                            for g in self.sim_model.groups:
+                                live_counts[g.name] = sum(c.population for c in g.clans)
+                            for l in getattr(self.sim_model, "loners", []):
+                                live_counts[l.species] = (
+                                    live_counts.get(l.species, 0) + 1
+                                )
+                        except Exception:
+                            live_counts = sc
+                        stats["species_counts"] = live_counts
+                except Exception:
+                    pass
             self.last_stats = stats  # Save stats for later
+
+            # Handle automation output
+            if self.auto_options and self.auto_options.get("output"):
+                try:
+                    out_path = Path(self.auto_options["output"])
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        json.dump(stats, f, indent=2)
+                    logger.info(f"Saved stats to {out_path}")
+                except Exception:
+                    logger.exception("Failed to save stats output")
+
+                if self.auto_options.get("auto_quit"):
+                    from PyQt6.QtWidgets import QApplication
+
+                    QApplication.quit()
+                    return
+
             dialog = StatsDialog(stats, self)
             dialog.exec()
 
@@ -1980,16 +2090,20 @@ class SimulationScreen(QWidget):
                     "Es sind keine Statistiken der vorherigen Simulation verfügbar.",
                 )
 
-    """Main simulation screen."""
-
     def __init__(
         self,
         go_to_start_callback: Callable[[], None],
         color_preset: Optional[Any] = None,
     ) -> None:
+        """Initialize the simulation screen.
+
+        @param go_to_start_callback: Function to call to return to start screen
+        @param color_preset: Optional color preset to apply
+        """
         super().__init__()
         self.go_to_start = go_to_start_callback
         self.color_preset = color_preset
+        self.auto_options = {}  # Initialize to empty dict
         self.is_running = False
         # Add missing speed value labels
         self.loner_speed_value_label = QLabel("1.0x")
@@ -2021,7 +2135,7 @@ class SimulationScreen(QWidget):
         logger.debug(f"species.json path: {json_path}")
         logger.debug(f"species.json exists: {json_path.exists()}")
         try:
-            with open(json_path, "r") as f:
+            with open(json_path, "r", encoding="utf-8") as f:
                 self.species_config = json.load(f)
         except FileNotFoundError:
             self.species_config = {}
@@ -2147,6 +2261,11 @@ class SimulationScreen(QWidget):
         initial_temp = self.environment_panel.get_temperature()
         self.environment_panel.update_species_compatibility_by_temp(initial_temp)
 
+        # Connect Temperature slider to live update
+        self.environment_panel.temp_slider.valueChanged.connect(
+            self.on_live_temp_change
+        )
+
         # Show region/environment panel by default
         self.panel_stack.setCurrentIndex(1)
 
@@ -2170,7 +2289,13 @@ class SimulationScreen(QWidget):
                         )
                         try:
                             # set pending seed so startup preview can be reused
-                            self._pending_food_seed = hash((num, amt)) & 0xFFFFFFFF
+                            # Use random number mixed with hash to ensure different previews on revisit
+                            import random
+
+                            random_modifier = random.randint(0, 999999)
+                            self._pending_food_seed = (
+                                hash((num, amt)) ^ random_modifier
+                            ) & 0xFFFFFFFF
                             # pass same value for amount and max_amount so preview
                             # matches backend initial max_amount behavior
                             self.map_widget.preview_food_sources(
@@ -2302,6 +2427,15 @@ class SimulationScreen(QWidget):
         self.btn_speed_5x.clicked.connect(lambda: self.set_speed(5))
         info_layout.addWidget(self.btn_speed_5x)
 
+        # Chaos/Randomize Button
+        self.btn_chaos = QPushButton("🎲")
+        chaos_font = QFont("Segoe UI Emoji", 14)
+        self.btn_chaos.setFont(chaos_font)
+        self.btn_chaos.setFixedWidth(40)
+        self.btn_chaos.setToolTip(_("Inject Randomness"))
+        self.btn_chaos.clicked.connect(self.on_inject_chaos)
+        info_layout.addWidget(self.btn_chaos)
+
         info_layout.addStretch()
         control_layout.addLayout(info_layout)
 
@@ -2427,10 +2561,38 @@ class SimulationScreen(QWidget):
                 start_temp = self.environment_panel.get_temperature()
                 start_is_day = self.environment_panel.get_is_day()
                 region_display = self.environment_panel.get_selected_region()
+
+                # Override from auto_options if present (for batch runs)
+                if self.auto_options:
+                    if self.auto_options.get("food_places") is not None:
+                        food_places = self.auto_options["food_places"]
+                    if self.auto_options.get("food_amount") is not None:
+                        food_amount = self.auto_options["food_amount"]
+                    if self.auto_options.get("temperature") is not None:
+                        start_temp = self.auto_options["temperature"]
+                    if self.auto_options.get("region"):
+                        # Only override if backend region keys match or we map it
+                        region_display = self.auto_options["region"]
+
                 # Map display name to region key for backend
                 region_key = self.environment_panel.region_name_to_key.get(
                     region_display, "Wasteland"
                 )
+                # If the passed region is already a key (like 'Evergreen_Forest') but not in display map
+                # we might want to check against keys directly or just fallback to what was passed if it looks like a key
+                if (
+                    region_display not in self.environment_panel.region_name_to_key
+                    and "_" in region_display
+                ):
+                    region_key = region_display
+
+                # Override populations if auto-running to ensure all species active
+                if self.auto_options:
+                    for s_name in self.species_config.keys():
+                        if s_name not in populations:
+                            # Default population for auto-enabled species
+                            populations[s_name] = 20
+
                 # Apply UI member slider values as per-species max_clan_members so
                 # spawned / split behavior respects what the user configured.
                 adj_species_config = copy.deepcopy(self.species_config or {})
@@ -2443,6 +2605,13 @@ class SimulationScreen(QWidget):
                 except Exception:
                     pass
 
+                # Use seed from auto_options if present, otherwise fallback to UI seed
+                seed_val = (
+                    self.auto_options.get("seed")
+                    if self.auto_options and self.auto_options.get("seed") is not None
+                    else getattr(self, "_pending_food_seed", None)
+                )
+
                 self.sim_model.setup(
                     adj_species_config,
                     populations,
@@ -2454,7 +2623,7 @@ class SimulationScreen(QWidget):
                     initial_food_positions=getattr(
                         self.map_widget, "_last_preview_positions", None
                     ),
-                    rng_seed=getattr(self, "_pending_food_seed", None),
+                    rng_seed=seed_val,
                 )
 
                 # Set region background (still use display name for UI)
@@ -2478,6 +2647,11 @@ class SimulationScreen(QWidget):
 
             # Resume (oder Start)
             self.is_running = True
+
+            # Apply speed override if auto-running
+            if self.auto_options and self.auto_options.get("speed"):
+                self.set_speed(self.auto_options["speed"])
+
             self.btn_play_pause.setText("⏸")
 
             # Start Update-Timer with speed multiplier
@@ -2528,6 +2702,15 @@ class SimulationScreen(QWidget):
         # Reset Model to None so it will be recreated on next start
         self.sim_model = None
 
+        # Reset pending seed to ensure diversity if user just restarts
+        import random
+
+        random_modifier = random.randint(0, 999999)
+        if hasattr(self, "_pending_food_seed"):
+            self._pending_food_seed = (
+                self._pending_food_seed ^ random_modifier
+            ) & 0xFFFFFFFF
+
         # Clear population data for live graph
         self.population_data = {}
         if self.live_graph_widget:
@@ -2544,8 +2727,7 @@ class SimulationScreen(QWidget):
         if show_stats and sim_model_for_stats:
             stats = sim_model_for_stats.get_final_stats()
             self.last_stats = stats
-            dialog = StatsDialog(stats, self)
-            dialog.exec()
+            self.show_final_stats(external_stats=stats)
 
     def set_speed(self, speed: int) -> None:
         """Set simulation speed multiplier."""
@@ -2555,6 +2737,11 @@ class SimulationScreen(QWidget):
         self.btn_speed_1x.setChecked(speed == 1)
         self.btn_speed_2x.setChecked(speed == 2)
         self.btn_speed_5x.setChecked(speed == 5)
+
+    def on_live_temp_change(self, value):
+        """Update simulation temperature in real-time."""
+        if self.sim_model and self.is_running:
+            self.sim_model.set_temperature(float(value))
 
     def on_loner_speed_changed(self, value: int) -> None:
         """Handle loner speed slider change."""
@@ -2571,6 +2758,11 @@ class SimulationScreen(QWidget):
         self.clan_speed_value_label.setText(f"{multiplier:.1f}x")
         if self.sim_model:
             self.sim_model.set_clan_speed(multiplier)
+
+    def on_inject_chaos(self):
+        """Inject randomness into the running simulation."""
+        if self.sim_model and self.is_running:
+            self.sim_model.inject_chaos()
 
     def update_simulation_with_speed(self) -> None:
         """Update simulation multiple times based on speed setting."""

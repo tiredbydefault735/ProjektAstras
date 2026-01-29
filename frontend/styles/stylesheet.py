@@ -10,11 +10,8 @@ def get_stylesheet(preset: Optional[Any] = None) -> str:
     """
     Generate stylesheet from a color preset.
 
-    Args:
-        preset: ColorPreset object. If None, uses DEFAULT_PRESET.
-
-    Returns:
-        CSS stylesheet string.
+    @param preset: ColorPreset object. If None, uses DEFAULT_PRESET.
+    @return: CSS stylesheet string.
     """
     # Default color set (used when no preset object is provided)
     default_colors = {

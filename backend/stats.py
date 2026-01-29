@@ -23,6 +23,9 @@ def _normalize_color(col: Any) -> Tuple[float, float, float, float]:
       - tuple/list of 3 or 4 floats (0..1) or ints (0..255)
       - hex string like '#rrggbb' or '#rrggbbaa'
       - fallback to DEFAULT_COLOR
+
+    @param col: The color input (string, tuple, list, or None)
+    @return: A normalized (r, g, b, a) tuple
     """
     if col is None:
         return DEFAULT_COLOR
@@ -56,7 +59,11 @@ def _normalize_color(col: Any) -> Tuple[float, float, float, float]:
 
 
 def collect_simulation_snapshot(sim: SimulationModel) -> Dict[str, Any]:
-    """Collect groups/loners/food snapshot and update species_counts in sim.stats."""
+    """Collect groups/loners/food snapshot and update species_counts in sim.stats.
+
+    @param sim: The simulation model instance
+    @return: A dictionary containing the snapshot data
+    """
     groups_data = []
     for group in sim.groups:
         clans_data = [

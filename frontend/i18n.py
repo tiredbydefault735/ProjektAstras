@@ -148,6 +148,13 @@ def _load_translations(lang: str) -> None:
 
 
 def set_language(lang: str) -> bool:
+    """Set the current application language.
+
+    Loads the corresponding translation catalog and notifies listeners.
+
+    @param lang: Language code (e.g. 'en', 'de')
+    @return: True if language set initiated successfully
+    """
     global _current_lang
     _current_lang = lang
     _load_translations(lang)
@@ -202,6 +209,8 @@ def register_language_listener(fn: Callable[[], None]) -> None:
     """Register a callback to be invoked when the language changes.
 
     The callback will be called with no arguments.
+
+    @param fn: The callback function to register
     """
     try:
         _lang_listeners.append(fn)
@@ -247,11 +256,18 @@ def _notify_language_change() -> None:
 
 
 def get_language() -> str:
+    """Get the current language code.
+
+    @return: The current language code (e.g. 'en')
+    """
     return _current_lang
 
 
 def available_languages() -> List[str]:
-    """Return discovered language identifiers present in `LOCALE_DIR`."""
+    """Return discovered language identifiers present in `LOCALE_DIR`.
+
+    @return: List of available language codes
+    """
     langs = set()
     # top-level JSON/PO files: en.json, en.po
     if LOCALE_DIR.exists():
@@ -270,7 +286,11 @@ def available_languages() -> List[str]:
 
 
 def _(text: str) -> str:
-    """Translate `text` using loaded catalog or gettext translation."""
+    """Translate `text` using loaded catalog or gettext translation.
+
+    @param text: Text string to translate
+    @return: Translated string or original text if not found
+    """
     if _gettext_trans is not None:
         try:
             return _gettext_trans.gettext(text)

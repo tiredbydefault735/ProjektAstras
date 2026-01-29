@@ -13,11 +13,8 @@ def get_static_path(relative_path: Union[str, Path]) -> Path:
     Get the absolute path to a static resource file.
     Works both in development and when frozen with PyInstaller.
 
-    Args:
-        relative_path: Path relative to the static/ directory
-
-    Returns:
-        Path object to the resource
+    @param relative_path: Path relative to the static/ directory
+    @return: Path object to the resource
     """
     if getattr(sys, "frozen", False):
         # Running as compiled executable

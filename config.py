@@ -98,6 +98,11 @@ LOG_LEVEL = "INFO"
 
 # Helper convenience
 def get_locale_file(locale: str) -> Path:
+    """Get the path to the localization file for a given locale.
+
+    @param locale: The locale code (e.g., 'en', 'de').
+    @return: Path object pointing to the locale JSON file.
+    """
     return LOCALE_DIR / f"{locale}.json"
 
 
@@ -170,7 +175,7 @@ TEMP_CHANGE_INTERVAL = 200
 TEMP_CHANGE_DELTA = 3.0
 ATTACK_DAMAGE = 6
 LONER_HUNGER_SEEK = 200
-FOOD_REGEN_PROB = 0.02
+FOOD_REGEN_PROB = 0.03
 COMBAT_STRENGTH_RANGE = (0.85, 1.25)
 LONER_HUNGER_RANGE = (40, 90)
 MAX_CLANS_PER_SPECIES = 15
@@ -186,8 +191,8 @@ CLAN_DAMAGE_MAX = 12
 FOOD_HUNGER_STEP = 10
 
 # Spawn thresholds
-SPAWN_THRESHOLD_HIGH = 0.005
-SPAWN_THRESHOLD_LOW = 0.001
+SPAWN_THRESHOLD_HIGH = 0.008
+SPAWN_THRESHOLD_LOW = 0.002
 
 # Attack chance tuning
 ATTACK_CHANCE_DAY = 0.3
@@ -210,7 +215,7 @@ CLAN_VELOCITY_RANGE = (-2.0, 2.0)
 NIGHT_SPEED_MODIFIER = 0.7
 
 # RNG / movement tuning
-RANDOM_MOVE_PROB = 0.01
+RANDOM_MOVE_PROB = 0.02
 REGEN_CHOICES = [1, 1, 1, 2, 2, 3]
 LONER_SPEED_INIT_RANGE = (0.8, 1.5)
 LONER_SPEED_ALT_RANGE = (0.4, 1.0)

@@ -17,7 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 def update_and_apply(sim: SimulationModel) -> None:
-    """Handle day/night transition, temp drift, regen and apply temperature effects."""
+    """Process environmental updates and apply effects to entities.
+
+    Updates day/night cycle, changes base temperature, regenerates food, and applies
+    temperature or starvation damage to loners and clans.
+
+    @param sim: The main simulation model instance.
+    """
     # Transition progress handling
     if sim.in_transition:
         sim.transition_timer += 1
@@ -58,12 +64,12 @@ def update_and_apply(sim: SimulationModel) -> None:
             TEMPERATURE_MIN, min(TEMPERATURE_MAX, sim.current_temperature)
         )
         sim.stats["temperature"] = round(sim.current_temperature, TEMPERATURE_PRECISION)
-        sim.add_log(
-            (
-                "🌡️ Temperatur: {val}°C",
-                {"val": round(sim.current_temperature, TEMPERATURE_PRECISION)},
-            )
-        )
+        # sim.add_log(
+        #     (
+        #         "🌡️ Temperatur: {val}°C",
+        #         {"val": round(sim.current_temperature, TEMPERATURE_PRECISION)},
+        #     )
+        # )
 
     # Food regeneration
     for food_source in sim.food_sources:
@@ -85,6 +91,7 @@ def update_and_apply(sim: SimulationModel) -> None:
                 getattr(sim, "loner_speed_multiplier", 1.0),
             )
         except Exception:
+            logger.exception("Error updating loner state")
             pass
         species_config = sim.species_config.get(loner.species, {})
         min_temp = species_config.get(

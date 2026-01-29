@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 def spawn_loners(sim: SimulationModel) -> None:
-    """Spawn loners according to species_config and population overrides."""
+    """Spawn loners according to species_config and population overrides.
+
+    @param sim: The simulation model instance
+    """
     # Import Loner locally to avoid circular import at module import time
     from backend.entities import Loner
 
