@@ -8,13 +8,12 @@ from .custom_widgets import CustomImageButton
 
 class ControlBar(QWidget):
     """
-    Bottom control bar with Play/Pause, Stop, Time, Day/Night, Speed, Chaos labels and buttons.
+    Bottom control bar with Play/Pause, Stop, Time, Day/Night, Speed, labels and buttons.
     """
 
     playPauseClicked = pyqtSignal()
     stopClicked = pyqtSignal()
-    speedChanged = pyqtSignal(int)  # 1, 2, 5
-    chaosClicked = pyqtSignal()
+    speedChanged = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
