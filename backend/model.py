@@ -222,7 +222,7 @@ class SpeciesGroup:
 
         self.process = env.process(self.live())
 
-    def live(self) -> Generator[simpy.events.Event, None, None]:
+    def live(self) -> Generator[simpy.Event, None, None]:
         """Lifecycle process for the species group.
 
         Updates all clans in the group at each simulation step.
@@ -231,13 +231,17 @@ class SpeciesGroup:
         """
         while True:
             yield self.env.timeout(SIM_STEP_TIMEOUT)
-            is_day = getattr(self.env, "sim_model", None) and getattr(
-                self.env.sim_model, "is_day", True
-            )
+            sim_model = getattr(self.env, "sim_model", None)
+            is_day = bool(sim_model.is_day) if sim_model else True
 
             # Use global clan speed multiplier from SimulationModel when available
-            sim_model = getattr(self.env, "sim_model", None)
             clan_speed_mult = getattr(sim_model, "clan_speed_multiplier", 1.0)
+
+            # Retrieve species specific multiplier
+            if sim_model and hasattr(sim_model, "species_config"):
+                species_stats = sim_model.species_config.get(self.name, {})
+                species_mult = species_stats.get("clan_speed_mult", 1.0)
+                clan_speed_mult *= species_mult
 
             for clan in list(self.clans):
                 clan.update(self.map_width, self.map_height, is_day, clan_speed_mult)
@@ -300,9 +304,10 @@ class SpeciesGroup:
                 self.clans.append(new_clan)
                 self.next_clan_id += 1
 
-                if hasattr(self.env, "sim_model"):
+                sim_model = getattr(self.env, "sim_model", None)
+                if sim_model:
                     try:
-                        self.env.sim_model.add_log(
+                        sim_model.add_log(
                             (
                                 "✂️ {species} Clan #{old_id} teilt sich! → Clan #{new_id} (je {members} Mitglieder)",
                                 {
@@ -313,7 +318,7 @@ class SpeciesGroup:
                                 },
                             )
                         )
-                        self.env.sim_model.add_log(
+                        sim_model.add_log(
                             (
                                 "🎉 Neue Population: Clan #{old_id} ({old_members}) + Clan #{new_id} ({new_members}) = {total} Mitglieder",
                                 {
@@ -998,30 +1003,6 @@ class SimulationModel:
         self.current_temperature = self.base_temperature + self.day_night_temp_offset
         self.stats["temperature"] = round(
             self.current_temperature, TEMPERATURE_PRECISION
-        )
-
-    def inject_chaos(self) -> None:
-        """Inject entropy into the random number generator.
-
-        This breaks the deterministic chain of the initial seed, allowing
-        the simulation to diverge into a new random path.
-        """
-        import random
-
-        random.seed()  # Re-seed with system time/entropy
-
-        # Also force a small immediate event to give feedback
-        # e.g. Randomize all loner directions immediately
-        for loner in self.loners:
-            import math
-
-            angle = random.uniform(0, 2 * math.pi)
-            speed = random.uniform(*LONER_SPEED_INIT_RANGE)
-            loner.vx = math.cos(angle) * speed
-            loner.vy = math.sin(angle) * speed
-
-        self.add_log(
-            ("🎲 Zufalls-Impuls aktiviert! Das Schicksal wurde neu gewürfelt.", {})
         )
 
     def set_food_level(self, level: float) -> None:

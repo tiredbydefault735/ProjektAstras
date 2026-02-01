@@ -12,11 +12,16 @@ from config import (
     SPAWN_THRESHOLD_LOW,
     SPAWN_SINGLE_COUNT,
     DEFAULT_COLOR,
-    DEFAULT_COLOR_HEX,
+    DEFAULT_COLOR as DEFAULT_COLOR_HEX,  # Fallback alias
     LONER_SPAWN_RANGE,
     LONER_SPAWN_RANGE as _LONER_SPAWN_RANGE,
     FOOD_INTAKE_DEFAULT,
     DEFAULT_FOOD_PLACES,
+    DEFAULT_HP,
+    ICEFANG_COLOR,
+    CRUSHED_CRITTERS_COLOR,
+    SPORES_COLOR,
+    THE_CORRUPTED_COLOR,
 )
 
 if TYPE_CHECKING:
@@ -47,17 +52,16 @@ def spawn_loners(sim: SimulationModel) -> None:
             spawn_threshold = SPAWN_THRESHOLD_LOW
         spawn_chance = random.uniform(0.0, 1.0)
         if spawn_chance < spawn_threshold:
-            spawn_count = SPAWN_SINGLE_COUNT
+            # Increase spawn count slightly to make it more noticeable (2-3 instead of 1)
+            spawn_count = random.randint(2, 3)
             color_map = {
-                "Icefang": getattr(sim, "ICEFANG_COLOR", None) or DEFAULT_COLOR_HEX,
-                "Crushed_Critters": getattr(sim, "CRUSHED_CRITTERS_COLOR", None)
-                or DEFAULT_COLOR_HEX,
-                "Spores": getattr(sim, "SPORES_COLOR", None) or DEFAULT_COLOR_HEX,
-                "The_Corrupted": getattr(sim, "THE_CORRUPTED_COLOR", None)
-                or DEFAULT_COLOR_HEX,
+                "Icefang": ICEFANG_COLOR,
+                "Crushed_Critters": CRUSHED_CRITTERS_COLOR,
+                "Spores": SPORES_COLOR,
+                "The_Corrupted": THE_CORRUPTED_COLOR,
             }
             color = color_map.get(species_name, DEFAULT_COLOR)
-            hp = stats.get("hp", getattr(sim, "DEFAULT_HP", 1))
+            hp = stats.get("hp", DEFAULT_HP)
             food_intake = stats.get("food_intake", FOOD_INTAKE_DEFAULT)
             can_cannibalize = species_name in ["Spores", "The_Corrupted"]
             for _ in range(spawn_count):

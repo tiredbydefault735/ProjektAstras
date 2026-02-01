@@ -91,18 +91,6 @@ class ControlBar(QWidget):
         self.btn_speed_5x.clicked.connect(lambda: self.speedChanged.emit(5))
         info_layout.addWidget(self.btn_speed_5x)
 
-        # Chaos/Randomize Button
-        self.btn_chaos = QPushButton("🎲")
-        chaos_font = QFont("Segoe UI Emoji", 14)
-        self.btn_chaos.setFont(chaos_font)
-        self.btn_chaos.setFixedWidth(40)
-        self.btn_chaos.setToolTip(_("Inject Randomness"))
-        self.btn_chaos.clicked.connect(self.chaosClicked.emit)
-        info_layout.addWidget(self.btn_chaos)
-
-        info_layout.addStretch()
-        layout.addLayout(info_layout)
-
         # Live info row
         live_info_layout = QHBoxLayout()
         live_info_layout.setSpacing(10)
@@ -167,7 +155,6 @@ class ControlBar(QWidget):
 
     def update_language(self):
         self.btn_stop.setText(_("Reset/Stop"))
-        self.btn_chaos.setToolTip(_("Inject Randomness"))
 
         txt = self.live_day_night_label.text()
         if "☀️" in txt:

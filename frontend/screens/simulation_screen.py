@@ -332,7 +332,6 @@ class SimulationScreen(QWidget):
         self.control_bar.playPauseClicked.connect(self.toggle_play_pause)
         self.control_bar.stopClicked.connect(self.stop_simulation)
         self.control_bar.speedChanged.connect(self.set_speed)
-        self.control_bar.chaosClicked.connect(self.on_inject_chaos)
         right_layout.addWidget(self.control_bar)
 
         # Graph Container for Live Graph
@@ -463,6 +462,7 @@ class SimulationScreen(QWidget):
                 # Initialize Simulation
                 self.sim_model = SimulationModel()
                 populations = self.species_panel.get_enabled_species_populations()
+                speeds = self.species_panel.get_species_speeds()
                 food_places = self.environment_panel.get_food_places()
                 food_amount = self.environment_panel.get_food_amount()
                 start_temp = self.environment_panel.get_temperature()
@@ -502,6 +502,15 @@ class SimulationScreen(QWidget):
                             adj_species_config[sname], dict
                         ):
                             adj_species_config[sname]["max_clan_members"] = int(val)
+
+                            if sname in speeds:
+                                # Map 1-10 to multiplier. Default 5 -> 1.0
+                                adj_species_config[sname]["loner_speed_mult"] = (
+                                    speeds[sname]["loner_speed"] / 5.0
+                                )
+                                adj_species_config[sname]["clan_speed_mult"] = (
+                                    speeds[sname]["clan_speed"] / 5.0
+                                )
                 except Exception:
                     pass
 
@@ -624,11 +633,6 @@ class SimulationScreen(QWidget):
         """Update simulation temperature in real-time."""
         if self.sim_model and self.is_running:
             self.sim_model.set_temperature(float(value))
-
-    def on_inject_chaos(self):
-        """Inject randomness."""
-        if self.sim_model and self.is_running:
-            self.sim_model.inject_chaos()
 
     def update_simulation_with_speed(self) -> None:
         for i in range(self.simulation_speed):

@@ -214,6 +214,17 @@ class SpeciesPanel(QWidget):
                 populations[species_id] = self.member_sliders[species_id].value()
         return populations
 
+    def get_species_speeds(self):
+        """Get speed settings for enabled species."""
+        speeds = {}
+        for species_id, checkbox in self.species_checkboxes.items():
+            if checkbox.isChecked():
+                speeds[species_id] = {
+                    "loner_speed": self.loner_speed_sliders[species_id].value(),
+                    "clan_speed": self.clan_speed_sliders[species_id].value(),
+                }
+        return speeds
+
     def update_theme(self, preset):
         """Update inline styles for the species panel."""
         self.color_preset = preset
