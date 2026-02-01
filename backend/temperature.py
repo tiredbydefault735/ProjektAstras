@@ -84,11 +84,18 @@ def update_and_apply(sim: SimulationModel) -> None:
     for loner in sim.loners:
         # Ensure loners move each simulation step
         try:
+            # Calculate total speed multiplier (global * species specific)
+            speed_mult = getattr(sim, "loner_speed_multiplier", 1.0)
+            if hasattr(sim, "species_config"):
+                species_stats = sim.species_config.get(loner.species, {})
+                species_mult = species_stats.get("loner_speed_mult", 1.0)
+                speed_mult *= species_mult
+
             loner.update(
                 sim.map_width,
                 sim.map_height,
                 sim.is_day,
-                getattr(sim, "loner_speed_multiplier", 1.0),
+                speed_mult,
             )
         except Exception:
             logger.exception("Error updating loner state")
