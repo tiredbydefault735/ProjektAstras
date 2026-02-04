@@ -124,7 +124,6 @@ class SpeciesGroup:
         self.clans: List[Clan] = []
         self.next_clan_id: int = 0
 
-        # Create initial clan if population > 0
         if start_population > 0:
             x = random.uniform(MAP_EDGE_PADDING, map_width - MAP_EDGE_PADDING)
             y = random.uniform(MAP_EDGE_PADDING, map_height - MAP_EDGE_PADDING)
@@ -374,6 +373,8 @@ class SimulationModel:
             "population_history": {},
         }
 
+        self.hunt_log_timer: Dict[str, int] = {}
+
         if start_temperature is not None:
             self.base_temperature = start_temperature
             self.current_temperature = start_temperature
@@ -400,7 +401,6 @@ class SimulationModel:
         else:
             random.seed()
 
-        # Farben für Spezies
         color_map = {
             "Icefang": ICEFANG_COLOR,
             "Crushed_Critters": CRUSHED_CRITTERS_COLOR,
