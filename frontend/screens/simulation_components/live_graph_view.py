@@ -34,19 +34,14 @@ class LiveGraphView(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # We will initialize the pyqtgraph widget lazily or here if dependencies allows
-        # But simulation screen did it via initialize_live_graph called later.
-        # We can do it here if we handle imports carefully.
         self.initialize_graphs()
 
     def initialize_graphs(self):
         try:
             import pyqtgraph as pg
 
-            # Prefer speed for live updates: disable antialiasing by default
             pg.setConfigOptions(antialias=False)
 
-            # Create PlotWidget
             pw = pg.PlotWidget(background="#1a1a1a")
             pw.getPlotItem().showGrid(x=True, y=True, alpha=0.2)
             pw.getAxis("left").setTextPen("#ffffff")
@@ -54,7 +49,6 @@ class LiveGraphView(QFrame):
             pw.setLabel("left", _("Population"), color="#ffffff", size="9pt")
             pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="9pt")
 
-            # Lock aspect settings
             try:
                 vb = pw.getPlotItem().getViewBox()
                 vb.setMouseEnabled(False, False)
@@ -81,7 +75,6 @@ class LiveGraphView(QFrame):
             self.layout().addWidget(pw)
             self.live_graph_widget = pw
 
-            # Legend
             self.graph_legend_label = QLabel()
             self.graph_legend_label.setStyleSheet(
                 "color: #ffffff; font-size: 11px; padding: 4px 0 0 0;"
@@ -95,7 +88,6 @@ class LiveGraphView(QFrame):
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.layout().addWidget(label)
         except Exception as e:
-            # Fallback
             pass
 
     def reset(self):
@@ -139,14 +131,12 @@ class LiveGraphView(QFrame):
 
             LIVE_WINDOW = 10
 
-            # Optimisation: check if snapshot changed
             try:
                 snapshot = tuple(
                     (name, len(population_data.get(name, [])))
                     for name in sorted(population_data.keys())
                 )
                 if self._last_pop_snapshot == snapshot:
-                    # Just update X range
                     self._update_x_range(population_data, LIVE_WINDOW)
                     return
                 self._last_pop_snapshot = snapshot
@@ -163,7 +153,6 @@ class LiveGraphView(QFrame):
                     continue
 
                 local_hist = list(history)
-                # Append instantaneous count
                 try:
                     if species_name in latest_species_counts and (
                         not local_hist
@@ -182,7 +171,6 @@ class LiveGraphView(QFrame):
                 ]
                 display_history = local_hist[-last_n:]
 
-                # Convert to int
                 try:
                     display_history = [int(round(float(v))) for v in display_history]
                 except Exception:
@@ -207,9 +195,6 @@ class LiveGraphView(QFrame):
             self._update_y_range(population_data)
             self._update_bottom_ticks(population_data)
             self._update_legend(population_data, colors)
-
-            # (Distribution graph update logic omitted for brevity as it was seemingly partial in original,
-            # but if it exists, it would follow similar pattern using rnd_samples)
 
         except Exception:
             pass
