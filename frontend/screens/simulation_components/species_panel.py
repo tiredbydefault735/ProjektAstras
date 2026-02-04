@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from utils import get_static_path
 from frontend.i18n import _
@@ -46,7 +45,6 @@ class SpeciesPanel(QWidget):
         self.clan_speed_sliders = {}
         self.member_sliders = {}
         self.member_value_labels = {}
-        # Keep label widgets so we can update their text on language change
         self.loner_speed_labels = {}
         self.clan_speed_labels = {}
         self.member_labels = {}
@@ -55,14 +53,12 @@ class SpeciesPanel(QWidget):
         layout.setContentsMargins(10, 15, 10, 10)
         layout.setSpacing(12)
 
-        # Title
         self.title = QLabel(_("Spezies"))
         title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
 
-        # Create entry for each species
         species_names = {
             "Icefang": "Icefang",
             "Crushed_Critters": "Crushed Critters",
@@ -71,10 +67,8 @@ class SpeciesPanel(QWidget):
         }
 
         for species_id, display_name in species_names.items():
-            # Checkbox for enable/disable with custom icons
             unchecked_path = str(get_static_path("ui/Checkbox_unchecked.png"))
             checked_path = str(get_static_path("ui/Checkbox_checked.png"))
-            # Debug logging removed: debug_log does not exist
             logger.debug(
                 f"Checkbox unchecked: {unchecked_path}, exists: {Path(unchecked_path).exists()}"
             )
@@ -87,7 +81,6 @@ class SpeciesPanel(QWidget):
             self.species_checkboxes[species_id] = checkbox
             layout.addWidget(checkbox)
 
-            # Loner speed slider
             loner_speed_layout = QHBoxLayout()
             loner_speed_layout.setSpacing(5)
 
@@ -110,7 +103,6 @@ class SpeciesPanel(QWidget):
 
             layout.addLayout(loner_speed_layout)
 
-            # Clan speed slider
             clan_speed_layout = QHBoxLayout()
             clan_speed_layout.setSpacing(5)
 
@@ -131,7 +123,6 @@ class SpeciesPanel(QWidget):
 
             layout.addLayout(clan_speed_layout)
 
-            # Member slider with value display
             member_layout = QHBoxLayout()
             member_layout.setSpacing(5)
 
@@ -164,7 +155,6 @@ class SpeciesPanel(QWidget):
 
             layout.addLayout(member_layout)
 
-            # Add spacing between species
             layout.addSpacing(25)
 
         layout.addStretch()
@@ -177,8 +167,6 @@ class SpeciesPanel(QWidget):
         except Exception:
             pass
 
-    # Note: EnvironmentPanel handles its own language updates.
-
     def update_language(self) -> None:
         """Update UI texts when language changes."""
         try:
@@ -186,8 +174,7 @@ class SpeciesPanel(QWidget):
 
             if hasattr(self, "title"):
                 self.title.setText(_("Spezies"))
-            # species subtitle removed
-            # Update per-species labels (loner/clan/member)
+
             try:
                 for sid in self.species_checkboxes.keys():
                     if sid in self.loner_speed_labels:
@@ -232,18 +219,13 @@ class SpeciesPanel(QWidget):
         border = preset.get_color("border_light") if preset else "#666666"
         text = preset.get_color("text_primary") if preset else "#ffffff"
         accent = preset.get_color("accent_primary") if preset else "#cc0000"
-        # Additional fallbacks used below to avoid calling preset.get_color when preset is None
         bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
         text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
 
-        # Panel background (no border for cleaner look)
         self.setStyleSheet(f"background-color: {bg}; border: none;")
 
-        # Text elements
         self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # species subtitle removed; no styling required
 
-        # Style checkboxes and sliders
         for checkbox in self.species_checkboxes.values():
             checkbox.setStyleSheet(
                 f"""
@@ -264,7 +246,6 @@ class SpeciesPanel(QWidget):
             """
             )
 
-        # Keep the slider groove visible (thin line) but transparent container backgrounds
         slider_style = f"""
             QSlider {{
                 background: transparent;
@@ -297,7 +278,6 @@ class SpeciesPanel(QWidget):
         for slider in self.member_sliders.values():
             slider.setStyleSheet(slider_style)
 
-        # Make sure labels and value boxes have transparent backgrounds
         try:
             for sid, lbl in self.loner_speed_labels.items():
                 lbl.setStyleSheet(f"color: {text}; background: transparent;")
