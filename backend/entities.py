@@ -232,6 +232,10 @@ class Clan:
         self.combat_strength: float = random.uniform(*COMBAT_STRENGTH_RANGE)
         self.hunger_threshold: int = random.randint(*LONER_HUNGER_RANGE)
 
+        self.last_cycle_state: bool = True
+        self.temp_survival_roll: bool = False
+        self._accum_damage: float = 0.0
+
     def total_hp(self) -> float:
         """Calculate the total health points of the clan.
 
