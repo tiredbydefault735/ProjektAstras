@@ -24,7 +24,6 @@ def update_and_apply(sim: SimulationModel) -> None:
 
     @param sim: The main simulation model instance.
     """
-    # Transition progress handling
     if sim.in_transition:
         sim.transition_timer += 1
         target_offset = (
@@ -50,7 +49,6 @@ def update_and_apply(sim: SimulationModel) -> None:
         )
         sim.stats["temperature"] = round(sim.current_temperature, TEMPERATURE_PRECISION)
 
-    # Periodic base temperature change
     sim.temp_change_timer += 1
     if sim.temp_change_timer >= TEMP_CHANGE_INTERVAL:
         sim.temp_change_timer = 0
@@ -64,14 +62,7 @@ def update_and_apply(sim: SimulationModel) -> None:
             TEMPERATURE_MIN, min(TEMPERATURE_MAX, sim.current_temperature)
         )
         sim.stats["temperature"] = round(sim.current_temperature, TEMPERATURE_PRECISION)
-        # sim.add_log(
-        #     (
-        #         "🌡️ Temperatur: {val}°C",
-        #         {"val": round(sim.current_temperature, TEMPERATURE_PRECISION)},
-        #     )
-        # )
 
-    # Food regeneration
     for food_source in sim.food_sources:
         regen = food_source.regenerate()
         if regen and hasattr(sim, "rnd_history"):
@@ -79,12 +70,9 @@ def update_and_apply(sim: SimulationModel) -> None:
             if len(sim.rnd_history["regen"]) > RND_HISTORY_LIMIT:
                 sim.rnd_history["regen"] = sim.rnd_history["regen"][-RND_HISTORY_LIMIT:]
 
-    # Apply temperature and starvation damage to loners
     loners_to_remove = []
     for loner in sim.loners:
-        # Ensure loners move each simulation step
         try:
-            # Calculate total speed multiplier (global * species specific)
             speed_mult = getattr(sim, "loner_speed_multiplier", 1.0)
             if hasattr(sim, "species_config"):
                 species_stats = sim.species_config.get(loner.species, {})
@@ -149,7 +137,6 @@ def update_and_apply(sim: SimulationModel) -> None:
         if loner in sim.loners:
             sim.loners.remove(loner)
 
-    # Apply temperature damage to clans
     for group in sim.groups:
         species_config = sim.species_config.get(group.name, {})
         min_temp = species_config.get(
