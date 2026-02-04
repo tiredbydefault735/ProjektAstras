@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
-# Adjust path for utils
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from utils import get_static_path
 from frontend.i18n import _
@@ -49,14 +48,11 @@ class EnvironmentPanel(QWidget):
         """
         super().__init__()
         self.color_preset = color_preset
-        self.map_widget = map_widget  # Reference to map widget for updating background
-        self.species_config = species_config  # Reference to species config
-        self.species_panel = (
-            species_panel  # Reference to species panel for checkbox control
-        )
-        self.current_food_level = 5  # Default food level (1-10)
+        self.map_widget = map_widget
+        self.species_config = species_config
+        self.species_panel = species_panel
+        self.current_food_level = 5
 
-        # Load region config for temperature ranges
         self.region_config = {}
         try:
             region_json_path = get_static_path("data/region.json")
@@ -69,14 +65,11 @@ class EnvironmentPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
 
-        # Title
         self.title = QLabel(_("Region"))
         title_font = QFont("Minecraft", 15, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.title.setFont(title_font)
         layout.addWidget(self.title)
-
-        # Region Selection (subtitle removed; only title + combo)
 
         self.region_combo = QComboBox()
         self.region_combo.addItems(
@@ -89,7 +82,6 @@ class EnvironmentPanel(QWidget):
         self.region_combo.currentTextChanged.connect(self.on_region_changed)
         layout.addWidget(self.region_combo)
 
-        # Store region name to key mapping
         self.region_name_to_key = {
             "Snowy Abyss": "Snowy_Abyss",
             "Wasteland": "Wasteland",
@@ -97,7 +89,6 @@ class EnvironmentPanel(QWidget):
             "Corrupted Caves": "Corrupted_Caves",
         }
 
-        # Temperature Section
         self.temp_label = QLabel(_("Temperatur:"))
         temp_label_font = QFont("Minecraft", 12)
         temp_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -118,18 +109,14 @@ class EnvironmentPanel(QWidget):
         self.temp_slider.valueChanged.connect(self.on_temp_value_changed)
         layout.addWidget(self.temp_value_label)
 
-        # Set initial temperature range based on default region (Snowy Abyss)
         self.update_temperature_range("Snowy Abyss")
 
-        # Food Section
         self.food_label_title = QLabel(_("Nahrung:"))
         food_title_font = QFont("Minecraft", 12)
         food_title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_label_title.setFont(food_title_font)
         layout.addWidget(self.food_label_title)
 
-        # Anzahl Nahrungsplätze
-        # Food Level Label (missing initialization fix)
         food_label_font = QFont("Minecraft", 11)
         food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.food_places_label = QLabel(_("Nahrungsplätze: 5"))
@@ -145,7 +132,6 @@ class EnvironmentPanel(QWidget):
         self.food_places_slider.valueChanged.connect(self.on_food_places_changed)
         layout.addWidget(self.food_places_slider)
 
-        # Nahrungsmenge pro Platz
         self.food_amount_label = QLabel(_("Nahrungsmenge: 50"))
         food_amount_font = QFont("Minecraft", 11)
         food_amount_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -163,7 +149,6 @@ class EnvironmentPanel(QWidget):
         )
         layout.addWidget(self.food_amount_slider)
 
-        # Day/Night Section
         self.day_night_label = QLabel(_("Tag - Nacht:"))
         day_night_label_font = QFont("Minecraft", 12)
         day_night_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -194,7 +179,7 @@ class EnvironmentPanel(QWidget):
 
         self.day_btn = day_btn
         self.night_btn = night_btn
-        self.start_is_day = True  # Default: Start bei Tag
+        self.start_is_day = True
 
         layout.addLayout(day_night_layout)
 
@@ -223,14 +208,11 @@ class EnvironmentPanel(QWidget):
         """Called when region selection changes."""
         if self.map_widget:
             self.map_widget.set_region(region_name)
-        # Update temperature slider range based on region
         self.update_temperature_range(region_name)
-        # Update species checkboxes based on region temperature compatibility
         self.update_species_compatibility(region_name)
 
     def update_temperature_range(self, region_name):
         """Update temperature slider min/max based on selected region."""
-        # Convert display name to JSON key
         region_key = self.region_name_to_key.get(region_name, "Wasteland")
 
         if region_key in self.region_config:
@@ -238,16 +220,12 @@ class EnvironmentPanel(QWidget):
             min_temp = region_data.get("min_temp", -50)
             max_temp = region_data.get("max_temp", 50)
 
-            # Update slider range
             self.temp_slider.setMinimum(min_temp)
             self.temp_slider.setMaximum(max_temp)
 
-            # Set value to middle of range
             mid_temp = (min_temp + max_temp) // 2
             self.temp_slider.setValue(mid_temp)
 
-            # Update label with range info
-            # Use translatable template for temperature display
             try:
                 from frontend.i18n import _
 
@@ -277,7 +255,6 @@ class EnvironmentPanel(QWidget):
             self.temp_value_label.setText(
                 f"Temp: {value} C° ({min_temp} bis {max_temp})"
             )
-        # Update species compatibility based on selected temperature
         self.update_species_compatibility_by_temp(value)
 
     def update_species_compatibility(self, region_name):
@@ -285,7 +262,6 @@ class EnvironmentPanel(QWidget):
         if not self.species_panel or not self.species_config:
             return
 
-        # Get region temperature range
         region_key = self.region_name_to_key.get(region_name, "Wasteland")
         if region_key not in self.region_config:
             return
@@ -294,55 +270,44 @@ class EnvironmentPanel(QWidget):
         region_min_temp = region_data.get("min_temp", -50)
         region_max_temp = region_data.get("max_temp", 50)
 
-        # Check each species
         for species_id, checkbox in self.species_panel.species_checkboxes.items():
             if species_id in self.species_config:
                 species_data = self.species_config[species_id]
                 species_min_temp = species_data.get("min_survival_temp", -100)
                 species_max_temp = species_data.get("max_survival_temp", 100)
 
-                # Check if species can survive in this region's temperature range
-                # Species can survive if there's ANY overlap between region temp and survival temp
                 can_survive = not (
                     region_max_temp < species_min_temp
                     or region_min_temp > species_max_temp
                 )
 
                 if not can_survive:
-                    # Disable and uncheck species that can't survive
                     checkbox.setChecked(False)
                     checkbox.setEnabled(False)
                     checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
                 else:
-                    # Enable species that can survive
                     checkbox.setEnabled(True)
-                    # Reset style (will be updated by update_theme)
 
     def update_species_compatibility_by_temp(self, temperature):
         """Enable/disable species checkboxes based on specific temperature."""
         if not self.species_panel or not self.species_config:
             return
 
-        # Check each species
         for species_id, checkbox in self.species_panel.species_checkboxes.items():
             if species_id in self.species_config:
                 species_data = self.species_config[species_id]
                 species_min_temp = species_data.get("min_survival_temp", -100)
                 species_max_temp = species_data.get("max_survival_temp", 100)
 
-                # Check if species can survive at this specific temperature
                 can_survive = species_min_temp <= temperature <= species_max_temp
 
                 if not can_survive:
-                    # Disable and uncheck species that can't survive
                     checkbox.setChecked(False)
                     checkbox.setEnabled(False)
                     checkbox.setStyleSheet(checkbox.styleSheet() + " color: #666666;")
                 else:
-                    # Enable and auto-check species that can survive
                     checkbox.setEnabled(True)
                     checkbox.setChecked(True)
-                    # Reset style (will be updated by update_theme)
 
     def set_species_panel(self, species_panel):
         """Set reference to species panel after it's created."""
@@ -351,7 +316,6 @@ class EnvironmentPanel(QWidget):
     def on_food_places_changed(self, v):
         """Handler for food places slider: update label and preview food on map."""
         try:
-            # update label
             self.food_places_label.setText(_("Nahrungsplätze: {v}").format(v=v))
         except Exception:
             try:
@@ -359,7 +323,6 @@ class EnvironmentPanel(QWidget):
             except Exception:
                 pass
 
-        # preview on map if available
         try:
             amount = (
                 self.food_amount_slider.value()
@@ -373,8 +336,7 @@ class EnvironmentPanel(QWidget):
             )
             if hasattr(self, "map_widget") and self.map_widget is not None:
                 try:
-                    # create a deterministic seed for preview so positions
-                    # remain consistent when the simulation starts
+
                     import random
 
                     random_modifier = random.randint(0, 999999)
@@ -435,12 +397,9 @@ class EnvironmentPanel(QWidget):
         bg_tertiary = preset.get_color("bg_tertiary") if preset else "#333333"
         text_secondary = preset.get_color("text_secondary") if preset else "#cccccc"
 
-        # Panel background (no border for cleaner look)
         self.setStyleSheet(f"background-color: {bg}; border: none;")
 
-        # Text elements
         self.title.setStyleSheet(f"color: {text}; background: transparent;")
-        # region subtitle removed; no styling required
         self.temp_label.setStyleSheet(
             f"color: {text_secondary}; background: transparent;"
         )
@@ -454,7 +413,6 @@ class EnvironmentPanel(QWidget):
             f"color: {text_secondary}; background: transparent;"
         )
 
-        # Style sliders (temp, food_places, food_amount)
         slider_style = f"""
             QSlider {{
                 background: transparent;
@@ -504,7 +462,6 @@ class EnvironmentPanel(QWidget):
         """
         )
 
-        # Style combobox
         combo_style = f"""
             QComboBox {{
                 background-color: {bg_tertiary};
@@ -530,7 +487,6 @@ class EnvironmentPanel(QWidget):
         """
         self.region_combo.setStyleSheet(combo_style)
 
-        # Style buttons
         button_style = f"""
             QPushButton {{
                 background-color: {bg_tertiary};
@@ -547,7 +503,6 @@ class EnvironmentPanel(QWidget):
         """
         self.day_btn.setStyleSheet(button_style)
         self.night_btn.setStyleSheet(button_style)
-        # Ensure labels and small display boxes are transparent to avoid dark boxes
         try:
             if hasattr(self, "temp_label") and self.temp_label is not None:
                 self.temp_label.setStyleSheet(
@@ -581,15 +536,12 @@ class EnvironmentPanel(QWidget):
 
             if hasattr(self, "title"):
                 self.title.setText(_("Region"))
-            # Region subtitle removed; nothing to update here
             if hasattr(self, "temp_label"):
                 self.temp_label.setText(_("Temperatur:"))
             if hasattr(self, "food_label_title"):
                 self.food_label_title.setText(_("Nahrung:"))
-            # Update dynamic numeric labels to use translated templates
             try:
                 if hasattr(self, "temp_slider") and hasattr(self, "temp_value_label"):
-                    # Recompute temp display based on current slider value
                     min_temp = self.temp_slider.minimum()
                     max_temp = self.temp_slider.maximum()
                     cur = self.temp_slider.value()
@@ -618,7 +570,6 @@ class EnvironmentPanel(QWidget):
                 pass
             if hasattr(self, "day_night_label"):
                 self.day_night_label.setText(_("Tag - Nacht:"))
-            # Update the individual day/night buttons if they exist
             try:
                 if hasattr(self, "day_btn"):
                     self.day_btn.setText(_("Tag"))
