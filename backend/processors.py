@@ -10,7 +10,6 @@ import logging
 from typing import TYPE_CHECKING
 from config import *
 
-# Import Loner/Clan types from entities to construct instances when needed
 from backend.entities import Loner, Clan
 
 if TYPE_CHECKING:
@@ -26,7 +25,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
 
     @param sim: The simulation model instance
     """
-    # Clans suchen und essen Nahrung
     for group in sim.groups:
         for clan in group.clans:
             primary_prey_species = ["Icefang", "Crushed_Critters"]
@@ -115,7 +113,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
                     clan.hp_per_member = min(
                         clan.hp_per_member + (consumed * HP_PER_FOOD), max_hp
                     )
-                    # Log removed per user request
                     pass
 
                     try:
@@ -160,7 +157,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
                     except Exception:
                         pass
 
-    # Loners suchen und essen Nahrung
     for loner in sim.loners:
         primary_prey_species = ["Icefang", "Crushed_Critters"]
         primary_prey_exists = any(
@@ -212,7 +208,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
                 dist_sq = dx * dx + dy * dy
                 if dist_sq > 0:
                     inv = 1.0 / math.sqrt(dist_sq)
-                    # Preserve loner's current speed magnitude; only change direction.
                     current_speed = math.hypot(loner.vx, loner.vy)
                     if current_speed <= 0:
                         current_speed = random.uniform(*LONER_SPEED_INIT_RANGE)
@@ -239,7 +234,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
             dist_sq = dx * dx + dy * dy
             if dist_sq > 0:
                 inv = 1.0 / math.sqrt(dist_sq)
-                # Preserve loner's current speed magnitude; only change direction.
                 current_speed = math.hypot(loner.vx, loner.vy)
                 if current_speed <= 0:
                     current_speed = random.uniform(*LONER_SPEED_INIT_RANGE)
@@ -254,7 +248,6 @@ def process_food_seeking(sim: SimulationModel) -> None:
                 )
                 old_hp = loner.hp
                 loner.hp = min(loner.hp + (consumed * HP_PER_FOOD), loner.max_hp)
-                # Log removed per user request
                 pass
 
 
@@ -265,8 +258,6 @@ def process_interactions(sim: SimulationModel) -> None:
 
     @param sim: The simulation model instance
     """
-    if not hasattr(sim, "hunt_log_timer"):
-        sim.hunt_log_timer = {}
 
     primary_prey_species = ["Icefang", "Crushed_Critters"]
     primary_prey_exists = any(
@@ -322,18 +313,6 @@ def process_interactions(sim: SimulationModel) -> None:
                             >= HUNT_LOG_COOLDOWN
                         ):
                             sim.hunt_log_timer[hunt_key] = sim.time
-                            # sim.add_log(
-                            #     (
-                            #         "🎯 {attacker} Clan #{att_id} jagt {target} Clan #{tgt_id}! (Distanz: {dist}px)",
-                            #         {
-                            #             "attacker": group1.name,
-                            #             "att_id": clan1.clan_id,
-                            #             "target": group2.name,
-                            #             "tgt_id": clan2.clan_id,
-                            #             "dist": int(math.sqrt(dist_sq)),
-                            #         },
-                            #     )
-                            # )
 
                     if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
                         if interaction == "Aggressiv":
@@ -495,17 +474,6 @@ def process_interactions(sim: SimulationModel) -> None:
                         or sim.time - sim.hunt_log_timer[hunt_key] >= HUNT_LOG_COOLDOWN
                     ):
                         sim.hunt_log_timer[hunt_key] = sim.time
-                        # sim.add_log(
-                        #     (
-                        #         "🎯 {attacker} Clan #{att_id} jagt {loner_species} Einzelgänger! (Distanz: {dist}px)",
-                        #         {
-                        #             "attacker": group.name,
-                        #             "att_id": clan.clan_id,
-                        #             "loner_species": loner.species,
-                        #             "dist": int(math.sqrt(dist_sq)),
-                        #         },
-                        #     )
-                        # )
 
                 if dist_sq < (INTERACTION_RANGE * INTERACTION_RANGE):
                     if interaction == "Aggressiv":
