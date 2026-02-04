@@ -24,12 +24,10 @@ class StatsDialog(QDialog):
 
     def __init__(self, stats, parent=None):
         super().__init__(parent)
-        # initialize layout and widgets for stats dialog
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # Title
         title = QLabel(_("Simulations-Statistiken (5 Minuten)"))
         title_font = QFont("Minecraft", 16, QFont.Weight.Bold)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -38,11 +36,9 @@ class StatsDialog(QDialog):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title)
 
-        # Horizontal layout for text and graph
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)
 
-        # Left side: Stats text
         stats_text = QLabel()
         stats_font = QFont("Minecraft", 11)
         stats_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -51,8 +47,6 @@ class StatsDialog(QDialog):
         stats_text.setStyleSheet("color: #ffffff; padding: 10px;")
         stats_text.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Build stats string (each section added once, loops separate)
-        # Show final and peak populations so the text matches the plotted history
         text = "<b>" + _("Spezies im Spiel (gesamt):") + "</b><br>"
         species_counts = stats.get("species_counts", {}) or {}
         population_history = stats.get("population_history", {}) or {}
@@ -74,7 +68,6 @@ class StatsDialog(QDialog):
                     peak = final_count
             text += f"• {species}: {peak}<br>"
 
-        # Totals: current total population and aggregated death counts
         try:
             total_current = (
                 sum(int(v) for v in species_counts.values()) if species_counts else 0
@@ -109,7 +102,6 @@ class StatsDialog(QDialog):
         text += f"• {_('Verhungert')}: {total_starvation}<br>"
         text += f"• {_('Temperatur')}: {total_temperature}<br>"
 
-        # Peak populations per species (explicit)
         try:
             text += f"<br><b>{_('Peak Populationen pro Spezies:')}</b><br>"
             for species in sorted(all_species):
@@ -133,33 +125,27 @@ class StatsDialog(QDialog):
             logger.exception("Error in peak population section")
             pass
 
-        # Combat deaths
         text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
         for species, count in stats.get("deaths", {}).get("combat", {}).items():
             text += f"• {species}: {count}<br>"
 
-        # Starvation deaths
         text += f"<br><b>{_('Todesfälle (Verhungert):')}</b><br>"
         for species, count in stats.get("deaths", {}).get("starvation", {}).items():
             text += f"• {species}: {count}<br>"
 
-        # Temperature deaths
         text += f"<br><b>{_('Todesfälle (Temperatur):')}</b><br>"
         for species, count in stats.get("deaths", {}).get("temperature", {}).items():
             text += f"• {species}: {count}<br>"
 
-        # Summary numbers
         text += f"<br><b>{_('Maximale Clans:')}</b> {stats.get('max_clans', 0)}<br>"
         text += f"<b>{_('Futterplätze:')}</b> {stats.get('food_places', 0)}"
 
-        # store stats reference and text widget for language refresh and summaries
         try:
             self._stats = stats
         except Exception:
             logger.exception("Error storing stats")
             self._stats = {}
 
-        # Add a short summary of randomizer samples (helps debugging missing events)
         try:
             rnd = stats.get("rnd_samples", {}) or {}
             regen_count = len(rnd.get("regen", []))
@@ -204,9 +190,7 @@ class StatsDialog(QDialog):
             pass
 
         stats_text.setText(text)
-        # store for language refresh
         self._stats_text = stats_text
-        # Register listener so dialog updates if language changes while open
         try:
             from frontend.i18n import register_language_listener
 
@@ -215,23 +199,18 @@ class StatsDialog(QDialog):
             pass
         content_layout.addWidget(stats_text, 1)
 
-        # (no separate Y-label column; use axis labels on the plot)
-
-        # Right side: Population graph (use PyQtGraph for real-time performance)
         try:
             import pyqtgraph as pg
 
             pg.setConfigOptions(antialias=True)
 
             pw = pg.PlotWidget(background="#1a1a1a")
-            # Give final-stats graph more vertical room so curves aren't squished
             pw.setMinimumHeight(MIN_PANEL_HEIGHT)
             try:
                 pw.setMaximumHeight(16777215)
             except Exception:
                 pass
             try:
-                # QSizePolicy already imported
                 pw.setSizePolicy(
                     QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
                 )
@@ -241,11 +220,8 @@ class StatsDialog(QDialog):
             pw.getAxis("left").setTextPen("#ffffff")
             pw.getAxis("bottom").setTextPen("#ffffff")
             pw.setLabel("left", _("Population"), color="#ffffff", size="10pt")
-            # remove explicit seconds unit to reduce clutter
             pw.setLabel("bottom", _("Time (s)"), color="#ffffff", size="10pt")
 
-            # Disable user interaction; do NOT lock aspect ratio so the plot
-            # can expand vertically to use available space.
             try:
                 vb = pw.getPlotItem().getViewBox()
                 try:
@@ -270,11 +246,8 @@ class StatsDialog(QDialog):
 
             for species, history in population_history.items():
                 if history:
-                    # Downsample final stats to 5-second steps for clarity
-                    # population_history entries are per second; take every 5th
                     ds = 5
                     sampled = history[::ds]
-                    # Force integer populations for final stats
                     try:
                         sampled = [int(round(float(v))) for v in sampled]
                     except Exception:
@@ -289,9 +262,7 @@ class StatsDialog(QDialog):
                     except Exception:
                         pass
 
-            # Set Y-axis ticks for final stats: integers when max<10, else steps of 5
             try:
-                # Axis styling and adaptive tick selection to avoid label crowding
                 left_axis = pw.getAxis("left")
                 bottom_axis = pw.getAxis("bottom")
                 try:
@@ -300,7 +271,6 @@ class StatsDialog(QDialog):
                 except Exception:
                     pass
                 try:
-                    # Reduce reserved left axis width so the Y-label sits closer to axis
                     left_axis.setWidth(60)
                 except Exception:
                     pass
@@ -322,13 +292,11 @@ class StatsDialog(QDialog):
                         except Exception:
                             pass
 
-                # Y axis: add small headroom and choose step to keep ~6 ticks
                 padded = max(1.0, float(overall_max) * 1.10)
                 y_max = int(math.ceil(padded))
                 try:
                     import math as _math
 
-                    # Choose a "nice" step so we have at most ~6 ticks
                     nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
                     y_step = None
                     for s in nice:
@@ -336,10 +304,8 @@ class StatsDialog(QDialog):
                             y_step = s
                             break
                     if y_step is None:
-                        # fallback to ceil division
                         y_step = max(1, int(_math.ceil(float(y_max) / 6.0)))
 
-                    # Ensure visible spacing: prefer steps of 10 or more when range is larger
                     try:
                         if y_max >= 20 and y_step < 10:
                             y_step = 10
@@ -350,7 +316,6 @@ class StatsDialog(QDialog):
                 y_ticks = [(i, str(i)) for i in range(0, y_max + 1, y_step)]
                 if y_ticks and y_ticks[-1][0] != y_max:
                     y_ticks.append((y_max, str(y_max)))
-                # Show numeric Y-axis labels with the chosen ticks
                 try:
                     left_axis.setTicks([y_ticks])
                 except Exception:
@@ -361,10 +326,8 @@ class StatsDialog(QDialog):
                 except Exception:
                     pass
 
-                # Bottom axis: compute total duration from population_history and ds
                 ds = 5
                 total_seconds = max_len * ds if max_len else 0
-                # Choose step to avoid overcrowding (seconds or minutes)
                 if total_seconds <= 60:
                     step = 5
                 elif total_seconds <= 180:
@@ -377,7 +340,6 @@ class StatsDialog(QDialog):
                 bottom_ticks = []
                 for i in range(0, int(total_seconds) + 1, step):
                     if step >= 60:
-                        # show minutes for coarse steps
                         label = f"{int(i // 60)}m"
                     else:
                         label = str(i)
@@ -389,22 +351,17 @@ class StatsDialog(QDialog):
                 except Exception:
                     pass
 
-                # no separate Y label widget to populate
             except Exception:
                 pass
 
-            # Create a stacked area so we can switch between final population
-            # stats and Randomizers visualization using toggle buttons below.
             try:
                 right_stack = QStackedWidget()
 
-                # Page 0: final population plot
                 page_stats = QWidget()
                 p_stats_layout = QVBoxLayout(page_stats)
                 p_stats_layout.setContentsMargins(0, 0, 0, 0)
                 p_stats_layout.addWidget(pw)
 
-                # Randomizer toggles for final-stats overlay
                 try:
                     rnd_toggle_layout = QHBoxLayout()
                     rnd_toggle_layout.setSpacing(8)
@@ -425,13 +382,11 @@ class StatsDialog(QDialog):
                     rnd_toggle_layout.addStretch()
                     p_stats_layout.addLayout(rnd_toggle_layout)
 
-                    # overlay curves storage
                     self._stats_rnd_curves = {}
 
                     def _refresh_stats_overlays():
                         try:
                             samples = (self._stats or {}).get("rnd_samples", {}) or {}
-                            # compute y_max from population history similar to plot above
                             pop_hist = (self._stats or {}).get(
                                 "population_history", {}
                             ) or {}
@@ -472,22 +427,16 @@ class StatsDialog(QDialog):
                                             isinstance(item, (list, tuple))
                                             and len(item) == 2
                                         ):
-                                            # (time, value)
                                             t_val, v_val = item
-                                            # Convert ticks to seconds (assuming 0.1s tick rate / 10 ticks per sec)
                                             x.append(float(t_val) / 10.0)
                                             y.append(float(v_val))
                                         else:
-                                            # legacy fallback: use index
                                             x.append(float(len(x)))
                                             try:
                                                 y.append(float(item))
                                             except Exception:
                                                 y.append(0.0)
 
-                                    # Scale each series to fit the population Y-range
-                                    # Use expected maxima per-randomizer so small-series
-                                    # (e.g. regen=1..3) don't get amplified to full height.
                                     expected_max_map = {
                                         "regen": 10.0,
                                         "clan_growth": 10.0,
@@ -496,10 +445,8 @@ class StatsDialog(QDialog):
                                     expected_max = expected_max_map.get(key, 10.0)
                                     expected_max = max(1.0, float(expected_max))
 
-                                    # How strongly overlays should fill the population Y range
                                     overlay_strength = 0.6
 
-                                    # Compute scaled y values clamped to [0, y_max*overlay_strength]
                                     y_scaled = []
                                     for yi in y:
                                         try:
@@ -510,7 +457,6 @@ class StatsDialog(QDialog):
                                         y_scaled.append(frac * y_max * overlay_strength)
                                     if key not in self._stats_rnd_curves:
                                         try:
-                                            # Use dotted lines as requested
                                             pen = pg.mkPen(
                                                 color=colors.get(key, (200, 200, 200)),
                                                 width=2,
@@ -549,7 +495,6 @@ class StatsDialog(QDialog):
                         except Exception:
                             return
 
-                    # connect toggles
                     for cb in self._stats_rnd_toggles.values():
                         try:
                             cb.stateChanged.connect(
@@ -558,7 +503,6 @@ class StatsDialog(QDialog):
                         except Exception:
                             pass
 
-                    # initial overlay pass
                     try:
                         _refresh_stats_overlays()
                     except Exception:
@@ -566,7 +510,6 @@ class StatsDialog(QDialog):
                 except Exception:
                     pass
 
-                # Page 1: Randomizers graph (uses rnd_samples from stats)
                 page_rand = QWidget()
                 p_rand_layout = QVBoxLayout(page_rand)
                 p_rand_layout.setContentsMargins(0, 0, 0, 0)
@@ -584,7 +527,6 @@ class StatsDialog(QDialog):
                     except Exception:
                         pass
 
-                    # Plot rnd_samples as histograms for better distribution view
                     rnd = stats.get("rnd_samples", {}) or {}
                     colors = {
                         "regen": (102, 204, 102),
@@ -597,7 +539,6 @@ class StatsDialog(QDialog):
                         "loner_spawn": "Einzelgänger Spawn",
                     }
 
-                    # Collect histograms per series
                     has_any = False
                     max_bin = 0
                     hist_data = {}
@@ -611,7 +552,6 @@ class StatsDialog(QDialog):
                             continue
                         has_any = True
                         if key == "regen":
-                            # Aggregate regen into bins: 0-1, 2-4, 5-9, 10+
                             ranges = [(0, 1), (2, 4), (5, 9), (10, 10**9)]
                             counts = [0] * len(ranges)
                             for n in nums:
@@ -620,9 +560,7 @@ class StatsDialog(QDialog):
                                         counts[i] += 1
                                         break
                             bins = list(range(len(ranges)))
-                            # labels for bottom axis
                             labels = ["0-1", "2-4", "5-9", "10+"]
-                            # normalize to percentages so axis isn't dominated by outliers
                             total = sum(counts)
                             if total > 0:
                                 counts = [c / total * 100.0 for c in counts]
@@ -631,25 +569,21 @@ class StatsDialog(QDialog):
                         else:
                             mx = max(nums)
                             max_bin = max(max_bin, mx)
-                            # build simple count histogram bins 0..mx
                             counts = [0] * (mx + 1)
                             for n in nums:
                                 counts[n] += 1
                             bins = list(range(0, mx + 1))
-                            # normalize to percentages so axis isn't dominated by outliers
                             total = sum(counts)
                             if total > 0:
                                 counts = [c / total * 100.0 for c in counts]
                             hist_data[key] = (bins, counts, None)
 
                     if not has_any:
-                        # nothing to show
                         placeholder = QLabel(_("Keine Randomizer-Daten verfügbar"))
                         placeholder.setStyleSheet("color: #999999;")
                         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
                         p_rand_layout.addWidget(placeholder)
                     else:
-                        # Create grouped bar chart: shift bars slightly per series
                         try:
                             from pyqtgraph import BarGraphItem
 
@@ -658,7 +592,6 @@ class StatsDialog(QDialog):
                                 for k in ("regen", "clan_growth", "loner_spawn")
                                 if k in hist_data
                             ]
-                            # width per bar
                             bw = 0.2
                             offsets = {
                                 "regen": -bw,
@@ -678,7 +611,6 @@ class StatsDialog(QDialog):
                                 )
                                 rpw.addItem(bg)
                                 try:
-                                    # add legend symbol
                                     rpw.plot(
                                         [],
                                         [],
@@ -688,12 +620,10 @@ class StatsDialog(QDialog):
                                 except Exception:
                                     pass
                         except Exception:
-                            # fallback to time-series if BarGraphItem not available
                             for key, vals in rnd.items():
                                 try:
                                     x = list(range(len(vals)))
                                     y = [float(v) for v in vals]
-                                    # normalize time-series to percentage of max to avoid extreme spikes
                                     maxy = max(y) if y else 0.0
                                     if maxy > 0:
                                         y = [yi / maxy * 100.0 for yi in y]
@@ -708,7 +638,6 @@ class StatsDialog(QDialog):
 
                     p_rand_layout.addWidget(rpw)
                 except Exception:
-                    # If pyqtgraph missing, show a placeholder
                     placeholder = QLabel(
                         _("Randomizers graph nicht verfügbar (pyqtgraph benötigt)")
                     )
@@ -719,12 +648,10 @@ class StatsDialog(QDialog):
                 right_stack.addWidget(page_stats)
                 right_stack.addWidget(page_rand)
 
-                # expose stack to dialog for button callbacks
                 self._right_stack = right_stack
 
                 content_layout.addWidget(right_stack, 2)
             except Exception:
-                # fallback: add the population plot directly
                 content_layout.addWidget(pw, 2)
         except Exception:
             no_graph_label = QLabel(_("Graph nicht verfügbar\n(pyqtgraph benötigt)"))
@@ -738,7 +665,6 @@ class StatsDialog(QDialog):
         btn_row.addStretch()
         main_layout.addLayout(btn_row)
 
-        # Close button
         close_btn = QPushButton(_("Schließen"))
         close_btn_font = QFont("Minecraft", 12)
         close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -756,23 +682,18 @@ class StatsDialog(QDialog):
         try:
             from frontend.i18n import _
 
-            # window title
             try:
                 self.setWindowTitle(_("Simulations-Statistiken"))
             except Exception:
                 pass
-            # title (first QLabel added in layout)
             try:
-                # title is the first widget in the main layout
                 title_widget = self.findChild(QLabel)
                 if title_widget is not None:
                     title_widget.setText(_("Simulations-Statistiken (5 Minuten)"))
             except Exception:
                 pass
-            # rebuild the main text area using stored stats
             try:
                 stats = getattr(self, "_stats", {})
-                # Build stats string (match logic from __init__ to show peaks)
                 text = "<b>" + _("Spezies im Spiel (Max):") + "</b><br>"
                 species_counts = stats.get("species_counts", {}) or {}
                 population_history = stats.get("population_history", {}) or {}
@@ -827,7 +748,6 @@ class StatsDialog(QDialog):
         try:
             if hasattr(self, "_right_stack") and self._right_stack is not None:
                 self._right_stack.setCurrentIndex(int(idx))
-            # update button checked states
             self.btn_view_stats.setChecked(idx == 0)
             self.btn_view_random.setChecked(idx == 1)
         except Exception:
