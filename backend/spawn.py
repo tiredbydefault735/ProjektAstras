@@ -10,13 +10,8 @@ from config import (
     SPAWN_PADDING,
     SPAWN_THRESHOLD_HIGH,
     SPAWN_THRESHOLD_LOW,
-    SPAWN_SINGLE_COUNT,
     DEFAULT_COLOR,
-    DEFAULT_COLOR as DEFAULT_COLOR_HEX,  # Fallback alias
-    LONER_SPAWN_RANGE,
-    LONER_SPAWN_RANGE as _LONER_SPAWN_RANGE,
     FOOD_INTAKE_DEFAULT,
-    DEFAULT_FOOD_PLACES,
     DEFAULT_HP,
     ICEFANG_COLOR,
     CRUSHED_CRITTERS_COLOR,
@@ -35,7 +30,6 @@ def spawn_loners(sim: SimulationModel) -> None:
 
     @param sim: The simulation model instance
     """
-    # Import Loner locally to avoid circular import at module import time
     from backend.entities import Loner
 
     for species_name, stats in sim.species_config.items():
@@ -52,7 +46,6 @@ def spawn_loners(sim: SimulationModel) -> None:
             spawn_threshold = SPAWN_THRESHOLD_LOW
         spawn_chance = random.uniform(0.0, 1.0)
         if spawn_chance < spawn_threshold:
-            # Increase spawn count slightly to make it more noticeable (2-3 instead of 1)
             spawn_count = random.randint(2, 3)
             color_map = {
                 "Icefang": ICEFANG_COLOR,
