@@ -11,7 +11,6 @@ class CustomCheckBox(QCheckBox):
         self.unchecked_pixmap = QPixmap(unchecked_path)
         self.checked_pixmap = QPixmap(checked_path)
 
-        # Scale pixmaps to 20x20 if needed
         if not self.unchecked_pixmap.isNull():
             self.unchecked_pixmap = self.unchecked_pixmap.scaled(
                 20,
@@ -27,7 +26,6 @@ class CustomCheckBox(QCheckBox):
                 Qt.TransformationMode.SmoothTransformation,
             )
 
-        # Hide default indicator and add spacing for our custom image
         self.setStyleSheet(
             """
             QCheckBox {
@@ -47,7 +45,6 @@ class CustomCheckBox(QCheckBox):
 
         painter = QPainter(self)
 
-        # Draw checkbox image at left position
         pixmap = self.checked_pixmap if self.isChecked() else self.unchecked_pixmap
         if not pixmap.isNull():
             painter.drawPixmap(0, (self.height() - 20) // 2, pixmap)
@@ -68,8 +65,8 @@ class CustomImageButton(QPushButton):
         self.setFixedSize(size, size)
         self.setStyleSheet("border: none; background: transparent;")
 
-    def paintEvent(self, event):
-        super().paintEvent(event)
+    def paintEvent(self, a0):
+        super().paintEvent(a0)
         from PyQt6.QtGui import QPainter
 
         painter = QPainter(self)
