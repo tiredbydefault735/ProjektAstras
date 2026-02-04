@@ -10,11 +10,8 @@ import gettext
 from pathlib import Path
 from typing import Callable, List, Dict, Optional, Any
 
-# Locale directory (project root)/i18n
-# Translations are stored under `i18n/<lang>/LC_MESSAGES/*.mo`
 LOCALE_DIR = Path(__file__).parent.parent / "i18n"
 
-# Current runtime state
 _current_lang: str = "de"
 _po_catalog: Dict[str, str] = {}
 _gettext_trans: Optional[gettext.NullTranslations] = None
@@ -54,7 +51,6 @@ def _parse_po(path: Path) -> Dict[str, str]:
                 state = None
     if msgid is not None:
         entries[msgid] = msgstr
-    # drop header entry
     if "" in entries:
         entries.pop("")
     return entries
@@ -77,7 +73,6 @@ def _load_translations(lang: str) -> None:
     _po_catalog = {}
     _gettext_trans = None
 
-    # 1) JSON at top-level like i18n/en.json
     json_top = LOCALE_DIR / f"{lang}.json"
     if json_top.exists():
         try:
@@ -89,7 +84,6 @@ def _load_translations(lang: str) -> None:
         except Exception:
             _po_catalog = {}
 
-    # 2) JSON inside lang directory: i18n/<lang>/projektas.json
     json_inner = LOCALE_DIR / lang / "projektas.json"
     if json_inner.exists():
         try:
@@ -101,7 +95,6 @@ def _load_translations(lang: str) -> None:
         except Exception:
             _po_catalog = {}
 
-    # 3) compiled .mo
     mo_path = LOCALE_DIR / lang / "LC_MESSAGES" / "projektas.mo"
     if mo_path.exists():
         try:
@@ -114,7 +107,6 @@ def _load_translations(lang: str) -> None:
         except Exception:
             _gettext_trans = None
 
-    # 4) .po inside lang/LC_MESSAGES
     po_inner = LOCALE_DIR / lang / "LC_MESSAGES" / "projektas.po"
     if po_inner.exists():
         try:
@@ -125,7 +117,6 @@ def _load_translations(lang: str) -> None:
         except Exception:
             _po_catalog = {}
 
-    # 5) top-level .po like i18n/en.po
     po_top = LOCALE_DIR / f"{lang}.po"
     if po_top.exists():
         try:
@@ -136,7 +127,6 @@ def _load_translations(lang: str) -> None:
         except Exception:
             _po_catalog = {}
 
-    # 6) fallback: try top-level JSON again (safe no-op)
     if json_top.exists():
         try:
             with open(json_top, "r", encoding="utf-8") as f:
@@ -158,23 +148,18 @@ def set_language(lang: str) -> bool:
     global _current_lang
     _current_lang = lang
     _load_translations(lang)
-    # notify listeners after changing language
     try:
         _notify_language_change()
     except Exception:
         pass
-    # As a final guarantee, try to find top-level application windows and
-    # call `update_language()` on known screen attributes so UI refreshes.
     try:
         debug = os.environ.get("I18N_DEBUG")
         from PyQt6.QtWidgets import QApplication
 
         app = QApplication.instance()
         if app is not None:
-            # We assume app type here is generic enough to have topLevelWidgets
             for w in QApplication.topLevelWidgets():
                 try:
-                    # common screen attribute names used in ArachfaraApp
                     for attr in (
                         "start_screen",
                         "simulation_screen",
@@ -196,12 +181,10 @@ def set_language(lang: str) -> bool:
                 except Exception:
                     pass
     except Exception:
-        # Non-fatal: if PyQt is not available or no app running, ignore
         pass
     return True
 
 
-# Language change listeners
 _lang_listeners: List[Callable[[], None]] = []
 
 
@@ -214,13 +197,11 @@ def register_language_listener(fn: Callable[[], None]) -> None:
     """
     try:
         _lang_listeners.append(fn)
-        # If debugging enabled, print registration info
         try:
             if os.environ.get("I18N_DEBUG"):
                 logger.debug(f"i18n: registered listener {fn}")
         except Exception:
             pass
-        # Call the listener once to ensure UI is in sync with current language
         try:
             fn()
         except Exception:
@@ -234,7 +215,6 @@ def register_language_listener(fn: Callable[[], None]) -> None:
 
 
 def _notify_language_change() -> None:
-    # Optional debug logging controlled by environment variable `I18N_DEBUG`.
     debug = os.environ.get("I18N_DEBUG")
     try:
         if debug:
@@ -269,17 +249,14 @@ def available_languages() -> List[str]:
     @return: List of available language codes
     """
     langs = set()
-    # top-level JSON/PO files: en.json, en.po
     if LOCALE_DIR.exists():
         for p in LOCALE_DIR.glob("*.json"):
             langs.add(p.stem)
         for p in LOCALE_DIR.glob("*.po"):
             langs.add(p.stem)
-        # directories like 'en', 'de'
         for p in LOCALE_DIR.iterdir():
             if p.is_dir():
                 langs.add(p.name)
-                # also consider json files inside the lang dir (e.g. i18n/en/projektas.json)
                 for j in p.glob("*.json"):
                     langs.add(p.name)
     return sorted(langs)
@@ -302,7 +279,6 @@ def _(text: str) -> str:
         return text
 
 
-# Export shorthand
 __all__ = [
     "_",
     "set_language",
