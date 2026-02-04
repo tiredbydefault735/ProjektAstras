@@ -83,6 +83,9 @@ class EnvironmentPanel(QWidget):
             ["Snowy Abyss", "Wasteland", "Evergreen Forest", "Corrupted Caves"]
         )
         self.region_combo.setFixedHeight(30)
+        region_combo_font = QFont("Minecraft", 12)
+        region_combo_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.region_combo.setFont(region_combo_font)
         self.region_combo.currentTextChanged.connect(self.on_region_changed)
         layout.addWidget(self.region_combo)
 
@@ -127,11 +130,8 @@ class EnvironmentPanel(QWidget):
 
         # Anzahl Nahrungsplätze
         # Food Level Label (missing initialization fix)
-        self.food_label = QLabel("1/10")
         food_label_font = QFont("Minecraft", 11)
         food_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.food_label.setFont(food_label_font)
-        layout.addWidget(self.food_label)
         self.food_places_label = QLabel(_("Nahrungsplätze: 5"))
         food_places_font = QFont("Minecraft", 11)
         food_places_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -396,12 +396,10 @@ class EnvironmentPanel(QWidget):
     def increase_food(self):
         """Increase food level."""
         self.current_food_level = min(10, self.current_food_level + 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
 
     def decrease_food(self):
         """Decrease food level."""
         self.current_food_level = max(1, self.current_food_level - 1)
-        self.food_label.setText(f"{self.current_food_level}/10")
 
     def get_selected_region(self):
         """Get currently selected region."""
@@ -559,10 +557,6 @@ class EnvironmentPanel(QWidget):
                 self.temp_value_label.setStyleSheet(
                     f"color: {text}; background: transparent;"
                 )
-            if hasattr(self, "food_label") and self.food_label is not None:
-                self.food_label.setStyleSheet(
-                    f"color: {text}; background: transparent;"
-                )
             if (
                 hasattr(self, "food_places_label")
                 and self.food_places_label is not None
@@ -630,15 +624,6 @@ class EnvironmentPanel(QWidget):
                     self.day_btn.setText(_("Tag"))
                 if hasattr(self, "night_btn"):
                     self.night_btn.setText(_("Nacht"))
-            except Exception:
-                pass
-            # Update day/night buttons in EnvironmentPanel if present
-            try:
-                if hasattr(self, "environment_panel"):
-                    if hasattr(self.environment_panel, "day_btn"):
-                        self.environment_panel.day_btn.setText(_("Tag"))
-                    if hasattr(self.environment_panel, "night_btn"):
-                        self.environment_panel.night_btn.setText(_("Nacht"))
             except Exception:
                 pass
 

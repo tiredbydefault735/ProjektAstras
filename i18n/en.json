@@ -35,7 +35,7 @@
     "Regeneration": "Regeneration",
     "Region": "Region",
     "Region:": "Region:",
-    "Reset/Stop": "Reset/Stop",
+    "Stop": "Stop",
     "Schließen": "Close",
     "Settings": "Settings",
     "Simulation Logs": "Simulation Logs",
@@ -58,8 +58,6 @@
     "Todesfälle (Temperatur):": "Deaths (Temperature):",
     "Todesfälle (Verhungert):": "Deaths (Starvation):",
     "Zurück": "Back",
-    "← Back": "← Back",
-    "← Zurück": "← Back",
     "☀️ Tag": "☀️ Day",
     "🌙 Nacht": "🌙 Night",
     "🌡️ {val}°C": "🌡️ {val}°C"
@@ -76,8 +74,7 @@
     "❄️ {species} Einzelgänger stirbt an Temperatur ({val}°C)!": "❄️ {species} loner dies from temperature ({val}°C)!",
     "☠️ {species} Einzelgänger verhungert!": "☠️ {species} loner starved to death!",
     "🌱 {species} Clan #{clan_id} wächst nach Essen (+{increase} Mitglieder)": "🌱 {species} clan #{clan_id} grows after eating (+{increase} members)",
-    "🍽️ {species} Einzelgänger isst {consumed} Food (+{hp_gain} HP)": "🍽️ {species} loner eats {consumed} food (+{hp_gain} HP)"
-    ,
+
     "🎯 {attacker} Clan #{att_id} jagt {target} Clan #{tgt_id}! (Distanz: {dist}px)": "🎯 {attacker} clan #{att_id} hunts {target} clan #{tgt_id}! (Distance: {dist}px)",
     "⚔️ {attacker} Clan #{att_id} → {target} Clan #{tgt_id} (-{killed} Mitglied)": "⚔️ {attacker} clan #{att_id} → {target} clan #{tgt_id} (-{killed} member)",
     "🍖 {species} Clan #{clan_id} frisst {killed} Arach(s) (+{food} Food)": "🍖 {species} clan #{clan_id} eats {killed} arach(s) (+{food} food)",

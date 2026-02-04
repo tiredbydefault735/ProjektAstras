@@ -754,17 +754,20 @@ class SimulationModel:
         # Referenz für Logging (removed for SimPy compatibility)
         # self.env.sim_model = self
 
+        # Total population calculation
         total_pop = sum(sum(c.population for c in g.clans) for g in self.groups)
-        self.add_log(
-            (
-                "Start: {species_count} Spezies, {total_pop} Mitglieder, {loner_count} Einzelgänger",
-                {
-                    "species_count": len(self.groups),
-                    "total_pop": total_pop,
-                    "loner_count": len(self.loners),
-                },
-            )
-        )
+
+        # Log removed per user request
+        # self.add_log(
+        #     (
+        #         "Start: {species_count} Spezies, {total_pop} Mitglieder, {loner_count} Einzelgänger",
+        #         {
+        #             "species_count": len(self.groups),
+        #             "total_pop": total_pop,
+        #             "loner_count": len(self.loners),
+        #         },
+        #     )
+        # )
 
         # Initialize statistics
         self.stats["food_places"] = food_places

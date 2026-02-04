@@ -22,7 +22,6 @@ from PyQt6.QtGui import QIcon, QFontDatabase, QCloseEvent
 
 from screens.start_screen import StartScreen
 from screens.simulation_screen import SimulationScreen
-from screens.species_info_screen import SpeciesInfoScreen
 from styles.stylesheet import get_stylesheet
 from frontend.i18n import _, set_language
 from config import WINDOW_START_X, WINDOW_START_Y, WINDOW_WIDTH, WINDOW_HEIGHT
@@ -40,7 +39,7 @@ class ArachfaraApp(QMainWindow):
     @ivar stacked: The QStackedWidget holding different screens
     @ivar start_screen: Instance of the start screen
     @ivar simulation_screen: Instance of the simulation screen
-    @ivar species_info_screen: Instance of the species info screen
+
     """
 
     def __init__(
@@ -73,13 +72,8 @@ class ArachfaraApp(QMainWindow):
         self.setCentralWidget(self.stacked)
 
         # Create screens with optional color preset
-        self.start_screen = StartScreen(
-            self.go_to_simulation, self.go_to_species_info, self.color_preset
-        )
+        self.start_screen = StartScreen(self.go_to_simulation, self.color_preset)
         self.simulation_screen = SimulationScreen(self.go_to_start, self.color_preset)
-        self.species_info_screen = SpeciesInfoScreen(
-            self.go_to_start, self.color_preset
-        )
 
         # Apply automation if requested
         if self.auto_options.get("auto_run"):
@@ -109,8 +103,6 @@ class ArachfaraApp(QMainWindow):
                 register_language_listener(self.start_screen.update_language)
             if hasattr(self.simulation_screen, "update_language"):
                 register_language_listener(self.simulation_screen.update_language)
-            if hasattr(self.species_info_screen, "update_language"):
-                register_language_listener(self.species_info_screen.update_language)
         except Exception:
             logger.exception("Failed to register language listeners")
             pass
@@ -118,7 +110,6 @@ class ArachfaraApp(QMainWindow):
         # Add screens to stacked widget
         self.stacked.addWidget(self.start_screen)
         self.stacked.addWidget(self.simulation_screen)
-        self.stacked.addWidget(self.species_info_screen)
 
         # Start with start screen
         self.stacked.setCurrentWidget(self.start_screen)
@@ -152,10 +143,6 @@ class ArachfaraApp(QMainWindow):
     def go_to_simulation(self) -> None:
         """Switch to simulation screen."""
         self.stacked.setCurrentWidget(self.simulation_screen)
-
-    def go_to_species_info(self) -> None:
-        """Switch to species info page."""
-        self.stacked.setCurrentWidget(self.species_info_screen)
 
     def open_settings(self) -> None:
         """Settings screen removed; noop callback."""

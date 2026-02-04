@@ -165,6 +165,7 @@ class SimulationScreen(QWidget):
         self.max_simulation_time = MAX_SIMULATION_TIME  # seconds
         self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
         self.population_data = {}  # Store population history for live graph
+        self.last_log_count = 0  # Track number of processed logs
 
         # Load species config
         json_path = get_static_path("data/species.json")
@@ -193,7 +194,7 @@ class SimulationScreen(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
 
-        self.btn_back = QPushButton(_("← Back"))
+        self.btn_back = QPushButton(_("Back"))
         btn_back_font = QFont("Minecraft", 12)
         btn_back_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_back.setFont(btn_back_font)
@@ -207,7 +208,6 @@ class SimulationScreen(QWidget):
         btn_exit_font = QFont("Minecraft", 12)
         btn_exit_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_exit.setFont(btn_exit_font)
-        self.btn_exit.setFixedWidth(BUTTON_FIXED_WIDTH)
         self.btn_exit.clicked.connect(self.on_exit)
         top_bar.addWidget(self.btn_exit)
 
@@ -327,6 +327,15 @@ class SimulationScreen(QWidget):
 
         right_layout.addWidget(self.stats_log_widget)
 
+        # Start Simulation Button
+        self.btn_start_simulation = QPushButton(_("Start Simulation"))
+        start_font = QFont("Minecraft", 14)
+        start_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
+        self.btn_start_simulation.setFont(start_font)
+        self.btn_start_simulation.setFixedHeight(40)
+        self.btn_start_simulation.clicked.connect(self.toggle_simulation)
+        right_layout.addWidget(self.btn_start_simulation)
+
         # New Control Bar
         self.control_bar = ControlBar()
         self.control_bar.playPauseClicked.connect(self.toggle_play_pause)
@@ -362,6 +371,7 @@ class SimulationScreen(QWidget):
         main_layout.addWidget(content_splitter)
 
         self.update_theme(self.color_preset)
+        self.update_ui_visibility()
 
     def preview_startup(self):
         try:
@@ -451,6 +461,39 @@ class SimulationScreen(QWidget):
             """
             self.btn_species_tab.setStyleSheet(tab_button_style)
             self.btn_region_tab.setStyleSheet(tab_button_style)
+
+    def update_ui_visibility(self):
+        """Update visibility of UI elements based on state."""
+        has_stats = hasattr(self, "last_stats") and self.last_stats is not None
+        is_running = self.is_running
+
+        # Start button: Only when NOT running
+        self.btn_start_simulation.setVisible(not is_running)
+
+        # Control Bar: Only when running
+        self.control_bar.setVisible(is_running)
+
+        # Stats/Log Widget: Visible if running OR if we have stats/logs (i.e. not initial state)
+        # Assuming we want to show it if we have something to show, or if user is in "post-run" state.
+        # "all these should only show up while the simulation is running" -> Maybe user meant Control Bar AND Stats/Log?
+        # But Stats button is needed AFTER run.
+        # Let's show Stats/Log container if we are running OR have previous stats.
+        self.stats_log_widget.setVisible(is_running or has_stats)
+
+        # Specifically for Stats button: Only show if NOT running and HAVE stats
+        # (Assuming we don't view previous stats while running new one, to avoid confusion)
+        self.btn_stats.setVisible(not is_running and has_stats)
+
+        # Tabs/Panel: Hidden when running
+        self.btn_region_tab.setVisible(not is_running)
+        self.btn_species_tab.setVisible(not is_running)
+        self.panel_stack.setVisible(not is_running)
+
+        # Graph: Visible when running
+        self.graph_container.setVisible(is_running)
+
+        # Force layout update
+        QApplication.processEvents()
 
     def toggle_simulation(self) -> None:
         """Start/resume simulation."""
@@ -542,15 +585,13 @@ class SimulationScreen(QWidget):
                     self.population_data[species_name] = []
 
                 # UI Visibility
-                self.btn_region_tab.setVisible(False)
-                self.btn_species_tab.setVisible(False)
-                self.panel_stack.setVisible(False)
-                self.stats_log_widget.setVisible(False)
-                self.control_bar.setVisible(True)
-                self.graph_container.setVisible(True)
+                self.update_ui_visibility()
 
                 # Reset graph
                 self.live_graph_view.reset()
+
+                # Reset log counter
+                self.last_log_count = 0
 
             # Resume
             self.is_running = True
@@ -559,6 +600,7 @@ class SimulationScreen(QWidget):
                 self.set_speed(self.auto_options["speed"])
 
             self.control_bar.set_running_state(True)
+            self.update_ui_visibility()
 
             if not self.update_timer:
                 self.update_timer = QTimer()
@@ -584,7 +626,7 @@ class SimulationScreen(QWidget):
 
     def stop_simulation(self) -> None:
         """Stop and reset simulation."""
-        show_stats = self.is_running and self.sim_model
+        show_stats = self.sim_model is not None
 
         self.environment_panel.set_controls_enabled(True)
 
@@ -612,12 +654,7 @@ class SimulationScreen(QWidget):
         self.live_graph_view.reset()
 
         # UI Visibility
-        self.btn_region_tab.setVisible(True)
-        self.btn_species_tab.setVisible(True)
-        self.panel_stack.setVisible(True)
-        self.stats_log_widget.setVisible(True)
-        self.control_bar.setVisible(True)
-        self.graph_container.setVisible(False)
+        self.update_ui_visibility()
 
         if show_stats and sim_model_for_stats:
             stats = sim_model_for_stats.get_final_stats()
@@ -687,11 +724,13 @@ class SimulationScreen(QWidget):
 
             # Logs
             logs = data.get("logs", [])
-            if logs:
+            new_logs = logs[self.last_log_count :]
+            if new_logs:
                 parsed = []
-                for l in logs:
+                for l in new_logs:
                     parsed.append(self._format_log_entry(l))
                 self.log_text += "\n" + "\n".join(parsed)
+                self.last_log_count = len(logs)
                 # truncate
                 parts = self.log_text.split("\n")
                 if len(parts) > 1000:
@@ -771,7 +810,7 @@ class SimulationScreen(QWidget):
 
     def update_language(self):
         if hasattr(self, "btn_back"):
-            self.btn_back.setText(_("← Back"))
+            self.btn_back.setText(_("Back"))
         if hasattr(self, "btn_exit"):
             self.btn_exit.setText(_("Exit"))
         if hasattr(self, "btn_region_tab"):

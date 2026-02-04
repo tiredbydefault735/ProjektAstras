@@ -26,7 +26,7 @@ class ControlBar(QWidget):
 
         # Play/Pause and Stop Buttons
         play_controls_layout = QHBoxLayout()
-        self.btn_play_pause = QPushButton("▶")
+        self.btn_play_pause = QPushButton(_("Pause"))
         play_font = QFont("Minecraft", 16)
         play_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_play_pause.setFont(play_font)
@@ -34,7 +34,7 @@ class ControlBar(QWidget):
         self.btn_play_pause.clicked.connect(self.playPauseClicked.emit)
         play_controls_layout.addWidget(self.btn_play_pause)
 
-        self.btn_stop = QPushButton(_("Reset/Stop"))
+        self.btn_stop = QPushButton(_("Stop"))
         stop_font = QFont("Minecraft", 16)
         stop_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         self.btn_stop.setFont(stop_font)
@@ -90,6 +90,8 @@ class ControlBar(QWidget):
         self.btn_speed_5x.clicked.connect(lambda: self.speedChanged.emit(5))
         info_layout.addWidget(self.btn_speed_5x)
 
+        layout.addLayout(info_layout)
+
         # Live info row
         live_info_layout = QHBoxLayout()
         live_info_layout.setSpacing(10)
@@ -114,15 +116,13 @@ class ControlBar(QWidget):
 
     def set_running_state(self, is_running):
         if is_running:
-            self.btn_play_pause.setText("⏸")
+            self.btn_play_pause.setText(_("Pause"))
             self.btn_play_pause.setStyleSheet(
                 "background-color: #4CAF50; color: white;"
             )
         else:
-            self.btn_play_pause.setText("▶")
+            self.btn_play_pause.setText(_("Weiter"))
             self.btn_play_pause.setStyleSheet("")
-            # Pause icon in label is handled by update logic if needed, or by parent.
-            # But the requirement was "setText" so we do this.
 
     def update_speed_buttons(self, speed):
         self.btn_speed_1x.setChecked(speed == 1)
@@ -153,7 +153,7 @@ class ControlBar(QWidget):
             self.live_day_night_label.setStyleSheet("color: #8888ff; padding: 0 10px;")
 
     def update_language(self):
-        self.btn_stop.setText(_("Reset/Stop"))
+        self.btn_stop.setText(_("Stop"))
 
         txt = self.live_day_night_label.text()
         if "☀️" in txt:

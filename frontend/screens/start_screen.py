@@ -32,12 +32,10 @@ class StartScreen(QWidget):
     def __init__(
         self,
         go_to_simulation_callback: Callable[[], None],
-        go_to_settings_callback: Callable[[], None],
         color_preset: Optional[Any] = None,
     ) -> None:
         super().__init__()
         self.go_to_simulation = go_to_simulation_callback
-        self.go_to_settings = go_to_settings_callback
         self.color_preset = color_preset
         self.center_container = None
         self.init_ui()
@@ -136,15 +134,15 @@ class StartScreen(QWidget):
 
         # Center container with title and buttons
         self.center_container = QFrame(self)
-        self.center_container.setFixedSize(480, 420)
+        self.center_container.setFixedSize(480, 300)
         self.center_container.setStyleSheet(
             f"background-color: {bg_color_rgba}; border: none;"
         )
         self.center_container.setContentsMargins(10, 10, 10, 10)
 
         button_layout = QVBoxLayout(self.center_container)
-        button_layout.setContentsMargins(30, 40, 30, 40)
-        button_layout.setSpacing(0)
+        button_layout.setContentsMargins(30, 10, 30, 10)
+        button_layout.setSpacing(5)
 
         # Title and subtitle as single HTML label for tight spacing control
         header = QLabel()
@@ -166,7 +164,7 @@ class StartScreen(QWidget):
                 padding: 8px;
             }
             QPushButton:hover {
-                background-color: rgba(180, 75, 75, 0);
+                background-color: rgba(255, 255, 255, 50);
             }
         """
 
@@ -179,15 +177,6 @@ class StartScreen(QWidget):
         self.btn_start.setStyleSheet(button_style)
         self.btn_start.clicked.connect(self._on_start_clicked)
         button_layout.addWidget(self.btn_start)
-
-        self.btn_settings = QPushButton(_("Species Information"))
-        btn_settings_font = QFont("Minecraft", 11)
-        btn_settings_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
-        self.btn_settings.setFont(btn_settings_font)
-        self.btn_settings.setFixedHeight(40)
-        self.btn_settings.setStyleSheet(button_style)
-        self.btn_settings.clicked.connect(self.on_species_info)
-        button_layout.addWidget(self.btn_settings)
 
         self.btn_exit = QPushButton(_("Exit"))
         btn_exit_font = QFont("Minecraft", 11)
@@ -217,8 +206,6 @@ class StartScreen(QWidget):
                     header.setText(self._header_html())
             if hasattr(self, "btn_start"):
                 self.btn_start.setText(_("Start Simulation"))
-            if hasattr(self, "btn_settings"):
-                self.btn_settings.setText(_("Species Information"))
             if hasattr(self, "btn_exit"):
                 self.btn_exit.setText(_("Exit"))
         except Exception:
@@ -242,47 +229,6 @@ class StartScreen(QWidget):
             "</div>"
         )
 
-    def on_species_info(self):
-        """Navigate to the Species Info screen; fall back to dialog if no callback."""
-        # Prefer the stacked widget navigation callback if provided
-        if hasattr(self, "go_to_settings") and callable(self.go_to_settings):
-            try:
-                self.go_to_settings()
-                return
-            except Exception:
-                pass
-
-        # Fallback: show a simple dialog with the infographic
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Species Information")
-        layout = QVBoxLayout(dlg)
-
-        img_path = get_static_path("ui/icefang_info.png")
-        info_label = QLabel()
-        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if img_path.exists():
-            pm = QPixmap(str(img_path))
-            # scale image to reasonable size within dialog
-            try:
-                scaled = pm.scaledToWidth(
-                    700, Qt.TransformationMode.SmoothTransformation
-                )
-                info_label.setPixmap(scaled)
-            except Exception:
-                info_label.setPixmap(pm)
-        else:
-            info_label.setText("No infographic available")
-
-        layout.addWidget(info_label)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dlg.accept)
-        layout.addWidget(close_btn)
-
-        dlg.exec()
-
     def change_language(self, code: str) -> None:
         try:
             set_language(code)
@@ -290,7 +236,6 @@ class StartScreen(QWidget):
             pass
         # Update UI labels
         self.btn_start.setText(_("Start Simulation"))
-        self.btn_settings.setText(_("Species Information"))
         self.btn_exit.setText(_("Exit"))
         # Update header
         header = self.findChild(QLabel, "start_header")
@@ -307,16 +252,16 @@ class StartScreen(QWidget):
         set_opacity(self.btn_flag_en, current == "en")
         set_opacity(self.btn_flag_de, current == "de")
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, a0):
         """Handle resize to scale background properly and reposition elements."""
-        super().resizeEvent(event)
+        super().resizeEvent(a0)
 
         # Calculate center position
         width = self.width()
         height = self.height()
 
         # Total height: logo (250) + spacing (5) + container (420) = 675
-        total_height = 625
+        total_height = 555
         start_y = (height - total_height) // 2
 
         # Center logo horizontally
@@ -329,7 +274,7 @@ class StartScreen(QWidget):
         self.center_container.move(container_x, container_y)
 
         # Resize background to match widget size
-        self._resize_background(event)
+        self._resize_background(a0)
 
         # Position language flags at bottom-right corner (20px padding)
         try:
@@ -390,11 +335,6 @@ class StartScreen(QWidget):
                     int(movie_size.width() * scale), int(movie_size.height() * scale)
                 )
                 self.movie.setScaledSize(new_size)
-
-    def on_settings(self):
-        """Settings button clicked."""
-        if self.go_to_settings:
-            self.go_to_settings()
 
     def on_exit(self):
         """Exit button clicked."""

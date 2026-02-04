@@ -53,7 +53,7 @@ class StatsDialog(QDialog):
 
         # Build stats string (each section added once, loops separate)
         # Show final and peak populations so the text matches the plotted history
-        text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
+        text = "<b>" + _("Spezies im Spiel (gesamt):") + "</b><br>"
         species_counts = stats.get("species_counts", {}) or {}
         population_history = stats.get("population_history", {}) or {}
         all_species = set(list(species_counts.keys()) + list(population_history.keys()))
@@ -72,7 +72,7 @@ class StatsDialog(QDialog):
                 except Exception:
                     logger.exception("Error calculating peak population")
                     peak = final_count
-            text += f"• {species}: {final_count} / {peak}<br>"
+            text += f"• {species}: {peak}<br>"
 
         # Totals: current total population and aggregated death counts
         try:
@@ -734,21 +734,7 @@ class StatsDialog(QDialog):
 
         main_layout.addLayout(content_layout)
 
-        # Toggle buttons to switch between Stats and Randomizers graph
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self.btn_view_stats = QPushButton(_("Stats"))
-        self.btn_view_stats.setCheckable(True)
-        self.btn_view_stats.setChecked(True)
-        self.btn_view_stats.clicked.connect(lambda: self._switch_stats_page(0))
-        btn_row.addWidget(self.btn_view_stats)
-
-        self.btn_view_random = QPushButton(_("Randomizers"))
-        self.btn_view_random.setCheckable(True)
-        self.btn_view_random.setChecked(False)
-        self.btn_view_random.clicked.connect(lambda: self._switch_stats_page(1))
-        btn_row.addWidget(self.btn_view_random)
-
         btn_row.addStretch()
         main_layout.addLayout(btn_row)
 
@@ -787,7 +773,7 @@ class StatsDialog(QDialog):
             try:
                 stats = getattr(self, "_stats", {})
                 # Build stats string (match logic from __init__ to show peaks)
-                text = "<b>" + _("Spezies im Spiel (aktuell / Max):") + "</b><br>"
+                text = "<b>" + _("Spezies im Spiel (Max):") + "</b><br>"
                 species_counts = stats.get("species_counts", {}) or {}
                 population_history = stats.get("population_history", {}) or {}
                 all_species = set(
@@ -807,7 +793,7 @@ class StatsDialog(QDialog):
                             )
                         except Exception:
                             peak = final_count
-                    text += f"• {species}: {final_count} / {peak}<br>"
+                    text += f"• {species}: {peak}<br>"
                 text += f"<br><b>{_('Todesfälle (Kampf):')}</b><br>"
                 for species, count in stats.get("deaths", {}).get("combat", {}).items():
                     text += f"• {species}: {count}<br>"
