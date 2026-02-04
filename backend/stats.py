@@ -29,19 +29,15 @@ def _normalize_color(col: Any) -> Tuple[float, float, float, float]:
     """
     if col is None:
         return DEFAULT_COLOR
-    # tuple/list
     if isinstance(col, (list, tuple)):
         vals = list(col)
         if all(isinstance(x, (int, float)) for x in vals):
-            # ints in 0-255 -> convert
             if any(isinstance(x, int) and x > 1 for x in vals):
                 vals = [float(x) / 255.0 for x in vals]
-            # pad to 4
             if len(vals) == 3:
                 vals.append(1.0)
             return tuple(float(x) for x in vals[:4])  # type: ignore
 
-    # hex string
     if isinstance(col, str):
         s = col.strip()
         m = re.match(r"^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$", s)
@@ -54,7 +50,6 @@ def _normalize_color(col: Any) -> Tuple[float, float, float, float]:
             a = int(alpha, 16) / 255.0
             return (r, g, b, a)
 
-    # fallback
     return DEFAULT_COLOR
 
 
@@ -89,7 +84,6 @@ def collect_simulation_snapshot(sim: SimulationModel) -> Dict[str, Any]:
         for f in sim.food_sources
     ]
 
-    # Update species counts in stats (safe best-effort)
     try:
         current_counts = {}
         for g in sim.groups:
@@ -104,7 +98,6 @@ def collect_simulation_snapshot(sim: SimulationModel) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # normalize colors to safe format for frontend
     for g in groups_data:
         g["color"] = _normalize_color(g.get("color"))
         for c in g.get("clans", []):
