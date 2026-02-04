@@ -46,7 +46,6 @@ class LogHighlighter(QSyntaxHighlighter):
                 f.setFontWeight(QFont.Weight.Bold)
             return f
 
-        # Use inline (?i) for case-insensitive matching to avoid enum differences
         self.rules = [
             (QRegularExpression(r"(?i)☠️.*verhungert.*"), fmt(LOG_COLOR_DEATH)),
             (QRegularExpression(r"(?i)❄️.*Temperatur.*"), fmt(LOG_COLOR_COLD)),
@@ -84,13 +83,11 @@ class LogDialog(QDialog):
         self.setModal(False)
         self.resize(600, 400)
 
-        # Set dark theme
         self.setStyleSheet("background-color: #1a1a1a; color: #ffffff;")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Title
         title = QLabel(_("Simulation Logs"))
         title_font = QFont("Minecraft", 14)
         title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -98,7 +95,6 @@ class LogDialog(QDialog):
         title.setStyleSheet("color: #ffffff; font-weight: bold;")
         layout.addWidget(title)
 
-        # Text area with scroll (use QPlainTextEdit for performance)
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         text_font = QFont(LOG_FONT_FAMILY, LOG_FONT_SIZE)
@@ -107,15 +103,12 @@ class LogDialog(QDialog):
         self.text_edit.setStyleSheet(
             f"background-color: #2a2a2a; color: #ffffff; border: 1px solid #666666; font-family: {LOG_FONT_FAMILY}; font-size: {LOG_FONT_SIZE}px;"
         )
-        # Enable word wrapping and scrolling
         self.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
         self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        # Populate plain text and attach highlighter for colorization
         self.text_edit.setPlainText(log_text)
         LogHighlighter(self.text_edit.document())
         layout.addWidget(self.text_edit)
 
-        # Close button
         close_btn = QPushButton(_("Schließen"))
         close_btn_font = QFont("Minecraft", 12)
         close_btn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -132,7 +125,6 @@ class LogDialog(QDialog):
         if not log_text:
             return ""
 
-        # Keep as plain text; LogHighlighter applies formats to the document.
         return log_text
 
     def update_log(self, log_text):
@@ -140,16 +132,11 @@ class LogDialog(QDialog):
         scrollbar = self.text_edit.verticalScrollBar()
         was_at_bottom = False
         if scrollbar is not None:
-            was_at_bottom = (
-                scrollbar.value() >= scrollbar.maximum() - 10
-            )  # 10px threshold
+            was_at_bottom = scrollbar.value() >= scrollbar.maximum() - 10
 
-        # Replace plain text; highlighter will reformat visually
         self.text_edit.setPlainText(self.colorize_logs(log_text))
 
-        # Force scrollbar update
         self.text_edit.ensureCursorVisible()
 
-        # Only auto-scroll if user was already at the bottom
         if scrollbar is not None and was_at_bottom:
             scrollbar.setValue(scrollbar.maximum())
