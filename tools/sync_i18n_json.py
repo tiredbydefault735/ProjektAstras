@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
 """Scan project for _(...) usages and ensure i18n JSON files contain all keys.
 
 Usage: python tools/sync_i18n_json.py
 """
+
 import argparse
 import sys
 
-# Prevent .pyc files (__pycache__) from being generated
 sys.dont_write_bytecode = True
 
 from pathlib import Path
@@ -17,7 +16,6 @@ import logging
 ROOT = Path(__file__).parent.parent
 I18N_DIR = ROOT / "i18n"
 
-# Match _('...') or_("...") simple occurrences
 pattern = re.compile(r"_\(\s*['\"](.*?)['\"]\s*\)")
 
 logger = logging.getLogger(__name__)
@@ -56,7 +54,6 @@ def write_json(p: Path, d: dict, dry_run: bool = False):
     temp_p.write_text(
         json.dumps(d, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
     )
-    # Atomic replace
     temp_p.replace(p)
 
 
@@ -78,14 +75,12 @@ def main(dry_run: bool = False):
                 en[k] = k
                 added_en += 1
             if k not in de:
-                # If de already had a translation in a nested folder, keep it; otherwise default to key
                 de[k] = de.get(k, k)
                 added_de += 1
 
         write_json(en_path, en, dry_run=dry_run)
         write_json(de_path, de, dry_run=dry_run)
 
-        # Remove compiled .mo files if present
         removed = 0
         for mo in (
             I18N_DIR / "de" / "LC_MESSAGES" / "projektas.mo",
