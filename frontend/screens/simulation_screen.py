@@ -11,10 +11,8 @@ import math
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Union, Callable
 
-# Add parent directory to path for backend imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Import resource path utilities
 from utils import get_static_path
 
 from PyQt6.QtWidgets import (
@@ -73,7 +71,6 @@ class SimulationScreen(QWidget):
         """Set configuration for automated run."""
         self.auto_options = options
         if self.auto_options.get("steps"):
-            # Convert steps to seconds (0.1s per step)
             self.max_simulation_time = self.auto_options["steps"] * 0.1
 
     def show_final_stats(self, external_stats: Optional[Dict[str, Any]] = None) -> None:
@@ -88,7 +85,6 @@ class SimulationScreen(QWidget):
             stats = self.sim_model.get_final_stats()
 
         if stats:
-            # Fallbacks for empty stats
             if self.sim_model:
                 try:
                     sc = stats.get("species_counts", {}) or {}
@@ -106,9 +102,8 @@ class SimulationScreen(QWidget):
                         stats["species_counts"] = live_counts
                 except Exception:
                     pass
-            self.last_stats = stats  # Save stats for later
+            self.last_stats = stats
 
-            # Handle automation output
             if self.auto_options and self.auto_options.get("output"):
                 try:
                     out_path = Path(self.auto_options["output"])
@@ -151,23 +146,22 @@ class SimulationScreen(QWidget):
         super().__init__()
         self.go_to_start = go_to_start_callback
         self.color_preset = color_preset
-        self.auto_options = {}  # Initialize to empty dict
+        self.auto_options = {}
         self.is_running = False
 
         self.sim_model = None
         self.update_timer = None
         self.animation_timer = None
-        self.last_stats = None  # Holds stats from the previous simulation
+        self.last_stats = None
 
         self.log_dialog = None
         self.time_step = 0
-        self.simulation_time = 0  # Time in seconds
-        self.max_simulation_time = MAX_SIMULATION_TIME  # seconds
-        self.simulation_speed = 1  # Speed multiplier (1x, 2x, 5x)
-        self.population_data = {}  # Store population history for live graph
-        self.last_log_count = 0  # Track number of processed logs
+        self.simulation_time = 0
+        self.max_simulation_time = MAX_SIMULATION_TIME
+        self.simulation_speed = 1
+        self.population_data = {}
+        self.last_log_count = 0
 
-        # Load species config
         json_path = get_static_path("data/species.json")
         try:
             with open(json_path, "r", encoding="utf-8") as f:
@@ -190,7 +184,6 @@ class SimulationScreen(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        # Top bar: back button
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
 
@@ -213,11 +206,9 @@ class SimulationScreen(QWidget):
 
         main_layout.addLayout(top_bar)
 
-        # Content: Use QSplitter for 75/25 split with dynamic resizing
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
         content_splitter.setHandleWidth(5)
 
-        # Left column: Map area (75%)
         left_column = QFrame()
         left_layout = QVBoxLayout(left_column)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -237,14 +228,12 @@ class SimulationScreen(QWidget):
         left_layout.addWidget(self.map_frame)
         content_splitter.addWidget(left_column)
 
-        # Right column: Settings and controls (25%)
         right_column = QFrame()
         right_column.setMinimumWidth(RIGHT_COLUMN_MIN_WIDTH)
         right_layout = QVBoxLayout(right_column)
         right_layout.setContentsMargins(10, 0, 0, 0)
         right_layout.setSpacing(10)
 
-        # Tab buttons
         tab_buttons_layout = QHBoxLayout()
         tab_buttons_layout.setSpacing(5)
 
@@ -270,20 +259,17 @@ class SimulationScreen(QWidget):
 
         right_layout.addLayout(tab_buttons_layout)
 
-        # Use QStackedWidget to prevent layout shifts when switching tabs
         self.panel_stack = QStackedWidget()
         self.panel_stack.setMinimumHeight(PANEL_STACK_MIN_HEIGHT)
 
-        # Create panels
         self.species_panel = SpeciesPanel(self.species_config, self.color_preset)
-        self.panel_stack.addWidget(self.species_panel)  # Index 0
+        self.panel_stack.addWidget(self.species_panel)
 
         self.environment_panel = EnvironmentPanel(
             self.color_preset, self.map_widget, self.species_config, self.species_panel
         )
-        self.panel_stack.addWidget(self.environment_panel)  # Index 1
+        self.panel_stack.addWidget(self.environment_panel)
 
-        # Initialize species compatibility
         self.environment_panel.update_species_compatibility("Snowy Abyss")
         initial_temp = self.environment_panel.get_temperature()
         self.environment_panel.update_species_compatibility_by_temp(initial_temp)
@@ -294,16 +280,12 @@ class SimulationScreen(QWidget):
         self.panel_stack.setCurrentIndex(1)
         right_layout.addWidget(self.panel_stack)
 
-        # Render default food preview
         self.preview_startup()
 
-        # Store log text
         self.log_text = _("Simulation bereit.")
 
-        # Control section at bottom of right column
         right_layout.addSpacing(40)
 
-        # Stats and Log buttons (only shown before simulation starts)
         self.stats_log_widget = QWidget()
         stats_log_layout = QHBoxLayout(self.stats_log_widget)
         stats_log_layout.setContentsMargins(0, 0, 0, 0)
@@ -327,7 +309,6 @@ class SimulationScreen(QWidget):
 
         right_layout.addWidget(self.stats_log_widget)
 
-        # Start Simulation Button
         self.btn_start_simulation = QPushButton(_("Start Simulation"))
         start_font = QFont("Minecraft", 14)
         start_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -336,14 +317,12 @@ class SimulationScreen(QWidget):
         self.btn_start_simulation.clicked.connect(self.toggle_simulation)
         right_layout.addWidget(self.btn_start_simulation)
 
-        # New Control Bar
         self.control_bar = ControlBar()
         self.control_bar.playPauseClicked.connect(self.toggle_play_pause)
         self.control_bar.stopClicked.connect(self.stop_simulation)
         self.control_bar.speedChanged.connect(self.set_speed)
         right_layout.addWidget(self.control_bar)
 
-        # Graph Container for Live Graph
         self.graph_container = QFrame()
         self.graph_container.setVisible(False)
         graph_layout = QVBoxLayout(self.graph_container)
@@ -352,7 +331,6 @@ class SimulationScreen(QWidget):
         self.live_graph_view = LiveGraphView()
         graph_layout.addWidget(self.live_graph_view)
 
-        # Log display under graph
         self.log_display = QPlainTextEdit()
         self.log_display.setReadOnly(True)
         self.log_display.setStyleSheet(
@@ -389,8 +367,6 @@ class SimulationScreen(QWidget):
                             else 100
                         )
                         try:
-                            # set pending seed so startup preview can be reused
-                            # Use random number mixed with hash to ensure different previews on revisit
                             import random
 
                             random_modifier = random.randint(0, 999999)
@@ -467,42 +443,27 @@ class SimulationScreen(QWidget):
         has_stats = hasattr(self, "last_stats") and self.last_stats is not None
         is_running = self.is_running
 
-        # Start button: Only when NOT running
         self.btn_start_simulation.setVisible(not is_running)
 
-        # Control Bar: Only when running
         self.control_bar.setVisible(is_running)
-
-        # Stats/Log Widget: Visible if running OR if we have stats/logs (i.e. not initial state)
-        # Assuming we want to show it if we have something to show, or if user is in "post-run" state.
-        # "all these should only show up while the simulation is running" -> Maybe user meant Control Bar AND Stats/Log?
-        # But Stats button is needed AFTER run.
-        # Let's show Stats/Log container if we are running OR have previous stats.
         self.stats_log_widget.setVisible(is_running or has_stats)
 
-        # Specifically for Stats button: Only show if NOT running and HAVE stats
-        # (Assuming we don't view previous stats while running new one, to avoid confusion)
         self.btn_stats.setVisible(not is_running and has_stats)
 
-        # Tabs/Panel: Hidden when running
         self.btn_region_tab.setVisible(not is_running)
         self.btn_species_tab.setVisible(not is_running)
         self.panel_stack.setVisible(not is_running)
 
-        # Graph: Visible when running
         self.graph_container.setVisible(is_running)
 
-        # Force layout update
         QApplication.processEvents()
 
     def toggle_simulation(self) -> None:
         """Start/resume simulation."""
         if not self.is_running:
-            # Nur beim ersten Start initialisieren (wenn kein Model existiert)
             if self.sim_model is None:
                 self.environment_panel.set_controls_enabled(False)
 
-                # Initialize Simulation
                 self.sim_model = SimulationModel()
                 populations = self.species_panel.get_enabled_species_populations()
                 speeds = self.species_panel.get_species_speeds()
@@ -512,7 +473,6 @@ class SimulationScreen(QWidget):
                 start_is_day = self.environment_panel.get_is_day()
                 region_display = self.environment_panel.get_selected_region()
 
-                # Override from auto_options if present
                 if self.auto_options:
                     if self.auto_options.get("food_places") is not None:
                         food_places = self.auto_options["food_places"]
@@ -532,7 +492,6 @@ class SimulationScreen(QWidget):
                 ):
                     region_key = region_display
 
-                # Override populations if auto-running
                 if self.auto_options:
                     for s_name in self.species_config.keys():
                         if s_name not in populations:
@@ -547,7 +506,6 @@ class SimulationScreen(QWidget):
                             adj_species_config[sname]["max_clan_members"] = int(val)
 
                             if sname in speeds:
-                                # Map 1-10 to multiplier. Default 5 -> 1.0
                                 adj_species_config[sname]["loner_speed_mult"] = (
                                     speeds[sname]["loner_speed"] / 5.0
                                 )
@@ -579,21 +537,16 @@ class SimulationScreen(QWidget):
 
                 self.map_widget.set_region(region_display)
 
-                # Initialize population data
                 self.population_data = {}
                 for species_name in populations.keys():
                     self.population_data[species_name] = []
 
-                # UI Visibility
                 self.update_ui_visibility()
 
-                # Reset graph
                 self.live_graph_view.reset()
 
-                # Reset log counter
                 self.last_log_count = 0
 
-            # Resume
             self.is_running = True
 
             if self.auto_options and self.auto_options.get("speed"):
@@ -618,8 +571,6 @@ class SimulationScreen(QWidget):
                 self.control_bar.timer_label.text() + " ⏸"
             )
         else:
-            # currently paused, resume
-            # remove pause symbol
             t = self.control_bar.timer_label.text().replace(" ⏸", "")
             self.control_bar.timer_label.setText(t)
             self.toggle_simulation()
@@ -653,7 +604,6 @@ class SimulationScreen(QWidget):
         self.population_data = {}
         self.live_graph_view.reset()
 
-        # UI Visibility
         self.update_ui_visibility()
 
         if show_stats and sim_model_for_stats:
@@ -696,7 +646,6 @@ class SimulationScreen(QWidget):
                 self.stop_simulation()
                 self.stop_simulation()
 
-            # Extinction Check
             try:
                 species_counts = stats.get("species_counts", {})
                 total_pop = sum(species_counts.values()) if species_counts else 0
@@ -707,14 +656,12 @@ class SimulationScreen(QWidget):
             except Exception:
                 pass
 
-            # Update Data
             population_history = stats.get("population_history", {})
             if population_history:
                 self.population_data = {
                     k: list(v) for k, v in population_history.items()
                 }
 
-            # Live Graph Update calling View
             self.live_graph_view.update_graph(
                 self.population_data,
                 self.species_panel.get_enabled_species_populations().keys(),
@@ -722,7 +669,6 @@ class SimulationScreen(QWidget):
                 data.get("rnd_samples", {}),
             )
 
-            # Logs
             logs = data.get("logs", [])
             new_logs = logs[self.last_log_count :]
             if new_logs:
@@ -731,12 +677,10 @@ class SimulationScreen(QWidget):
                     parsed.append(self._format_log_entry(l))
                 self.log_text += "\n" + "\n".join(parsed)
                 self.last_log_count = len(logs)
-                # truncate
                 parts = self.log_text.split("\n")
                 if len(parts) > 1000:
                     self.log_text = "\n".join(parts[-1000:])
 
-                # update log widgets
                 if self.log_dialog and self.log_dialog.isVisible():
                     self.log_dialog.update_log(self.log_text)
                 if self.log_display:
@@ -745,7 +689,6 @@ class SimulationScreen(QWidget):
                     )
 
             if update_ui:
-                # Update Control Bar Info
                 self.control_bar.update_time(self.simulation_time)
                 is_day = data.get("is_day", True)
                 self.control_bar.update_day_night_icon(is_day)
@@ -787,17 +730,14 @@ class SimulationScreen(QWidget):
             self.log_dialog.update_log(self.log_text)
 
     def _format_log_entry(self, entry):
-        # Simplified handling
         try:
             if isinstance(entry, dict):
                 t = entry.get("time")
                 msgid = entry.get("msgid", "")
                 params = entry.get("params", {}) or {}
-                # safe format
                 try:
                     from frontend.i18n import _
 
-                    # Custom format logic if needed or just .format
                     text = _(msgid).format(**params)
                 except:
                     text = str(msgid)
