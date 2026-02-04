@@ -24,7 +24,6 @@ class ControlBar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # Play/Pause and Stop Buttons
         play_controls_layout = QHBoxLayout()
         self.btn_play_pause = QPushButton(_("Pause"))
         play_font = QFont("Minecraft", 16)
@@ -44,11 +43,9 @@ class ControlBar(QWidget):
         play_controls_layout.addStretch()
         layout.addLayout(play_controls_layout)
 
-        # Info display row with timer, day/night, and speed controls
         info_layout = QHBoxLayout()
         info_layout.setSpacing(10)
 
-        # Timer display
         self.timer_label = QLabel("00:00")
         timer_font = QFont("Minecraft", 14)
         timer_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -56,7 +53,6 @@ class ControlBar(QWidget):
         self.timer_label.setStyleSheet("color: #ffffff;")
         info_layout.addWidget(self.timer_label)
 
-        # Day/Night indicator
         self.day_night_label = QLabel("☀️")
         day_night_font = QFont("Minecraft", 16)
         day_night_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -64,7 +60,6 @@ class ControlBar(QWidget):
         self.day_night_label.setStyleSheet("color: #ffffff;")
         info_layout.addWidget(self.day_night_label)
 
-        # Speed control buttons next to time
         speed_label = QLabel("Sim Speed:")
         speed_label_font = QFont("Minecraft", 9)
         speed_label_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -72,7 +67,6 @@ class ControlBar(QWidget):
         speed_label.setStyleSheet("color: #ffffff;")
         info_layout.addWidget(speed_label)
 
-        # Replace text speed buttons with image buttons from static/ui
         one_img = str(get_static_path("ui/one_times.png"))
         two_img = str(get_static_path("ui/two_times.png"))
         five_img = str(get_static_path("ui/five_times.png"))
@@ -92,11 +86,9 @@ class ControlBar(QWidget):
 
         layout.addLayout(info_layout)
 
-        # Live info row
         live_info_layout = QHBoxLayout()
         live_info_layout.setSpacing(10)
 
-        # Temperature display (live)
         self.live_temp_label = QLabel("🌡️ 0°C")
         live_temp_font = QFont("Minecraft", 11)
         live_temp_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
@@ -104,7 +96,6 @@ class ControlBar(QWidget):
         self.live_temp_label.setStyleSheet("color: #88ccff;")
         live_info_layout.addWidget(self.live_temp_label)
 
-        # Day/Night indicator (live)
         self.live_day_night_label = QLabel(_("☀️ Tag"))
         live_dn_font = QFont("Minecraft", 11)
         live_dn_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
