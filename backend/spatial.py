@@ -30,7 +30,6 @@ class SpatialGrid:
         @param grid_cell_size: Size of the grid cells in pixels
         """
         self.grid_cell_size: int = grid_cell_size or GRID_CELL_MIN
-        # Grid maps (x, y) tuple to a dict of lists
         self.grid: Dict[Tuple[int, int], Dict[str, List[Any]]] = {}
         self._cell_size: int = self.grid_cell_size
 
@@ -71,7 +70,6 @@ class SpatialGrid:
         for f in food_sources:
             _add(f, "food", f.x, f.y)
 
-        # remember used cell size for nearby calculations
         self._cell_size = cs
 
     def nearby_candidates(
