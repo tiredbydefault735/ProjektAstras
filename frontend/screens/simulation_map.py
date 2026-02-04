@@ -31,41 +31,30 @@ class SimulationMapWidget(QGraphicsView):
     def __init__(self) -> None:
         super().__init__()
 
-        # Create graphics scene (will resize with viewport)
         self.map_scene = QGraphicsScene()
         self.setScene(self.map_scene)
 
-        # Disable scrollbars
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Align scene to top-left to avoid centered offsets when the view
-        # or scene are resized or not yet laid out.
         try:
             self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         except Exception:
             pass
 
-        # Region image mapping
-        # Use get_static_path so resources work when frozen with PyInstaller
         self.region_images = {k: get_static_path(v) for k, v in REGION_TEXTURES.items()}
         self.bg_pixmap = None
 
-        # Current region
         self.current_region = "Snowy Abyss"
 
-        # Set initial background
         self.set_region(self.current_region)
 
-        # Optimierte Darstellung
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # Cache for icon lookup to handle case differences across filesystems
         self._spores_icon_path = None
         self._crushed_icon_path = None
         self._icefang_icon_path = None
         self._corrupted_icon_path = None
-        # store last preview request so we can replay it after layout/resizes
         self._last_preview = None
 
     def _find_spores_icon(self):
@@ -81,7 +70,6 @@ class SimulationMapWidget(QGraphicsView):
                         return p
         except Exception:
             pass
-        # Fallback to the canonical lowercase name
         candidate = get_static_path(ICON_SPORES)
         if candidate.exists():
             self._spores_icon_path = candidate
@@ -158,12 +146,10 @@ class SimulationMapWidget(QGraphicsView):
     def resizeEvent(self, event: Any) -> None:
         super().resizeEvent(event)
         self.update_background()
-        # Replay any pending preview (use small delay to wait for layout)
         if getattr(self, "_last_preview", None):
             QTimer.singleShot(20, self._replay_preview)
 
     def update_background(self) -> None:
-        # Remove any previous background pixmap item
         if hasattr(self, "_bg_item") and self._bg_item:
             self.map_scene.removeItem(self._bg_item)
             self._bg_item = None
@@ -184,8 +170,6 @@ class SimulationMapWidget(QGraphicsView):
             from PyQt6.QtWidgets import QGraphicsPixmapItem
 
             self._bg_item = QGraphicsPixmapItem(scaled)
-            # Ensure background sits at scene origin and scene rect matches
-            # the viewport so items use (0,0) origin consistently.
             self._bg_item.setZValue(-100)
             self._bg_item.setPos(0, 0)
             self.map_scene.addItem(self._bg_item)
@@ -195,7 +179,6 @@ class SimulationMapWidget(QGraphicsView):
                 pass
         else:
             self._bg_item = None
-            # Optionally fill with white rect if no image
             from PyQt6.QtWidgets import QGraphicsRectItem
 
             rect = QGraphicsRectItem(0, 0, width, height)
@@ -229,17 +212,14 @@ class SimulationMapWidget(QGraphicsView):
             Falls back to a neutral gray on parse errors.
             """
             try:
-                # Already a QColor
                 if isinstance(col, QColor):
                     return col
 
-                # Tuple/list of numbers
                 if isinstance(col, (list, tuple)):
                     vals = list(col)
                     if len(vals) >= 3 and all(
                         isinstance(x, (int, float)) for x in vals[:3]
                     ):
-                        # detect 0..1 floats vs 0..255 ints
                         if any(isinstance(x, int) and x > 1 for x in vals[:3]) or any(
                             isinstance(x, float) and x > 1.0 for x in vals[:3]
                         ):
@@ -269,7 +249,6 @@ class SimulationMapWidget(QGraphicsView):
                             max(0, min(255, int(a))),
                         )
 
-                # Hex string like '#rrggbb' or '#rrggbbaa'
                 if isinstance(col, str):
                     s = col.strip()
                     m = re.match(r"^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$", s)
@@ -286,16 +265,13 @@ class SimulationMapWidget(QGraphicsView):
             except Exception:
                 pass
 
-            # fallback neutral
             return QColor(200, 200, 200, fallback_alpha)
 
-        # Remove all items except the background
         for item in self.map_scene.items():
             if getattr(self, "_bg_item", None) and item is self._bg_item:
                 continue
             self.map_scene.removeItem(item)
 
-        # Get viewport dimensions (actual display size)
         viewport = self.viewport()
         if not viewport:
             return
@@ -306,15 +282,11 @@ class SimulationMapWidget(QGraphicsView):
         if width <= 0 or height <= 0:
             return
 
-        # Update scene rect to match viewport
         self.map_scene.setSceneRect(0, 0, width, height)
 
-        # Scale from logical coordinates (1200x600) to actual display size
         scale_x = width / 1200.0
         scale_y = height / 600.0
 
-        # Zeichne Nahrungsplätze: prefer image icons if available, fallback to
-        # colored circles when images are missing.
         if food_sources_data:
             for food in food_sources_data:
                 x = food["x"] * scale_x
@@ -322,11 +294,8 @@ class SimulationMapWidget(QGraphicsView):
                 amount = food.get("amount", 0)
                 max_amount = food.get("max_amount", 1) or 1
 
-                # Fixed visual size for food icons: do not shrink when amount is low.
-                # Use a sensible base size; rendering scales it up later for visibility.
                 size = 24
 
-                # choose image based on fullness: full, half, empty
                 try:
                     if amount <= 0:
                         img_candidate = get_static_path("ui/food_empty.png")
@@ -338,7 +307,6 @@ class SimulationMapWidget(QGraphicsView):
                     if img_candidate and Path(img_candidate).exists():
                         pm = QPixmap(str(img_candidate))
                         if not pm.isNull():
-                            # scale food icons larger for visibility (2.5x)
                             scaled_size = max(1, int(size * 2.5))
                             scaled = pm.scaled(
                                 scaled_size,
@@ -354,20 +322,17 @@ class SimulationMapWidget(QGraphicsView):
                                 pix.setZValue(0)
                             continue
                 except Exception:
-                    # fall through to circle drawing
                     pass
 
-                # Fallback: Farbe: Grün wenn voll, gelb wenn wenig, braun wenn leer
                 if amount > max_amount * 0.5:
-                    food_color = QColor(34, 139, 34, 180)  # Grün
+                    food_color = QColor(34, 139, 34, 180)
                 elif amount > 0:
-                    food_color = QColor(218, 165, 32, 180)  # Gelb/Gold
+                    food_color = QColor(218, 165, 32, 180)
                 else:
-                    food_color = QColor(139, 69, 19, 100)  # Braun (leer)
+                    food_color = QColor(139, 69, 19, 100)
 
                 border_color = QColor(0, 100, 0, 255)
 
-                # Kreis für Nahrung (scale up by 2.5)
                 draw_size = max(1, int(size * 2.5))
                 food_circle = self.map_scene.addEllipse(
                     x - draw_size / 2,
@@ -378,9 +343,8 @@ class SimulationMapWidget(QGraphicsView):
                     brush=QBrush(food_color),
                 )
                 if food_circle:
-                    food_circle.setZValue(0)  # Hinter allem
+                    food_circle.setZValue(0)
 
-        # Zeichne Clans (Quadrate mit Population-Text)
         for group in groups_data:
             if not group or "clans" not in group:
                 continue
@@ -390,15 +354,10 @@ class SimulationMapWidget(QGraphicsView):
                 y = clan["y"] * scale_y
                 pop = clan["population"]
 
-                # Visual size: make clan size reflect the clan's population
-                # (member count) but keep it capped to avoid extreme sizes.
-                # This keeps visual meaning while preventing layout breakage.
                 try:
-                    # base size plus per-member increment
                     base = 40
                     per_member = 4
                     size = int(base + max(0, int(pop)) * per_member)
-                    # enforce sensible min/max
                     size = max(48, min(180, size))
                 except Exception:
                     size = 80
@@ -411,7 +370,6 @@ class SimulationMapWidget(QGraphicsView):
                     color, alpha_override=200, fallback_alpha=200
                 )
 
-                # Try to draw a species icon (Spores, Crushed_Critters, Icefang) if available
                 drawn_with_icon = False
                 try:
                     species_name = group.get("name", "")
@@ -446,7 +404,6 @@ class SimulationMapWidget(QGraphicsView):
                     drawn_with_icon = False
 
                 if not drawn_with_icon:
-                    # Quadrat
                     rect = self.map_scene.addRect(
                         x - size / 2,
                         y - size / 2,
@@ -458,33 +415,27 @@ class SimulationMapWidget(QGraphicsView):
                     if rect:
                         rect.setZValue(0)
 
-                # Population als Text (overlay)
                 text = QGraphicsTextItem(str(pop))
                 text.setDefaultTextColor(QColor(0, 0, 0, 255))
                 font = QFont("Minecraft", 13, QFont.Weight.Bold)
                 font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
                 text.setFont(font)
 
-                # Zentriere Text
                 text_width = text.boundingRect().width()
                 text_height = text.boundingRect().height()
                 text.setPos(x - text_width / 2, y - text_height / 2)
                 text.setZValue(1)
                 self.map_scene.addItem(text)
 
-                # record display size for species so loners can be sized relative to clan
                 try:
                     if not hasattr(self, "_species_clan_size"):
                         self._species_clan_size = {}
                     species_name = group.get("name", "")
-                    # Store the (maximum) display size seen for this species
-                    # so loners can be sized relative to the largest clan.
                     prev = self._species_clan_size.get(species_name, 0)
                     self._species_clan_size[species_name] = max(prev, size)
                 except Exception:
                     pass
 
-        # Zeichne Loners (kleinere Kreise oder icons) AFTER clans so we can size them relative to clans
         if loners_data:
             for loner in loners_data:
                 x = loner["x"] * scale_x
@@ -496,29 +447,20 @@ class SimulationMapWidget(QGraphicsView):
                     color, alpha_override=255, fallback_alpha=255
                 )
 
-                # Default loner visual size (fixed by default).
-                # Previously loner size was derived from the largest clan
-                # display size for the species (so it scaled with member counts).
-                # Keep a fixed default to avoid loners changing size with clan population.
                 display_size = 12
                 try:
-                    # Optional: allow scaling with clan size when explicitly enabled
-                    # (set `_scale_loners_with_clans = True` on the view).
                     if getattr(self, "_scale_loners_with_clans", False):
                         if (
                             hasattr(self, "_species_clan_size")
                             and species in self._species_clan_size
                         ):
                             clan_size = self._species_clan_size.get(species, 12)
-                            # Loners should be about 50% of clan display size
                             display_size = max(6, int(clan_size * 0.5))
                 except Exception:
                     pass
 
-                # Cap loner size so individuals never grow excessively large
                 display_size = max(45, min(display_size, 60))
 
-                # Try to draw an icon for Spores/Crushed_Critters/Icefang loners
                 drawn_icon = False
                 try:
                     if species == "Spores":
@@ -564,13 +506,9 @@ class SimulationMapWidget(QGraphicsView):
                     if circle:
                         circle.setZValue(2)
 
-        # Fließender Dunkelheitseffekt basierend auf Tageszeit
-        # transition_progress: 0.0 = Nacht, 1.0 = Tag
-        # Berechne Dunkelheit: 0 bei Tag (hell), 120 bei Nacht (dunkel)
         darkness = int((1.0 - transition_progress) * 120)
 
         if darkness > 0:
-            # Use width and height from scene rect (1200x600) for consistent coverage
             overlay = self.map_scene.addRect(
                 0,
                 0,
@@ -580,7 +518,7 @@ class SimulationMapWidget(QGraphicsView):
                 brush=QBrush(QColor(0, 0, 0, darkness)),
             )
             if overlay:
-                overlay.setZValue(10)  # Über allem
+                overlay.setZValue(10)
 
     def clear_map(self) -> None:
         """Lösche Map."""
@@ -599,12 +537,8 @@ class SimulationMapWidget(QGraphicsView):
         food will appear before the simulation starts.
         """
         try:
-            # Store preview params so we can replay after resize/layout
             self._last_preview = (num, amount, max_amount, transition_progress, seed)
 
-            # If viewport not yet laid out or still very small, retry shortly
-            # to avoid preview items clustering at the top-left due to
-            # incorrect scaling while the widget is still being laid out.
             viewport = self.viewport()
             if not viewport:
                 return
@@ -620,29 +554,23 @@ class SimulationMapWidget(QGraphicsView):
                 return
 
             if not num or num <= 0:
-                # clear only non-background items
                 self.draw_groups([], [], [], transition_progress)
                 return
 
             food_sources = []
             cols = int(math.ceil(math.sqrt(num)))
             rows = int(math.ceil(num / cols))
-            # logical map size is 1200x600
             spacing_x = 1200.0 / (cols + 1)
             spacing_y = 600.0 / (rows + 1)
             placed = []
-            # Use deterministic RNG when seed is provided so preview matches
-            # backend initialization when the same seed is used.
             rng = random if seed is None else random.Random(seed)
 
             for i in range(num):
                 col = i % cols
                 row = i // cols
-                # center of cell
                 cx = (col + 1) * spacing_x
                 cy = (row + 1) * spacing_y
 
-                # jitter up to ~40% of cell spacing to avoid overlap and grid look
                 max_jx = spacing_x * 0.4
                 max_jy = spacing_y * 0.4
                 attempt = 0
@@ -652,11 +580,9 @@ class SimulationMapWidget(QGraphicsView):
                     x = cx + jx
                     y = cy + jy
 
-                    # clamp into logical map bounds with small margin
                     x = min(max(x, 16), 1200 - 16)
                     y = min(max(y, 16), 600 - 16)
 
-                    # simple overlap avoidance: ensure not too close to existing
                     ok = True
                     for px, py in placed:
                         if (px - x) ** 2 + (py - y) ** 2 < (48**2):
@@ -671,8 +597,6 @@ class SimulationMapWidget(QGraphicsView):
                     {"x": x, "y": y, "amount": amount, "max_amount": max_amount}
                 )
 
-            # Draw preview (no clans/loners)
-            # store positions for potential reuse by the backend
             try:
                 self._last_preview_positions = food_sources
             except Exception:
@@ -689,7 +613,6 @@ class SimulationMapWidget(QGraphicsView):
             if not params:
                 return
             num, amount, max_amount, transition_progress, seed = params
-            # clear stored preview so we don't loop
             self._last_preview = None
             self.preview_food_sources(
                 num, amount, max_amount, transition_progress, seed
