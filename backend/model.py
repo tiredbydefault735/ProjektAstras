@@ -382,7 +382,7 @@ class SimulationModel:
             self.base_temperature = random.uniform(*BASE_TEMPERATURE_FALLBACK_RANGE)
             self.current_temperature = self.base_temperature
         self.temp_change_timer = 0
-        self.day_night_temp_offset = 0
+        self.day_night_temp_offset = 0.0
 
         self.is_day = start_is_day
         self.day_night_timer = 0
