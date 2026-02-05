@@ -24,6 +24,14 @@ def update_and_apply(sim: SimulationModel) -> None:
 
     @param sim: The main simulation model instance.
     """
+    if not sim.in_transition:
+        sim.day_night_timer += 1
+        if sim.day_night_timer >= sim.day_night_cycle_duration:
+            sim.in_transition = True
+            sim.transition_to_day = not sim.is_day
+            sim.transition_timer = 0
+            sim.day_night_timer = 0
+
     if sim.in_transition:
         sim.transition_timer += 1
         target_offset = (

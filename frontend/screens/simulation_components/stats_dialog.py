@@ -529,7 +529,7 @@ class StatsDialog(QDialog):
 
                     rnd = stats.get("rnd_samples", {}) or {}
                     colors = {
-                        "regen": (102, 204, 102),
+                        "regen": (202, 204, 102),
                         "clan_growth": (102, 170, 255),
                         "loner_spawn": (255, 204, 102),
                     }
