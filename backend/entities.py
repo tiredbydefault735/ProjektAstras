@@ -63,9 +63,8 @@ class FoodSource:
             return 0
         regen_prob = FOOD_REGEN_PROB
         if random.random() < regen_prob:
-            regen_choices = REGEN_CHOICES
-            regen = random.choice(regen_choices)
-            regen = max(1, regen)
+            regen = random.expovariate(FOOD_REGEN_EXP_LAMBDA)
+            regen = max(1, int(round(regen)))
             self.amount = min(self.amount + regen, self.max_amount)
             return regen
         return 0
